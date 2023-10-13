@@ -38,6 +38,8 @@ namespace ValheimMod
             favoriteAmmoList = Config.Bind("General", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "List of ammo to replenish when repairing gear");
             favoriteAmmo = favoriteAmmoList.Value.Split(',').ToList();
 
+            Game.isModded = true;
+
             harmony.PatchAll();
         }
 
@@ -66,39 +68,17 @@ namespace ValheimMod
                     }
                     player.m_inventory.AddItem(prefab, 100 - count);
                 }
-            }
-        }
-
-        void OnDestroy() {
-            harmony.UnpatchSelf();
-        }
-
-        [HarmonyPatch(typeof(Game), "Awake")]
-        class Game_Awake_Patch
-        {
-            static void Postfix(ref bool ___isModded) {
-                ___isModded = true;
-            }
-        }
-
-        //[HarmonyPatch(typeof(Console), "Awake")]
-        //class Console_Awake_Patch
-        //{
-        //    [HarmonyPostfix]
-        //    static void GetConsole(ref Console ___m_instance) {
-        //        console = ___m_instance;
-        //    }
-        //}
-
-        [HarmonyPatch(typeof(Game), "SpawnPlayer")]
-        class Game_SpawnPlayer_Patch
-        {
-            static void Postfix(ref float ___m_staminaRate, ref float ___m_localDamgeTakenRate) {
-                if (___m_localDamgeTakenRate > customDamageRate.Value || ___m_staminaRate > customStaminaRate.Value) {
+                if (Game.m_localDamgeTakenRate > customDamageRate.Value || Game.m_staminaRate > customStaminaRate.Value) {
                     Debug.Log($"Setting damage and stamina rates.");
-                    ___m_localDamgeTakenRate = (float)customDamageRate.Value;
-                    ___m_staminaRate = (float)customStaminaRate.Value;
-                    Debug.Log($"Damage rate: {___m_localDamgeTakenRate}; Stamina rate: {___m_staminaRate}");
+                    Game.m_localDamgeTakenRate = customDamageRate.Value;
+                    Game.m_staminaRate = customStaminaRate.Value;
+                    Debug.Log($"Damage rate: {Game.m_localDamgeTakenRate}; Stamina rate: {Game.m_staminaRate}");
+                }
+                if (player.GetHealthPercentage() < 1f) {
+                    player.SetHealth(player.GetMaxHealth());
+                }
+                if (player.GetStaminaPercentage() < 1f) {
+                    player.AddStamina(player.GetMaxStamina());
                 }
             }
         }
@@ -121,19 +101,6 @@ namespace ValheimMod
             static void Prefix(ref ItemDrop.ItemData item) {
                 if (item.m_shared.m_movementModifier < 0) {
                     item.m_shared.m_movementModifier = 0;
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(Character), "SetWalk")]
-        class Character_SetWalk_Patch
-        {
-            static void Prefix(ref Character __instance) {
-                if (__instance.GetHealthPercentage() < 1f) {
-                    __instance.SetHealth(__instance.GetMaxHealth());
-                }
-                if (__instance.GetStaminaPercentage() < 1f) {
-                    __instance.AddStamina(__instance.GetMaxStamina());
                 }
             }
         }

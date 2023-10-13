@@ -1,7 +1,6 @@
 ﻿using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
-using HarmonyLib.Tools;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
@@ -22,7 +21,7 @@ namespace AutoPickupIgnorer
 
         private const string modGUID = "Pip.AutoPickupIgnorer";
         private const string modName = "Pip's Auto-pickup Ignorer";
-        private const string modVersion = "1.0.2";
+        private const string modVersion = "1.0.3";
         private readonly Harmony harmony = new Harmony(modGUID);
         private static ConfigEntry<string> AutoPickupIgnoreList;
         private static List<string> IgnoreList;
@@ -77,7 +76,7 @@ namespace AutoPickupIgnorer
             AutoPickupIgnoreList = Config.Bind("General", "AutoPickupIgnoreList", DefaultItemList, "Comma-separated list of items to ignore auto-pickup. Remove # before item to add to ignore list.");
             IgnoreList = AutoPickupIgnoreList.Value.Split(',').Where(i => !i.Trim().StartsWith("#")).ToList();
             ToggleBehaviorHotkey = Config.Bind("General", "BehaviorHotkey", new KeyboardShortcut(KeyCode.Quote), "Hotkey to change pickup behavior between custom ignore, ignore all, and default behavior");
-            HarmonyFileLog.Enabled = true;
+            Game.isModded = true;
             harmony.PatchAll();
         }
 
@@ -104,14 +103,6 @@ namespace AutoPickupIgnorer
             }
         }
 
-        [HarmonyPatch(typeof(Game), "Awake")]
-        class Game_Awake_Patch
-        {
-            static void Postfix(ref bool ___isModded) {
-                ___isModded = true;
-            }
-        }
-
         [HarmonyPatch(typeof(MessageHud), "Awake")]
         class MessageHud_Awake_Patch
         {
@@ -122,7 +113,6 @@ namespace AutoPickupIgnorer
         }
 
         [HarmonyPatch(typeof(Player), "AutoPickup")]
-        [HarmonyDebug]
         public static class Player_AutoPickup_Patch
         {
             [HarmonyTranspiler]
