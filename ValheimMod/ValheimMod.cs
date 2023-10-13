@@ -20,27 +20,31 @@ namespace ValheimMod
         private static ConfigEntry<float> customPlayerDamageRate;
         private static ConfigEntry<bool> noPlacementCost;
         private static ConfigEntry<KeyboardShortcut> favoriteFoodHotkey;
+        private static ConfigEntry<KeyboardShortcut> repairHotkey;
+        private static ConfigEntry<bool> negateKnockback;
+        private static ConfigEntry<bool> negateEquipmentMovementPenalty;
         private static ConfigEntry<string> favoriteFoodList;
         private static List<string> favoriteFoods;
-        private static ConfigEntry<KeyboardShortcut> repairHotkey;
         private static ConfigEntry<string> favoriteAmmoList;
         private static List<string> favoriteAmmo;
         private static Player player;
 
         private void Awake() {
-            favoriteFoodHotkey = Config.Bind("Foods", "FavoriteFoodHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to spawn favorite foods in inventory");
-            favoriteFoodList = Config.Bind("Foods", "FavoriteFoods", "MisthareSupreme,MushroomOmelette,Salad", "Comma-separated list of foods to spawn");
-            favoriteFoods = favoriteFoodList.Value.Split(',').ToList();
-
             customIncomingDamageRate = Config.Bind("General", "CustomIncomingDamageRate", 1f, "Custom incoming damage rate");
             customStaminaRate = Config.Bind("General", "CustomStaminaRate", 1f, "Custom stamina rate");
             customMaxCarryWeight = Config.Bind("General", "CustomMaxCarryWeight", 300f, "Custom base max carry weight");
             customSkillGainRate = Config.Bind("General", "CustomSkillGainRate", 1f, "Custom skill gain rate");
             customPlayerDamageRate = Config.Bind("General", "CustomPlayerDamageRate", 1f, "Custom player damage rate");
-
             noPlacementCost = Config.Bind("General", "NoPlacementCost", false, "No material cost for building/crafting");
-            repairHotkey = Config.Bind("General", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory");
-            favoriteAmmoList = Config.Bind("General", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "List of ammo to replenish when repairing gear");
+            negateKnockback = Config.Bind("General", "NegateKnockback", true, "Turn off knockback when hit");
+            negateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
+
+            repairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, replenish ammo, and heal player");
+            favoriteFoodHotkey = Config.Bind("Hotkeys", "FavoriteFoodHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to spawn or replenish favorite foods in inventory");
+
+            favoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,MushroomOmelette,Salad", "Comma-separated list of foods to spawn");
+            favoriteFoods = favoriteFoodList.Value.Split(',').ToList();
+            favoriteAmmoList = Config.Bind("Inventory", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "Comma-separated list of ammo to replenish when repairing gear");
             favoriteAmmo = favoriteAmmoList.Value.Split(',').ToList();
 
             CustomUpdateWorldRates();
@@ -107,7 +111,7 @@ namespace ValheimMod
         class Player_UpdateMovementModifier_Patch
         {
             static void Prefix(ref ItemDrop.ItemData item) {
-                if (item.m_shared.m_movementModifier < 0) {
+                if (negateEquipmentMovementPenalty.Value && item.m_shared.m_movementModifier < 0) {
                     item.m_shared.m_movementModifier = 0;
                 }
             }
@@ -117,7 +121,9 @@ namespace ValheimMod
         class Character_ApplyPushback_Patch
         {
             static void Prefix(ref float pushForce) {
-                pushForce = 0f;
+                if (negateKnockback.Value) {
+                    pushForce = 0f;
+                }
             }
         }
 
