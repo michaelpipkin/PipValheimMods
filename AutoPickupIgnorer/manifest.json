@@ -1,6 +1,6 @@
 {
   "name": "AutoPickupIgnorer",
-  "version_number": "1.0.3",
+  "version_number": "1.0.4",
   "website_url": "https://github.com/michaelpipkin/PipValheimMods/tree/main/AutoPickupIgnorer",
   "description": "Allows the player to specify which items will and won't be auto-picked-up.",
   "dependencies": ["denikson-BepInExPack_Valheim-5.4.2200"]

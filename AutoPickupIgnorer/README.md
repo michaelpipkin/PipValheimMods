@@ -5,7 +5,7 @@
 This project is a recreation of an old mod that I used to love, but which sadly has not been maintained in some time.
 The mod allows the player to specify which items will and won't be auto-picked-up.
 
-Once Valheim is run with the mod installed, a config file will be created (PipMod.AutoPickupIgnorer.cfg).
+Once Valheim is run with the mod installed, a config file will be created (Pip.AutoPickupIgnorer.cfg).
 In order to ignore an item for auto-pickup, open the config file remove the # in front of the item.
 
 There is also a configurable hotkey (' by default) that will toggle the pickup behavior between three states:
@@ -18,4 +18,4 @@ Source: [Github](https://github.com/michaelpipkin/PipValheimMods/tree/main/AutoP
 
 Install with [BepInEx](https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/)
 
-Copy AutoPickupIgnorer.dll into the BepInEx/plugins folder
+If not using the Thunderstore mod manager, copy AutoPickupIgnorer.dll into the BepInEx/plugins folder

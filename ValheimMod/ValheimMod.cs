@@ -13,9 +13,11 @@ namespace ValheimMod
     public class ValheimMod : BaseUnityPlugin
     {
         private readonly Harmony harmony = new Harmony("482ac281-ce1b-451d-b843-488fd8e61b20");
-        private static ConfigEntry<float> customDamageRate;
+        private static ConfigEntry<float> customIncomingDamageRate;
         private static ConfigEntry<float> customStaminaRate;
         private static ConfigEntry<float> customMaxCarryWeight;
+        private static ConfigEntry<float> customSkillGainRate;
+        private static ConfigEntry<float> customPlayerDamageRate;
         private static ConfigEntry<bool> noPlacementCost;
         private static ConfigEntry<KeyboardShortcut> favoriteFoodHotkey;
         private static ConfigEntry<string> favoriteFoodList;
@@ -30,14 +32,18 @@ namespace ValheimMod
             favoriteFoodList = Config.Bind("Foods", "FavoriteFoods", "MisthareSupreme,MushroomOmelette,Salad", "Comma-separated list of foods to spawn");
             favoriteFoods = favoriteFoodList.Value.Split(',').ToList();
 
-            customDamageRate = Config.Bind("General", "CustomDamageRate", 1f, "Custom damage rate (0-1)");
-            customStaminaRate = Config.Bind("General", "CustomStaminaRate", 1f, "Custom stamina rate (0-1)");
+            customIncomingDamageRate = Config.Bind("General", "CustomIncomingDamageRate", 1f, "Custom incoming damage rate");
+            customStaminaRate = Config.Bind("General", "CustomStaminaRate", 1f, "Custom stamina rate");
             customMaxCarryWeight = Config.Bind("General", "CustomMaxCarryWeight", 300f, "Custom base max carry weight");
+            customSkillGainRate = Config.Bind("General", "CustomSkillGainRate", 1f, "Custom skill gain rate");
+            customPlayerDamageRate = Config.Bind("General", "CustomPlayerDamageRate", 1f, "Custom player damage rate");
+
             noPlacementCost = Config.Bind("General", "NoPlacementCost", false, "No material cost for building/crafting");
             repairHotkey = Config.Bind("General", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory");
             favoriteAmmoList = Config.Bind("General", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "List of ammo to replenish when repairing gear");
             favoriteAmmo = favoriteAmmoList.Value.Split(',').ToList();
 
+            CustomUpdateWorldRates();
             Game.isModded = true;
 
             harmony.PatchAll();
@@ -68,12 +74,6 @@ namespace ValheimMod
                     }
                     player.m_inventory.AddItem(prefab, 100 - count);
                 }
-                if (Game.m_localDamgeTakenRate > customDamageRate.Value || Game.m_staminaRate > customStaminaRate.Value) {
-                    Debug.Log($"Setting damage and stamina rates.");
-                    Game.m_localDamgeTakenRate = customDamageRate.Value;
-                    Game.m_staminaRate = customStaminaRate.Value;
-                    Debug.Log($"Damage rate: {Game.m_localDamgeTakenRate}; Stamina rate: {Game.m_staminaRate}");
-                }
                 if (player.GetHealthPercentage() < 1f) {
                     player.SetHealth(player.GetMaxHealth());
                 }
@@ -92,6 +92,14 @@ namespace ValheimMod
                 Debug.Log($"Base max carry weight: {___m_maxCarryWeight}");
                 ___m_noPlacementCost = noPlacementCost.Value;
                 player = __instance;
+            }
+        }
+
+        [HarmonyPatch(typeof(Game), "UpdateWorldRates")]
+        class Game_UpdateWorldRates_Patch
+        {
+            static void Postfix() {
+                CustomUpdateWorldRates();
             }
         }
 
@@ -127,6 +135,13 @@ namespace ValheimMod
             static void Postfix(ref float ___m_regenPerSec) {
                 ___m_regenPerSec = 20f;
             }
+        }
+
+        static void CustomUpdateWorldRates() {
+            Game.m_localDamgeTakenRate = customIncomingDamageRate.Value;
+            Game.m_staminaRate = customStaminaRate.Value;
+            Game.m_skillGainRate = customSkillGainRate.Value;
+            Game.m_playerDamageRate = customPlayerDamageRate.Value;
         }
     }
 }
