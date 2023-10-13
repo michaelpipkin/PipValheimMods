@@ -73,7 +73,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="icon.png" />
+    <Content Include="icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
