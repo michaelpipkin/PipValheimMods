@@ -19,7 +19,6 @@ namespace ValheimMod
         private static ConfigEntry<float> customSkillGainRate;
         private static ConfigEntry<float> customPlayerDamageRate;
         private static ConfigEntry<bool> noPlacementCost;
-        private static ConfigEntry<KeyboardShortcut> favoriteFoodHotkey;
         private static ConfigEntry<KeyboardShortcut> repairHotkey;
         private static ConfigEntry<bool> negateKnockback;
         private static ConfigEntry<bool> negateEquipmentMovementPenalty;
@@ -39,8 +38,7 @@ namespace ValheimMod
             negateKnockback = Config.Bind("General", "NegateKnockback", true, "Turn off knockback when hit");
             negateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
 
-            repairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, replenish ammo, and heal player");
-            favoriteFoodHotkey = Config.Bind("Hotkeys", "FavoriteFoodHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to spawn or replenish favorite foods in inventory");
+            repairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, heal player, replenish ammo, and spawn or replenish favorite foods");
 
             favoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,MushroomOmelette,Salad", "Comma-separated list of foods to spawn");
             favoriteFoods = favoriteFoodList.Value.Split(',').ToList();
@@ -54,29 +52,31 @@ namespace ValheimMod
         }
 
         private void Update() {
-            if (favoriteFoodHotkey.Value.IsDown()) {
-                foreach (var food in favoriteFoods) {
-                    int count = 0;
-                    GameObject prefab = ZNetScene.instance.GetPrefab(food.Trim());
-                    var sharedName = prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-                    if (player.m_inventory.ContainsItemByName(sharedName)) {
-                        count = player.m_inventory.CountItems(sharedName);
-                    }
-                    player.m_inventory.AddItem(prefab, 10 - count);
-                }
-            }
             if (repairHotkey.Value.IsDown()) {
                 foreach (var item in player.m_inventory.GetAllItems().Where(i => i.IsEquipable() && i.m_durability < i.GetMaxDurability())) {
                     item.m_durability = item.GetMaxDurability();
                 }
                 foreach (var ammo in favoriteAmmo) {
                     int count = 0;
-                    GameObject prefab = ZNetScene.instance.GetPrefab(ammo.Trim());
-                    var sharedName = prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-                    if (player.m_inventory.ContainsItemByName(sharedName)) {
-                        count = player.m_inventory.CountItems(sharedName);
+                    var prefab = ZNetScene.instance.GetPrefab(ammo.Trim());
+                    var itemData = prefab.GetComponent<ItemDrop>().m_itemData.m_shared;
+                    if (player.m_inventory.ContainsItemByName(itemData.m_name)) {
+                        count = player.m_inventory.CountItems(itemData.m_name);
                     }
-                    player.m_inventory.AddItem(prefab, 100 - count);
+                    if (count < itemData.m_maxStackSize) {
+                        player.m_inventory.AddItem(prefab, itemData.m_maxStackSize - count);
+                    }
+                }
+                foreach (var food in favoriteFoods) {
+                    int count = 0;
+                    var prefab = ZNetScene.instance.GetPrefab(food.Trim());
+                    var itemData = prefab.GetComponent<ItemDrop>().m_itemData.m_shared;
+                    if (player.m_inventory.ContainsItemByName(itemData.m_name)) {
+                        count = player.m_inventory.CountItems(itemData.m_name);
+                    }
+                    if (count < itemData.m_maxStackSize) {
+                        player.m_inventory.AddItem(prefab, itemData.m_maxStackSize - count);
+                    }
                 }
                 if (player.GetHealthPercentage() < 1f) {
                     player.SetHealth(player.GetMaxHealth());
