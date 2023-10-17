@@ -31,10 +31,12 @@ namespace AutoPickupIgnorer
         private void Awake() {
             Game.isModded = true;
 
-            AutoPickupIgnoreList = Config.Bind("General", "AutoPickupIgnoreList", _defaultItemList, "Comma-separated list of items to ignore auto-pickup. Remove # before item to add to ignore list.");
-            ToggleBehaviorHotkey = Config.Bind("General", "BehaviorHotkey", new KeyboardShortcut(KeyCode.Quote), "Hotkey to change pickup behavior between custom ignore, ignore all, and default behavior");
+            AutoPickupIgnoreList = Config.Bind("General", "AutoPickupIgnoreList", _defaultItemList,
+                "Comma-separated list of items to ignore auto-pickup. Remove # before item to add to ignore list.");
+            ToggleBehaviorHotkey = Config.Bind("General", "BehaviorHotkey", new KeyboardShortcut(KeyCode.Quote),
+                "Hotkey to change pickup behavior between custom ignore, ignore all, and default behavior");
 
-            _ignoreList = AutoPickupIgnoreList.Value.Split(',').Where(i => !i.Trim().StartsWith("#")).Select(i => i.Trim()).ToList();
+            _ignoreList = AutoPickupIgnoreList.Value.Split(',').Select(i => i.Trim()).Where(i => !i.StartsWith("#")).ToList();
 
             harmony.PatchAll();
         }
@@ -85,7 +87,8 @@ namespace AutoPickupIgnorer
                         var instructionsToInsert = new List<CodeInstruction> {
                             new CodeInstruction(OpCodes.Ldloc_S, 4),
                             new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(ItemDrop), "m_itemData")),
-                            new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(AutoPickupIgnorer), "IgnoreItem", new [] {typeof(ItemDrop.ItemData) })),
+                            new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(AutoPickupIgnorer), "IgnoreItem",
+                                new [] { typeof(ItemDrop.ItemData) })),
                             new CodeInstruction(OpCodes.Brtrue, gotoLabel)
                         };
                         codes.InsertRange(i + 5, instructionsToInsert);
