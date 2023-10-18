@@ -46,19 +46,19 @@ namespace AutoPickupIgnorer
                 switch (_currentPickupBehavior) {
                     case PickupBehavior.Custom:
                         _currentPickupBehavior = PickupBehavior.IgnoreAll;
-                        _messageHud.ShowMessage(MessageHud.MessageType.Center, "Ignoring all items");
+                        _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, "Ignoring all items");
                         break;
                     case PickupBehavior.IgnoreAll:
                         _currentPickupBehavior = PickupBehavior.Default;
-                        _messageHud.ShowMessage(MessageHud.MessageType.Center, "Default pickup behavior");
+                        _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, "Default pickup behavior");
                         break;
                     case PickupBehavior.Default:
                         _currentPickupBehavior = PickupBehavior.Custom;
-                        _messageHud.ShowMessage(MessageHud.MessageType.Center, "Ignoring custom items");
+                        _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, "Ignoring custom items");
                         break;
                     default:
                         _currentPickupBehavior = PickupBehavior.Custom;
-                        _messageHud.ShowMessage(MessageHud.MessageType.Center, "Ignoring custom items");
+                        _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, "Ignoring custom items");
                         break;
                 }
             }
