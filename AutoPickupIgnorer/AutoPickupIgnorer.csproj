@@ -59,7 +59,6 @@
     <Compile Include="AutoPickupIgnorer.cs" />
     <Compile Include="Common.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ValheimItem.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="CHANGELOG.md">
