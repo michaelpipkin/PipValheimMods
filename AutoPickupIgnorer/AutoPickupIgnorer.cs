@@ -16,7 +16,7 @@ namespace AutoPickupIgnorer
         // Module info
         private const string modGUID = "Pip.AutoPickupIgnorer";
         private const string modName = "Pip's Auto-pickup Ignorer";
-        private const string modVersion = "1.0.5";
+        private const string modVersion = "1.0.6";
         private readonly Harmony harmony = new Harmony(modGUID);
 
         // Config file entries
@@ -80,10 +80,14 @@ namespace AutoPickupIgnorer
             static IEnumerable<CodeInstruction> AutoPickupTranspiler(IEnumerable<CodeInstruction> instructions) {
                 var codes = new List<CodeInstruction>(instructions);
                 for (var i = 0; i < codes.Count; i++) {
+                    Debug.unityLogger.Log($"Index: {i} | OpCode: {codes[i].opcode} | Operand: {codes[i].operand}");
                     if (codes[i].opcode == OpCodes.Stloc_S &&
                         codes[i].operand.GetType() == typeof(LocalBuilder) &&
-                        ((LocalBuilder)codes[i].operand).LocalIndex == 4) {
+                        ((LocalBuilder)codes[i].operand).LocalIndex == 4 &&
+                        codes[i - 4].opcode == OpCodes.Brfalse) {
+                        Debug.unityLogger.Log("Entered if block");
                         var gotoLabel = codes[i - 4].operand;
+                        Debug.unityLogger.Log($"Getting label from index: {i - 4}");
                         var instructionsToInsert = new List<CodeInstruction> {
                             new CodeInstruction(OpCodes.Ldloc_S, 4),
                             new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(ItemDrop), "m_itemData")),
@@ -91,7 +95,8 @@ namespace AutoPickupIgnorer
                                 new [] { typeof(ItemDrop.ItemData) })),
                             new CodeInstruction(OpCodes.Brtrue, gotoLabel)
                         };
-                        codes.InsertRange(i + 5, instructionsToInsert);
+                        Debug.unityLogger.Log($"instructions: {instructionsToInsert} | index: {i + 1}");
+                        codes.InsertRange(i + 1, instructionsToInsert);
                     }
                 }
                 return codes.AsEnumerable();
