@@ -7,6 +7,8 @@ The mod allows the player to specify which items will and won't be auto-picked-u
 
 Once Valheim is run with the mod installed, a config file will be created (Pip.AutoPickupIgnorer.cfg).
 In order to ignore an item for auto-pickup, open the config file remove the # in front of the item.
+If you don't care to track items in the config file that you are not ignoring, you can remove all #-prefixed items from the list,
+and simply include a comma-separated list of the items you want to ignore.
 Many of the items in the game do not have straightforward names. I recommend consulting the item
 list [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html) to look up some of the less obviously-named items.
 Item names used in the config file are from the Item column on that page.

@@ -1,3 +1,10 @@
+## Release 1.0.8
+* Change main method from transpiler to prefix
+* Catch NullReferenceException when standing next to cart
+## Release 1.0.7
+* Remove debugging log statements
+## Release 1.0.6
+* Updated for Ashlands
 ## Release 1.0.5
 * Cleaned up main class by moving some code
 * Optimize ignore list construction
