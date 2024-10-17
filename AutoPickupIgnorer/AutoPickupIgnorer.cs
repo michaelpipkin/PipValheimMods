@@ -159,20 +159,18 @@ namespace AutoPickupIgnorer
 				if (item != null) {
 					if ((DateTime.Now - item.LastPickupTime).TotalSeconds > 30) {
 						Debug.unityLogger.Log($"{DateTime.Now:MM/dd/yyyy HH:mm:ss}: Ignoring item: {itemData.m_dropPrefab.name}");
+						// Update the last pickup time to the current time
 						item.LastPickupTime = DateTime.Now;
 					}
-					return true;
 				}
 				else {
 					Debug.unityLogger.Log($"{DateTime.Now:MM/dd/yyyy HH:mm:ss}: Ignoring item: {itemData.m_dropPrefab.name}");
 					// If the item is not tracked, add it to the tracking list with the current time
 					_itemTracking.Add(new ItemTracking { ItemName = itemData.m_dropPrefab.name, LastPickupTime = DateTime.Now });
-					return true;
 				}
+				return true;
 			}
-			// If the pickup behavior is set to IgnoreAll or the item is in the ignore list in Custom mode, return true
-			return _currentPickupBehavior == PickupBehavior.IgnoreAll ||
-					(_currentPickupBehavior == PickupBehavior.Custom && _ignoreList.Contains(itemData.m_dropPrefab.name));
+			return false;
 		}
 	}
 
