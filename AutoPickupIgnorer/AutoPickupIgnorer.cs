@@ -17,7 +17,7 @@ namespace AutoPickupIgnorer
 		// Module info
 		private const string modGUID = "Pip.AutoPickupIgnorer";
 		private const string modName = "Pip's Auto-pickup Ignorer";
-		private const string modVersion = "1.0.8";
+		private const string modVersion = "1.0.9";
 		private readonly Harmony harmony = new Harmony(modGUID);
 
 		// Config file entries
@@ -100,6 +100,7 @@ namespace AutoPickupIgnorer
 							continue;
 						}
 						ItemDrop component = ((Component)(object)val.attachedRigidbody).GetComponent<ItemDrop>();
+						// If the item ignore condition is met, return false to skip the pickup
 						if (IgnoreItem(component.m_itemData)) {
 							return false;
 						}
@@ -151,23 +152,27 @@ namespace AutoPickupIgnorer
 		}
 
 		public static bool IgnoreItem(ItemDrop.ItemData itemData) {
+			// Check if the current pickup behavior is set to Custom and the item is in the ignore list
 			if (_currentPickupBehavior == PickupBehavior.Custom && _ignoreList.Contains(itemData.m_dropPrefab.name)) {
 				var item = _itemTracking.Find(i => i.ItemName == itemData.m_dropPrefab.name);
+				// If the item is already tracked, check if enough time has passed since the last pickup
 				if (item != null) {
-					if ((DateTime.Now - item.LastPickupTime).TotalSeconds > 15) {
+					if ((DateTime.Now - item.LastPickupTime).TotalSeconds > 30) {
 						Debug.unityLogger.Log($"{DateTime.Now:MM/dd/yyyy HH:mm:ss}: Ignoring item: {itemData.m_dropPrefab.name}");
 						item.LastPickupTime = DateTime.Now;
-						return true;
 					}
+					return true;
 				}
 				else {
 					Debug.unityLogger.Log($"{DateTime.Now:MM/dd/yyyy HH:mm:ss}: Ignoring item: {itemData.m_dropPrefab.name}");
+					// If the item is not tracked, add it to the tracking list with the current time
 					_itemTracking.Add(new ItemTracking { ItemName = itemData.m_dropPrefab.name, LastPickupTime = DateTime.Now });
 					return true;
 				}
 			}
+			// If the pickup behavior is set to IgnoreAll or the item is in the ignore list in Custom mode, return true
 			return _currentPickupBehavior == PickupBehavior.IgnoreAll ||
-				(_currentPickupBehavior == PickupBehavior.Custom && _ignoreList.Contains(itemData.m_dropPrefab.name));
+					(_currentPickupBehavior == PickupBehavior.Custom && _ignoreList.Contains(itemData.m_dropPrefab.name));
 		}
 	}
 

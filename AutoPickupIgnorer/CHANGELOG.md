@@ -1,3 +1,5 @@
+## Release 1.0.9
+* Fix placement of return statement in IgnoreItem method
 ## Release 1.0.8
 * Change main method from transpiler to prefix
 * Catch NullReferenceException when standing next to cart
