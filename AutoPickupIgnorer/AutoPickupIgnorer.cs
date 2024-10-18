@@ -17,7 +17,7 @@ namespace AutoPickupIgnorer
 		// Module info
 		private const string modGUID = "Pip.AutoPickupIgnorer";
 		private const string modName = "Pip's Auto-pickup Ignorer";
-		private const string modVersion = "1.0.9";
+		private const string modVersion = "1.0.10";
 		private readonly Harmony harmony = new Harmony(modGUID);
 
 		// Config file entries
@@ -101,7 +101,7 @@ namespace AutoPickupIgnorer
 						}
 						ItemDrop component = ((Component)(object)val.attachedRigidbody).GetComponent<ItemDrop>();
 						// If the item ignore condition is met, return false to skip the pickup
-						if (IgnoreItem(component.m_itemData)) {
+						if (_currentPickupBehavior == PickupBehavior.IgnoreAll || IgnoreItem(component.m_itemData)) {
 							return false;
 						}
 						FloatingTerrainDummy floatingTerrainDummy = null;

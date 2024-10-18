@@ -1,3 +1,5 @@
+## Release 1.0.10
+* Fix bug with Ignore All behavior
 ## Release 1.0.9
 * Further optimization of IgnoreItem method
 ## Release 1.0.8
