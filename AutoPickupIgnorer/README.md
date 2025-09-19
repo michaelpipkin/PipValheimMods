@@ -11,6 +11,9 @@ In order to ignore an item for auto-pickup, open the config file remove the # in
 If you don't care to track items in the config file that you are not ignoring, you can remove all #-prefixed items from the list,
 and simply include a comma-separated list of the items you want to ignore.
 
+The automatically generated list of items in the config file is not exhaustive, especially as new items are added to the game,
+and you may need to add items manually. Simply add new items to the list without a leading #, and they will be ignored.
+
 Many of the items in the game do not have straightforward names. I recommend consulting the item
 list [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html) to look up some of the less obviously-named items.
 Item names used in the config file are from the Item column on that page.

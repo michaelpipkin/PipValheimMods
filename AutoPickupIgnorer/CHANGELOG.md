@@ -1,3 +1,7 @@
+## Release 1.0.12
+* Updated for patch 0.220.3
+## Release 1.0.11
+* Updated for Bog Witch
 ## Release 1.0.10
 * Fix bug with Ignore All behavior
 ## Release 1.0.9
