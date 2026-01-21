@@ -253,15 +253,45 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Character), "ApplyDamage")]
         class Character_ApplyDamage_PlayerSpecific_Patch
         {
-            static void Prefix(Character __instance, HitData hit) {
-                // Only modify damage dealt BY the local player TO enemies
+            static bool Prefix(Character __instance, HitData hit, bool showDamageText, bool triggerEffects, HitData.DamageModifier mod) {
+                // Handle damage dealt BY the local player TO enemies
                 if (hit.GetAttacker() == Player.m_localPlayer && !__instance.IsPlayer()) {
                     hit.ApplyModifier(CustomPlayerDamageRate.Value);
+                    return true; // Continue with original method
                 }
-                // Only modify damage taken BY the local player
-                else if (__instance == Player.m_localPlayer) {
-                    hit.ApplyModifier(CustomIncomingDamageRate.Value);
+
+                // Handle damage taken BY the local player
+                if (__instance == Player.m_localPlayer) {
+                    Player player = __instance as Player;
+                    float currentHealth = player.GetHealth();
+                    float maxHealth = player.GetMaxHealth();
+                    float healthPercentage = currentHealth / maxHealth;
+
+                    // Calculate total incoming damage before any modifiers
+                    float totalDamage = hit.GetTotalDamage();
+
+                    if (healthPercentage <= 0.25f) {
+                        // Below 25% health: nullify all damage
+                        return false; // Skip the original method entirely
+                    } else if (healthPercentage <= 0.5f) {
+                        // 25-50% health: cap damage at 10% of current health (very protective)
+                        float maxAllowedDamage = currentHealth * 0.1f;
+                        if (totalDamage > maxAllowedDamage) {
+                            float reductionFactor = maxAllowedDamage / totalDamage;
+                            hit.ApplyModifier(reductionFactor);
+                        }
+                        return true;
+                    } else {
+                        // Above 50% health: cap damage at 25% of current health  
+                        float maxAllowedDamage = currentHealth * 0.25f;
+                        if (totalDamage > maxAllowedDamage) {
+                            float reductionFactor = maxAllowedDamage / totalDamage;
+                            hit.ApplyModifier(reductionFactor);
+                        }
+                        return true;
+                    }
                 }
+                return true; // Continue with the original method for all other cases
             }
         }
     }

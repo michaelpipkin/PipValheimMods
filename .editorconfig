@@ -1,0 +1,17 @@
+root = true
+
+[*.cs]
+# Disable fading for unreferenced code (common in game modding with Harmony patches)
+dotnet_diagnostic.IDE0051.severity = none  # Remove unused private members
+dotnet_diagnostic.IDE0052.severity = none  # Remove unread private members
+dotnet_diagnostic.IDE0060.severity = none  # Remove unused parameter
+
+# Disable unused variable warnings
+dotnet_diagnostic.IDE0059.severity = none  # Unnecessary assignment of a value
+
+# Keep standard formatting preferences
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+insert_final_newline = false
+trim_trailing_whitespace = true
