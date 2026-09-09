@@ -1,0 +1,1518 @@
+PrefabName	DisplayName	NameToken	ItemType	AutoPickup	InZNetScene	MaxStack	Weight
+Abomination_attack1	Swing attack	Swing attack	OneHandedWeapon	True	True	1	1
+Abomination_attack2	Slam attack	Slam attack	OneHandedWeapon	True	True	1	1
+Abomination_attack3	Stub to the ground	Stub to the ground	OneHandedWeapon	True	True	1	1
+Acorn	Acorns	$item_oakseeds	Material	True	True	100	0.1
+Amber	Amber	$item_amber	Material	True	True	20	0.1
+AmberPearl	Amber Pearl	$item_amberpearl	Material	True	True	50	0.1
+AncientCoin	Ancient Coin	$item_ancientcoin	Material	True	True	999	0.2
+AncientGemstoneBlack	Draumyx	$item_ancientgemstone_black	Material	True	True	20	0.3
+AncientGemstoneGreen	Grimvarn	$item_ancientgemstone_green	Material	True	True	20	0.3
+AncientGemstoneOrange	Solryth	$item_ancientgemstone_orange	Material	True	True	20	0.3
+AncientGemstonePurple	Veydris	$item_ancientgemstone_purple	Material	True	True	20	0.3
+AncientSeed	Ancient Seed	$item_ancientseed	Misc	True	True	50	1
+ArmorAshlandsMediumChest	Breastplate of Ask	$item_chest_medium_ashlands	Chest	True	True	1	5
+ArmorAshlandsMediumlegs	Trousers of Ask	$item_legs_medium_ashlands	Legs	True	True	1	5
+ArmorBerserkerChest	Patterns of the Bear	$item_chest_berserker	Chest	True	True	1	5
+ArmorBerserkerLegs	Loincloth of the Bear	$item_legs_berserker	Legs	True	True	1	5
+ArmorBerserkerUndeadChest	Vilebone Cage	$item_chest_berserker_undead	Chest	True	True	1	5
+ArmorBerserkerUndeadLegs	Vilebone Drapes	$item_legs_berserker_undead	Legs	True	True	1	5
+ArmorBronzeChest	Bronze Plate Tunic	$item_chest_bronze	Chest	True	True	1	10
+ArmorBronzeLegs	Bronze Plate Leggings	$item_legs_bronze	Legs	True	True	1	10
+ArmorCarapaceChest	Carapace Breastplate	$item_chest_carapace	Chest	True	True	1	10
+ArmorCarapaceLegs	Carapace Greaves	$item_legs_carapace	Legs	True	True	1	10
+ArmorDeepNorthHeavyChest	Breastplate of the Protector	$item_chest_heavy_deepnorth	Chest	True	True	1	5
+ArmorDeepNorthHeavylegs	Trousers of the Protector	$item_legs_heavy_deepnorth	Legs	True	True	1	5
+ArmorDeepNorthMageChest	Robes of the Caller	$item_chest_mage_deepnorth	Chest	True	True	1	5
+ArmorDeepNorthMagelegs	Trousers of the Caller	$item_legs_mage_deepnorth	Legs	True	True	1	5
+ArmorDeepNorthMediumChest	Chestpiece of the Vanguard	$item_chest_medium_deepnorth	Chest	True	True	1	5
+ArmorDeepNorthMediumlegs	Trousers of the Vanguard	$item_legs_medium_deepnorth	Legs	True	True	1	5
+ArmorDress1	Plain Brown Dress	$item_chest_dress1	Chest	True	True	1	10
+ArmorDress10	Simple Undyed Dress	$item_chest_dress10	Chest	True	True	1	10
+ArmorDress2	Brown Dress with Shawl	$item_chest_dress2	Chest	True	True	1	10
+ArmorDress3	Brown Dress with Beads	$item_chest_dress3	Chest	True	True	1	10
+ArmorDress4	Plain Blue Dress	$item_chest_dress4	Chest	True	True	1	10
+ArmorDress5	Blue Dress with Shawl	$item_chest_dress5	Chest	True	True	1	10
+ArmorDress6	Blue Dress with Beads	$item_chest_dress6	Chest	True	True	1	10
+ArmorDress7	Plain Yellow Dress	$item_chest_dress7	Chest	True	True	1	10
+ArmorDress8	Yellow Dress with Shawl	$item_chest_dress8	Chest	True	True	1	10
+ArmorDress9	Yellow Dress with Beads	$item_chest_dress9	Chest	True	True	1	10
+ArmorFenringChest	Fenris Coat	$item_chest_fenris	Chest	True	True	1	10
+ArmorFenringLegs	Fenris Leggings	$item_legs_fenris	Legs	True	True	1	10
+ArmorFlametalChest	Flametal Breastplate	$item_chest_flametal	Chest	True	True	1	10
+ArmorFlametalLegs	Flametal Greaves	$item_legs_flametal	Legs	True	True	1	10
+ArmorGoldHeavyChestUncooked	Cast: Breastplate of the Protector	$item_chest_heavy_gold_uncooked	Material	True	True	10	1
+ArmorGoldHeavyHelmetUncooked	Cast: Helmet of the Protector	$item_helmet_heavy_gold_uncooked	Material	True	True	10	1
+ArmorGoldHeavyLegsUncooked	Cast: Trousers of the Protector	$item_legs_heavy_gold_uncooked	Material	True	True	10	1
+ArmorGoldMageChestUncooked	Cast: Robes of the Caller	$item_chest_mage_gold_uncooked	Material	True	True	10	1
+ArmorGoldMageHelmetUncooked	Cast: Headdress of the Caller	$item_helmet_mage_gold_uncooked	Material	True	True	10	1
+ArmorGoldMageLegsUncooked	Cast: Trousers of the Caller	$item_legs_mage_gold_uncooked	Material	True	True	10	1
+ArmorGoldMediumChestUncooked	Cast: Chestpiece of the Vanguard	$item_chest_medium_gold_uncooked	Material	True	True	10	1
+ArmorGoldMediumHelmetUncooked	Cast: Hood of the Vanguard	$item_helmet_medium_gold_uncooked	Material	True	True	10	1
+ArmorGoldMediumLegsUncooked	Cast: Trousers of the Vanguard	$item_legs_medium_gold_uncooked	Material	True	True	10	1
+ArmorHarvester1	Harvest Tunic	$item_chest_harvester1	Chest	True	True	1	10
+ArmorHarvester2	Harvest Dress	$item_chest_harvester2	Chest	True	True	1	10
+ArmorIronChest	Iron Scale Mail	$item_chest_iron	Chest	True	True	1	15
+ArmorIronLegs	Iron Greaves	$item_legs_iron	Legs	True	True	1	15
+ArmorLeatherChest	Leather Tunic	$item_chest_leather	Chest	True	True	1	5
+ArmorLeatherLegs	Leather Trousers	$item_legs_leather	Legs	True	True	1	5
+ArmorLoxChest	Lox Fur Jacket	$item_chest_lox	Chest	True	True	1	5
+ArmorLoxLegs	Lox Fur Trousers	$item_legs_lox	Legs	True	True	1	5
+ArmorMageChest	Eitr-weave Robe	$item_chest_mage	Chest	True	True	1	5
+ArmorMageChest_Ashlands	Robes of Embla	$item_chest_mage_ashlands	Chest	True	True	1	5
+ArmorMageLegs	Eitr-weave Trousers	$item_legs_mage	Legs	True	True	1	5
+ArmorMageLegs_Ashlands	Trousers of Embla	$item_legs_mage_ashlands	Legs	True	True	1	5
+ArmorPaddedCuirass	Padded Cuirass	$item_chest_pcuirass	Chest	True	True	1	10
+ArmorPaddedGreaves	Padded Greaves	$item_legs_pgreaves	Legs	True	True	1	10
+ArmorRagsChest	Rag Tunic	$item_chest_rags	Chest	True	True	1	2
+ArmorRagsLegs	Rag Trousers	$item_legs_rags	Legs	True	True	1	2
+ArmorRootChest	Root Harnesk	$item_chest_root	Chest	True	True	1	10
+ArmorRootLegs	Root Leggings	$item_legs_root	Legs	True	True	1	10
+ArmorTrollLeatherChest	Troll Leather Tunic	$item_chest_trollleather	Chest	True	True	1	5
+ArmorTrollLeatherLegs	Troll Leather Trousers	$item_legs_trollleather	Legs	True	True	1	5
+ArmorTunic1	Plain Blue Tunic	$item_chest_tunic1	Chest	True	True	1	10
+ArmorTunic10	Simple Undyed Tunic	$item_chest_tunic10	Chest	True	True	1	10
+ArmorTunic2	Blue Tunic with Cape	$item_chest_tunic2	Chest	True	True	1	10
+ArmorTunic3	Blue Tunic with Beads	$item_chest_tunic3	Chest	True	True	1	10
+ArmorTunic4	Plain Red Tunic	$item_chest_tunic4	Chest	True	True	1	10
+ArmorTunic5	Red Tunic with Cape	$item_chest_tunic5	Chest	True	True	1	10
+ArmorTunic6	Red Tunic with Beads	$item_chest_tunic6	Chest	True	True	1	10
+ArmorTunic7	Plain Yellow Tunic	$item_chest_tunic7	Chest	True	True	1	10
+ArmorTunic8	Yellow Tunic with Cape	$item_chest_tunic8	Chest	True	True	1	10
+ArmorTunic9	Yellow Tunic with Beads	$item_chest_tunic9	Chest	True	True	1	10
+ArmorWolfChest	Wolf Hide Chestpiece	$item_chest_wolf	Chest	True	True	1	15
+ArmorWolfLegs	Wolf Hide Trousers	$item_legs_wolf	Legs	True	True	1	15
+ArrowBloodGold	Bloodgold Arrow	$item_arrow_bloodgold	Ammo	True	True	100	0.1
+ArrowBronze	Bronzehead Arrow	$item_arrow_bronze	Ammo	True	True	100	0.1
+ArrowCarapace	Carapace Arrow	$item_arrow_carapace	Ammo	True	True	100	0.1
+ArrowCharred	Charred Arrow	$item_arrow_charred	Ammo	True	True	100	0.1
+ArrowFire	Fire Arrow	$item_arrow_fire	Ammo	True	True	100	0.1
+ArrowFlint	Flinthead Arrow	$item_arrow_flint	Ammo	True	True	100	0.1
+ArrowFrost	Frost Arrow	$item_arrow_frost	Ammo	True	True	100	0.1
+ArrowIron	Ironhead Arrow	$item_arrow_iron	Ammo	True	True	100	0.1
+ArrowNeedle	Needle Arrow	$item_arrow_needle	Ammo	True	True	100	0.1
+ArrowObsidian	Obsidian Arrow	$item_arrow_obsidian	Ammo	True	True	100	0.1
+ArrowPoison	Poison Arrow	$item_arrow_poison	Ammo	True	True	100	0.1
+ArrowSilver	Silver Arrow	$item_arrow_silver	Ammo	True	True	100	0.1
+ArrowWood	Wood Arrow	$item_arrow_wood	Ammo	True	True	100	0.1
+AskBladder	Asksvin Bladder	$item_askbladder	Material	True	True	50	0.5
+AskHide	Asksvin Hide	$item_askhide	Material	True	True	50	1
+AsksvinCarrionNeck	Asksvin Neck	$item_asksvincarrionneck	Material	True	True	50	2
+AsksvinCarrionPelvic	Asksvin Pelvis	$item_asksvincarrionpelvic	Material	True	True	50	2
+AsksvinCarrionRibcage	Asksvin Ribcage	$item_asksvincarrionribcage	Material	True	True	50	5
+AsksvinCarrionSkull	Asksvin Skull	$item_asksvincarrionskull	Material	True	True	50	2
+AsksvinEgg	Asksvin Egg	$item_asksvin_egg	Misc	False	True	20	1
+AsksvinMeat	Asksvin Tail	$item_asksvin_meat	Material	True	True	20	1
+Asksvin_Bite	lox bite	lox bite	OneHandedWeapon	True	False	1	1
+Asksvin_Headbutt	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Asksvin_Pounce	lox bite	lox bite	OneHandedWeapon	True	False	1	1
+Asksvin_Turnaround	lox bite	lox bite	OneHandedWeapon	True	False	1	1
+aspect_bonemass_attack_aoe	heal	heal	OneHandedWeapon	True	False	1	1
+aspect_bonemass_attack_punch	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_bonemass_attack_throw	slime throw	slime throw	OneHandedWeapon	True	False	1	1
+aspect_dragon_bite	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+aspect_dragon_claw_left	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+aspect_dragon_claw_right	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+aspect_dragon_coldbreath	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+aspect_dragon_spit_shotgun	cold ball	cold ball	OneHandedWeapon	True	False	1	1
+aspect_dragon_taunt	scream	scream	OneHandedWeapon	True	False	1	1
+aspect_Eikthyr_antler	StagAttack1	StagAttack1	OneHandedWeapon	True	False	1	1
+aspect_Eikthyr_charge	StagAttack2	StagAttack2	OneHandedWeapon	True	False	1	1
+aspect_Eikthyr_stomp	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_Fader_Bite	Fader Bite	Fader Bite	OneHandedWeapon	True	False	1	1
+aspect_Fader_Claw_Left	Fader Claw Left	Fader Claw Left	OneHandedWeapon	True	False	1	1
+aspect_Fader_Claw_Right	Fader Claw Right	Fader Claw Right	OneHandedWeapon	True	False	1	1
+aspect_Fader_Fissure	Fader Fissure	Fader Fissure	OneHandedWeapon	True	False	1	1
+aspect_Fader_Flamebreath	Fader Firebreath	Fader Firebreath	OneHandedWeapon	True	False	1	1
+aspect_Fader_Spin	Fader Spin	Fader Spin	OneHandedWeapon	True	False	1	1
+aspect_Fader_WallOfFire	Fader Wall of Fire	Fader Wall of Fire	OneHandedWeapon	True	False	1	1
+aspect_gd_king_rootspawn	spawn	spawn	OneHandedWeapon	True	False	1	1
+aspect_gd_king_scream	scream	scream	OneHandedWeapon	True	False	1	1
+aspect_gd_king_shoot	shaman attack	shaman attack	OneHandedWeapon	True	False	1	1
+aspect_gd_king_stomp	jaws	jaws	OneHandedWeapon	True	False	1	1
+aspect_GoblinKing_Beam	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+aspect_GoblinKing_Nova	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_GoblinKing_Taunt	scream	scream	OneHandedWeapon	True	False	1	1
+aspect_SeekerQueen_Bite	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_SeekerQueen_PierceAOE	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_SeekerQueen_Rush	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_SeekerQueen_Slap	slap	slap	OneHandedWeapon	True	False	1	1
+aspect_SeekerQueen_Spit	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+AtgeirBlackmetal	Black Metal Atgeir	$item_atgeir_blackmetal	TwoHandedWeapon	True	True	1	2.5
+AtgeirBronze	Bronze Atgeir	$item_atgeir_bronze	TwoHandedWeapon	True	True	1	2.5
+AtgeirGold	Nord Atgeir	$item_atgeir_gold	TwoHandedWeapon	True	True	1	2.5
+AtgeirGoldUncooked	Cast: Nord Atgeir	$item_atgeir_gold_uncooked	Material	True	True	1	2.5
+AtgeirGold_BloodLightning	Thunderblood Atgeir	$item_atgeir_gold_bloodlightning	TwoHandedWeapon	True	True	1	2.5
+AtgeirGold_FrostFire	Frostfire Atgeir	$item_atgeir_gold_frostfire	TwoHandedWeapon	True	True	1	2.5
+AtgeirHimminAfl	Himminafl	$item_atgeir_himminafl	TwoHandedWeapon	True	True	1	2.5
+AtgeirIron	Iron Atgeir	$item_atgeir_iron	TwoHandedWeapon	True	True	1	2.5
+AtgeirWood	Wooden Atgeir	$item_atgeir_wood	TwoHandedWeapon	True	True	1	2.5
+Axe1h_JotunWarrior	Club	Club	OneHandedWeapon	False	True	1	1
+Axe1h_JotunWarrior 1	Club	Club	Shield	False	True	1	1
+Axe2h_JotunWarrior	Club	Club	OneHandedWeapon	False	True	1	1
+AxeBerzerkr	Berserkir Axes	$item_axe_berzerkr	TwoHandedWeapon	True	True	1	2
+AxeBerzerkrBlood	Bleeding Berserkir Axes	$item_axe_berzerkr_blood	TwoHandedWeapon	True	True	1	2
+AxeBerzerkrLightning	Thundering Berserkir Axes	$item_axe_berzerkr_lightning	TwoHandedWeapon	True	True	1	2
+AxeBerzerkrNature	Primal Berserkir Axes	$item_axe_berzerkr_nature	TwoHandedWeapon	True	True	1	2
+AxeBlackMetal	Black Metal Axe	$item_axe_blackmetal	OneHandedWeapon	True	True	1	2
+AxeBronze	Bronze Axe	$item_axe_bronze	OneHandedWeapon	True	True	1	2
+AxeEarly	Early Axes	$item_axe_early	TwoHandedWeapon	True	True	1	2
+AxeFlint	Flint Axe	$item_axe_flint	OneHandedWeapon	True	True	1	1.5
+AxeGold	Nord Axe	$item_axe_gold	OneHandedWeapon	True	True	1	2
+AxeGoldUncooked	Cast: Nord Axe	$item_axe_gold_uncooked	Material	True	True	1	2
+AxeGold_BloodLightning	Thunderblood Axe	$item_axe_gold_bloodlightning	OneHandedWeapon	True	True	1	2
+AxeGold_FrostFire	Frostfire Axe	$item_axe_gold_frostfire	OneHandedWeapon	True	True	1	2
+AxeHead1	Curious Axe Head	$item_axehead1	Material	True	True	10	2
+AxeHead2	Mysterious Axe Head	$item_axehead2	Material	True	True	10	2
+AxeIron	Iron Axe	$item_axe_iron	OneHandedWeapon	True	True	1	2
+AxeJotunBane	Jotun Bane	$item_axe_jotunbane	OneHandedWeapon	True	True	1	2
+AxeStone	Stone Axe	$item_axe_stone	OneHandedWeapon	True	True	1	1.5
+AxeWood	Wooden Axe	$item_axe_wood	OneHandedWeapon	True	True	1	2
+babyseeker_attack	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+BakedPoteitr	Baked Poteitr	$item_bakedpoteitr	Consumable	True	True	10	1
+BakedPoteitrUncooked	Unbaked Poteitr	$item_bakedpoteitr_uncooked	Material	True	True	10	1
+BarberKit	Barber Kit	$item_barberkit	Misc	True	True	1	2
+BarkaBranch	Frozen Branch	$item_barkabranch	Material	True	True	50	0.5
+Barka_Backslam	Barka Backslam	Barka Backslam	OneHandedWeapon	True	False	1	1
+Barka_HeavySwing	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Barka_SlamDrive	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Barka_WhipFlurry	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Barka_WhipSlam	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Barley	Barley	$item_barley	Material	True	True	100	0.2
+BarleyFlour	Barley Flour	$item_barleyflour	Misc	True	True	50	0.2
+BarleyWine	Fire Resistance Barley Wine	$item_barleywine	Consumable	True	True	10	1
+BarleyWineBase	Barley Wine Base: Fire Resistance	$item_barleywinebase	Material	True	True	1	1
+BarrelRings	Barrel Hoops	$item_barrelrings	Misc	True	True	20	2
+Battleaxe	Battleaxe	$item_battleaxe	TwoHandedWeapon	True	True	1	2.5
+BattleaxeBlackmetal	Black Metal Battleaxe	$item_battleaxe_blackmetal	TwoHandedWeapon	True	True	1	2.5
+BattleaxeCrystal	Crystal Battleaxe	$item_battleaxe_crystal	TwoHandedWeapon	True	True	1	2.5
+BattleaxeGold	Nord Greataxe	$item_axe2h_gold	TwoHandedWeapon	True	True	1	2.5
+BattleaxeGoldUncooked	Cast: Nord Greataxe	$item_battleaxe_gold_uncooked	Material	True	True	1	2.5
+BattleaxeGold_BloodLightning	Thunderblood Greataxe	$item_axe2h_gold_bloodlightning	TwoHandedWeapon	True	True	1	2.5
+BattleaxeGold_FrostFire	Frostfire Greataxe	$item_axe2h_gold_frostfire	TwoHandedWeapon	True	True	1	2.5
+BattleaxeSkullSplittur	Skull Splittur	$item_battleaxe_skullsplittur	TwoHandedWeapon	True	True	1	2.5
+BattleaxeWood	Wooden Battleaxe	$item_battleaxe_wood	TwoHandedWeapon	True	True	1	2.5
+bat_melee	Bat melee	Bat melee	OneHandedWeapon	True	True	1	1
+Beard1	Majestic	$customization_beard01	Customization	True	False	1	1
+Beard10	Top Braid	$customization_beard10	Customization	True	False	1	1
+Beard11	Facewarmer	$customization_beard11	Customization	True	False	1	1
+Beard12	Royal	$customization_beard12	Customization	True	False	1	1
+Beard13	Triplets	$customization_beard13	Customization	True	False	1	1
+Beard14	Split Braid	$customization_beard14	Customization	True	False	1	1
+Beard15	Mini Braid	$customization_beard15	Customization	True	False	1	1
+Beard16	Stonedweller	$customization_beard16	Customization	True	False	1	1
+Beard17	Neat	$customization_beard17	Customization	True	False	1	1
+Beard18	Jarl Braids	$customization_beard18	Customization	True	False	1	1
+Beard19	Bushy	$customization_beard19	Customization	True	False	1	1
+Beard2	Twin Braids	$customization_beard02	Customization	True	False	1	1
+Beard20	Spiky	$customization_beard20	Customization	True	False	1	1
+Beard21	Tidy	$customization_beard21	Customization	True	False	1	1
+Beard22	Mustache	$customization_beard22	Customization	True	False	1	1
+Beard23	Crumb Catcher	$customization_beard23	Customization	True	False	1	1
+Beard24	Waxed	$customization_beard24	Customization	True	False	1	1
+Beard25	Trimmed	$customization_beard25	Customization	True	False	1	1
+Beard26	Handlebar	$customization_beard26	Customization	True	False	1	1
+Beard3	Short	$customization_beard03	Customization	True	False	1	1
+Beard4	Straight	$customization_beard04	Customization	True	False	1	1
+Beard5	Single Braid	$customization_beard05	Customization	True	False	1	1
+Beard6	Loose Braid	$customization_beard06	Customization	True	False	1	1
+Beard7	Split Shave	$customization_beard07	Customization	True	False	1	1
+Beard8	Thick	$customization_beard08	Customization	True	False	1	1
+Beard9	Trobadour	$customization_beard09	Customization	True	False	1	1
+BeardNone	No Beard	$customization_nobeard	Customization	True	False	1	1
+BeechSeeds	Beech Seeds	$item_beechseeds	Material	True	True	100	0.1
+Bell	Bell	$item_bell	Misc	True	True	9	0.5
+BellFragment	Bell Fragment	$item_bellfragment	Material	True	True	9	0.5
+BeltStrength	Megingjord	$item_beltstrength	Utility	True	True	1	2
+Bilebag	Bilebag	$item_bilebag	Material	True	True	50	0.5
+BirchSeeds	Birch Seeds	$item_birchseeds	Material	True	True	100	0.1
+BjornHide	Bear Hide	$item_bjornhide	Material	True	True	50	1
+BjornMeat	Bear Meat	$item_bjorn_meat	Material	True	True	20	1
+BjornPaw	Bear Paw	$item_bjornpaw	Material	True	True	50	0.5
+bjorn_bite	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+bjorn_claws	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+bjorn_slam	slap	slap	OneHandedWeapon	True	False	1	1
+bjorn_swipe_combo	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+bjorn_swipe_l	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+bjorn_swipe_r	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+BlackCore	Black Core	$item_blackcore	Material	True	True	20	1
+BlackMarble	Black Marble	$item_blackmarble	Material	True	True	50	2
+BlackMetal	Black Metal	$item_blackmetal	Material	True	True	30	12
+BlackMetalScrap	Black Metal Scrap	$item_blackmetalscrap	Material	True	True	30	10
+BlackSoup	Black Soup	$item_blacksoup	Consumable	True	True	10	1
+Blackwood	Ashwood	$item_blackwood	Material	True	True	50	2
+blobelite_attack_aoe	fart	fart	OneHandedWeapon	True	False	1	1
+blobLava_attack_aoe			OneHandedWeapon	True	False	1	1
+blobmork_attack_aoe	fart	fart	OneHandedWeapon	True	False	1	1
+blobtar_attack	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+BlobVial	Corked Vial	$item_blobvial	Material	True	True	10	1
+blob_attack_aoe	fart	fart	OneHandedWeapon	True	False	1	1
+blob_frost_attack_aoe	fart	fart	OneHandedWeapon	True	False	1	1
+Bloodbag	Bloodbag	$item_bloodbag	Material	True	True	50	0.5
+BloodGoldKey	Intricate Key	$item_bloodgoldkey	Misc	True	True	1	0.1
+BloodPudding	Blood Pudding	$item_bloodpudding	Consumable	True	True	10	1
+Blueberries	Blueberries	$item_blueberries	Consumable	True	True	50	0.1
+BoarJerky	Boar Jerky	$item_boarjerky	Consumable	True	True	20	0.5
+boar_base_attack	boar attack1	boar attack1	OneHandedWeapon	True	False	1	1
+BogWitchKvastur_attack	jaws	jaws	OneHandedWeapon	True	False	1	1
+BoltBlackmetal	Black Metal Bolt	$item_bolt_blackmetal	Ammo	True	True	100	0.1
+BoltBloodGold	Bloodgold Bolt	$item_bolt_bloodgold	Ammo	True	True	100	0.1
+BoltBone	Bone Bolt	$item_bolt_bone	Ammo	True	True	100	0.1
+BoltCarapace	Carapace Bolt	$item_bolt_carapace	Ammo	True	True	100	0.1
+BoltCharred	Charred Bolt	$item_bolt_charred	Ammo	True	True	100	0.1
+BoltIron	Iron Bolt	$item_bolt_iron	Ammo	True	True	100	0.1
+BombBile	Bile Bomb	$item_bilebomb	OneHandedWeapon	True	True	50	0.3
+BombBlob_Frost	Blob Bomb: Frost	$item_bombblob_frost	OneHandedWeapon	True	True	50	0.3
+BombBlob_Lava	Blob Bomb: Lava	$item_bombblob_lava	OneHandedWeapon	True	True	50	0.3
+BombBlob_Morkhalla	Blob Bomb: Pulp	$item_bombblob_morkhalla	OneHandedWeapon	True	True	50	0.3
+BombBlob_Poison	Blob Bomb: Poison	$item_bombblob_poison	OneHandedWeapon	True	True	50	0.3
+BombBlob_PoisonElite	Blob Bomb: Elite Poison	$item_bombblob_poisonelite	OneHandedWeapon	True	True	50	0.3
+BombBlob_Tar	Blob Bomb: Tar	$item_bombblob_tar	OneHandedWeapon	True	True	50	0.3
+BombDynamite	Ember Charge	$item_bomb_dynamite	OneHandedWeapon	True	True	50	0.3
+BombLava	Basalt Bomb	$item_lavabomb	OneHandedWeapon	True	True	50	0.3
+BombOoze	Ooze Bomb	$item_oozebomb	OneHandedWeapon	True	True	50	0.3
+BombSiege	Explosive Payload	$item_catapult_ammo	Material	True	True	50	0.3
+BombSmoke	Smoke Bomb	$item_smokebomb	OneHandedWeapon	True	True	50	0.3
+BoneFragments	Bone Fragments	$item_bonefragments	Material	True	True	50	0.5
+bonemass_attack_aoe	heal	heal	OneHandedWeapon	True	False	1	1
+bonemass_attack_punch	slap	slap	OneHandedWeapon	True	False	1	1
+bonemass_attack_spawn	heal	heal	OneHandedWeapon	True	False	1	1
+bonemass_attack_throw	slime throw	slime throw	OneHandedWeapon	True	False	1	1
+BoneMawSerpentMeat	Bonemaw Meat	$item_bonemawmeat	Material	True	True	50	10
+BonemawSerpentScale	Bonemaw Scale	$item_bonemawscale	Material	True	True	50	2
+BonemawSerpentTooth	Bonemaw Tooth	$item_bonemawtooth	Material	True	True	50	2
+BonemawSerpent_bite	Serpent bite	Serpent bite	OneHandedWeapon	True	False	1	1
+BonemawSerpent_breath	Fallen Valkyrie Poison Breath	Fallen Valkyrie Poison Breath	OneHandedWeapon	True	False	1	1
+BonemawSerpent_ram	Serpent bite	Serpent bite	OneHandedWeapon	True	False	1	1
+BonemawSerpent_spit	bonemaw spit	bonemaw spit	OneHandedWeapon	True	False	1	1
+BonemawSerpent_taunt	Serpent Taunt	Serpent Taunt	OneHandedWeapon	True	False	1	1
+Bow	Crude Bow	$item_bow	Bow	True	True	1	1.5
+BowAshlands	Ash Fang	$item_bow_ashlands	Bow	True	True	1	1.5
+BowAshlandsBlood	Blood Fang	$item_bow_ashlandsblood	Bow	True	True	1	1.5
+BowAshlandsRoot	Root Fang	$item_bow_ashlandsroot	Bow	True	True	1	1.5
+BowAshlandsStorm	Storm Fang	$item_bow_ashlandsstorm	Bow	True	True	1	1.5
+BowDraugrFang	Draugr Fang	$item_bow_draugrfang	Bow	True	True	1	1.5
+BowFineWood	Finewood Bow	$item_bow_finewood	Bow	True	True	1	1.5
+BowGold	Nord Bow	$item_bow_gold	Bow	True	True	1	1.5
+BowGoldUncooked	Cast: Nord Bow	$item_bow_gold_uncooked	Material	True	True	1	1.5
+BowGold_BloodLightning	Thunderblood Bow	$item_bow_gold_bloodlightning	Bow	True	True	1	1.5
+BowGold_FrostFire	Frostfire Bow	$item_bow_gold_frostfire	Bow	True	True	1	1.5
+BowHuntsman	Huntsman Bow	$item_bow_huntsman	Bow	True	True	1	1.5
+BowSpineSnap	Spinesnap	$item_bow_snipesnap	Bow	True	True	1	1.5
+Bread	Bread	$item_bread	Consumable	True	True	20	0.5
+BreadDough	Bread Dough	$item_breaddough	Material	True	True	20	0.5
+Bronze	Bronze	$item_bronze	Material	True	True	30	12
+BronzeNails	Bronze Nails	$item_bronzenails	Material	True	True	100	0.5
+BronzeScrap	Scrap Bronze	$item_bronzescrap	Material	True	True	30	10
+BugMeat	Seeker Meat	$item_bug_meat	Material	True	True	20	1
+CandleWick	Candle Wick	$item_candlewick	Material	True	True	50	0.3
+CapeAsh	Ashen Cape	$item_cape_ash	Shoulder	True	True	1	4
+CapeAsksvin	Asksvin Cloak	$item_cape_asksvin	Shoulder	True	True	1	4
+CapeDeepNorth	Moose Hide Cape	$item_cape_deepnorth	Shoulder	True	True	1	4
+CapeDeepNorthMage	Cape of the Caller	$item_cape_deepnorth_mage	Shoulder	True	True	1	4
+CapeDeerHide	Deer Hide Cape	$item_cape_deerhide	Shoulder	True	True	1	4
+CapeFeather	Feather Cape	$item_cape_feather	Shoulder	True	True	1	4
+CapeLinen	Linen Cape	$item_cape_linen	Shoulder	True	True	1	4
+CapeLox	Lox Cape	$item_cape_lox	Shoulder	True	True	1	4
+CapeOdin	Cape of Oden	$item_cape_odin	Shoulder	True	True	1	4
+CapeTest	CAPE TEST	CAPE TEST	Shoulder	True	True	1	4
+CapeTrollHide	Troll Hide Cape	$item_cape_trollhide	Shoulder	True	True	1	4
+CapeWolf	Wolf Fur Cape	$item_cape_wolf	Shoulder	True	True	1	4
+Carapace	Carapace	$item_carapace	Material	True	True	50	2
+Carrot	Carrot	$item_carrot	Consumable	True	True	50	0.3
+CarrotSeeds	Carrot Seeds	$item_carrotseeds	Material	True	True	100	0.1
+CarrotSoup	Carrot Soup	$item_carrotsoup	Consumable	True	True	10	1
+Catapult_ammo	Grausten Payload	$item_catapult_training_ammo	Material	True	True	50	0.3
+Catapult_Ammo_BloodGold	Bloodgold Payload	$item_catapult_bloodgold_ammo	Material	True	True	50	0.3
+CelestialFeather	Celestial Feather	$item_celestialfeather	Material	True	True	50	0.5
+CeramicPlate	Ceramic Plate	$item_ceramicplate	Material	True	True	30	2
+Chain	Chain	$item_chain	Material	True	True	50	2
+CharcoalResin	Charcoal Resin	$item_charcoalresin	Material	True	True	50	0.3
+CharredBone	Charred Bone	$item_charredbone	Material	True	True	50	0.5
+CharredCogwheel	Charred Cogwheel	$item_charredcogwheel	Material	True	True	10	5
+Charredskull	Charred Skull	$item_charredskull	Material	True	True	50	2
+charred_bow	Bow	Bow	Bow	False	True	1	1
+charred_bow_Fader	Bow	Bow	Bow	False	True	1	1
+charred_bow_volley	Bow	Bow	Bow	False	True	1	1
+charred_bow_volley_Fader	Bow	Bow	Bow	False	True	1	1
+Charred_Breastplate	Iron plate armor	Iron plate armor	Chest	True	True	1	1
+charred_dyrnwyn_greatsword_feint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_dyrnwyn_greatsword_swing	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_dyrnwyn_greatsword_thrust	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_dyrnwyn_greatsword_thrustfeint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_fader_greatsword_feint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_fader_greatsword_swing	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_fader_greatsword_thrust	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_fader_greatsword_thrustfeint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_greatsword_feint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_greatsword_swing	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_greatsword_thrust	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_greatsword_thrustfeint	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+Charred_Helmet	Iron plate armor	Iron plate armor	Helmet	True	True	1	1
+Charred_HipCloth	Iron plate armor	Iron plate armor	Legs	True	True	1	1
+Charred_MageCloths	Iron plate armor	Iron plate armor	Chest	True	True	1	1
+charred_magestaff_fire	Bow	Bow	TwoHandedWeapon	False	True	1	1
+charred_magestaff_summon	Bow	Bow	TwoHandedWeapon	False	True	1	1
+charred_twitcher_scratch_l	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_twitcher_scratch_r	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+charred_twitcher_throw	Bow	Bow	Bow	False	True	1	1
+chest_hildir1	Hildir's Brass Chest	$item_chest_hildir1	Misc	True	True	1	200
+chest_hildir2	Hildir's Silver Chest	$item_chest_hildir2	Misc	True	True	1	200
+chest_hildir3	Hildir's Bronze Chest	$item_chest_hildir3	Misc	True	True	1	200
+ChickenEgg	Egg	$item_chicken_egg	Misc	False	True	20	1
+ChickenMeat	Chicken Meat	$item_chicken_meat	Material	True	True	20	1
+Chitin	Chitin	$item_chitin	Material	True	True	50	2
+Cloudberry	Cloudberries	$item_cloudberries	Consumable	True	True	50	0.1
+Club	Club	$item_club	OneHandedWeapon	True	True	1	2
+Coal	Coal	$item_coal	Material	True	True	50	2
+Coins	Coins	$item_coins	Material	True	True	999	0.1
+CookedAsksvinMeat	Cooked Asksvin Tail	$item_asksvin_meat_cooked	Consumable	True	True	20	1
+CookedBjornMeat	Cooked Bear Meat	$item_bjorn_meat_cooked	Consumable	True	True	20	1
+CookedBoneMawSerpentMeat	Cooked Bonemaw Meat	$item_bonemawmeat_cooked	Consumable	True	True	50	10
+CookedBugMeat	Cooked Seeker Meat	$item_bug_meat_cooked	Consumable	True	True	20	1
+CookedChickenMeat	Cooked Chicken Meat	$item_chicken_meat_cooked	Consumable	True	True	20	1
+CookedDeerMeat	Cooked Deer Meat	$item_deer_meat_cooked	Consumable	True	True	20	1
+CookedEgg	Cooked Egg	$item_egg_cooked	Consumable	True	True	20	1
+CookedHareMeat	Cooked Hare Meat	$item_hare_meat_cooked	Consumable	True	True	20	1
+CookedLoxMeat	Cooked Lox Meat	$item_loxmeat_cooked	Consumable	True	True	20	2
+CookedMeat	Cooked Boar Meat	$item_boar_meat_cooked	Consumable	True	True	20	1
+CookedMooseMeat	Cooked Moose Meat	$item_moose_meat_cooked	Consumable	True	True	20	1
+CookedSealBlubber	Cooked Seal Blubber	$item_blubber_cooked	Consumable	True	True	20	1
+CookedVoltureMeat	Cooked Volture Meat	$item_volture_meat_cooked	Consumable	True	True	20	1
+CookedWolfMeat	Cooked Wolf Meat	$item_wolf_meat_cooked	Consumable	True	True	20	1
+Copper	Copper	$item_copper	Material	True	True	30	12
+CopperOre	Copper Ore	$item_copperore	Material	True	True	30	10
+CopperScrap	Copper Scrap	$item_copperscrap	Material	True	True	30	10
+CrossbowArbalest	Arbalest	$item_crossbow_arbalest	Bow	True	True	1	1.5
+CrossbowGold	Nord Crossbow	$item_crossbow_gold	Bow	True	True	1	1.5
+CrossbowGoldUncooked	Cast: Nord Crossbow	$item_crossbow_gold_uncooked	Material	True	True	1	1.5
+CrossbowGold_BloodLightning	Thunderblood Crossbow	$item_crossbow_bloodlightning_gold	Bow	True	True	1	1.5
+CrossbowGold_FrostFire	Frostfire Crossbow	$item_crossbow_frostfire_gold	Bow	True	True	1	1.5
+CrossbowRipper	Ripper	$item_crossbow_ripper	Bow	True	True	1	1.5
+CrossbowRipperBlood	Wound Ripper	$item_crossbow_ripper_blood	Bow	True	True	1	1.5
+CrossbowRipperLightning	Storm Ripper	$item_crossbow_ripper_lightning	Bow	True	True	1	1.5
+CrossbowRipperNature	Root Ripper	$item_crossbow_ripper_nature	Bow	True	True	1	1.5
+CrownJewel	Crown Jewel	$item_crownjewel	Material	True	True	5	2
+CryptKey	Swamp Key	$item_cryptkey	Misc	True	True	1	0.1
+Crystal	Crystal	$item_crystal	Material	True	True	50	1
+Cultivator	Cultivator	$item_cultivator	Tool	True	True	1	2
+CuredSquirrelHamstring	Cured Squirrel Hamstring	$item_curedsquirrelhamstring	Material	True	True	50	0.5
+Dandelion	Dandelion	$item_dandelion	Material	True	True	50	0.1
+Deathsquito_sting	Wraith melee	Wraith melee	OneHandedWeapon	True	True	1	1
+DeerHide	Deer Hide	$item_deerhide	Material	True	True	50	1
+DeerMeat	Deer Meat	$item_deer_meat	Material	True	True	20	1
+DeerStew	Deer Stew	$item_deerstew	Consumable	True	True	10	1
+Demister	Wisplight	$item_demister	Utility	True	True	1	0.1
+DragonEgg	Dragon Egg	$item_dragonegg	Misc	True	True	1	200
+DragonTear	Dragon Tear	$item_dragontear	Misc	True	True	50	1
+dragon_bite	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+dragon_claw_left	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+dragon_claw_right	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+dragon_coldbreath	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+dragon_coldbreath_OLD	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+dragon_spit_shotgun	cold ball	cold ball	OneHandedWeapon	True	False	1	1
+dragon_taunt	scream	scream	OneHandedWeapon	True	False	1	1
+draugr_arrow	Ironhead arrow	Ironhead arrow	Ammo	False	True	20	1
+draugr_axe	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+draugr_bow	Bow	Bow	Bow	False	True	1	1
+draugr_sword	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+DvergerArbalest	Arbalest	$item_crossbow_arbalest	Utility	True	True	1	1.5
+DvergerArbalest_shoot	Arbalest	$item_crossbow_arbalest	OneHandedWeapon	True	True	1	1.5
+DvergerArbalest_shootAshlands	Arbalest	$item_crossbow_arbalest	OneHandedWeapon	True	True	1	1.5
+DvergerArbalest_shootDeepNorth	Arbalest	$item_crossbow_arbalest	OneHandedWeapon	True	True	1	1.5
+DvergerHairFemale	Iron plate armor	Iron plate armor	Legs	False	True	1	1
+DvergerHairFemale_Redhair	Iron plate armor	Iron plate armor	Legs	False	True	1	1
+DvergerHairMale	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+DvergerHairMale_Redbeard	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+DvergerMistile	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffBlocker	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffFire	Club	Club	Utility	True	True	1	1
+DvergerStaffFire_clusterbomb	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffFire_fireball	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffHeal	Club	Club	Utility	True	True	1	1
+DvergerStaffHeal_heal	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffIce	Club	Club	Utility	True	True	1	1
+DvergerStaffIce_icebolt	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffNova	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerStaffSupport	Club	Club	Utility	True	True	1	1
+DvergerStaffSupport_buff	Club	Club	OneHandedWeapon	True	False	1	1
+DvergerSuitArbalest	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+DvergerSuitArbalest_Ashlands	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+DvergerSuitFire	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+DvergerSuitIce	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+DvergerSuitSupport	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+Dverger_melee	Club	Club	OneHandedWeapon	True	False	1	1
+Dverger_meleeAshlands	Club	Club	OneHandedWeapon	True	False	1	1
+Dverger_meleeDeepNorth	Club	Club	OneHandedWeapon	True	False	1	1
+DvergrKey	Sealbreaker	$item_dvergrkey	Misc	True	True	1	0.5
+DvergrKeyFragment	Sealbreaker Fragment	$item_dvergrkeyfragment	Material	True	True	9	0.5
+DvergrNeedle	Dvergr Extractor	$item_dvergrneedle	Material	True	True	10	5
+DyrnwynBladeFragment	Dyrnwyn Blade Fragment	$item_Dyrnwyn_blade	Material	True	True	1	0.5
+DyrnwynHiltFragment	Dyrnwyn Hilt Fragment	$item_Dyrnwyn_hilt	Material	True	True	1	0.5
+DyrnwynTipFragment	Dyrnwyn Tip Fragment	$item_Dyrnwyn_tip	Material	True	True	1	0.5
+Ectoplasm	Ectoplasm	$item_ectoplasm	Material	True	True	50	2
+Eikthyr_antler	StagAttack1	StagAttack1	OneHandedWeapon	True	False	1	1
+Eikthyr_charge	StagAttack2	StagAttack2	OneHandedWeapon	True	False	1	1
+Eikthyr_flegs_OLD	StagAttack1	StagAttack1	OneHandedWeapon	True	False	1	1
+Eikthyr_stomp	slap	slap	OneHandedWeapon	True	False	1	1
+Eitr	Refined Eitr	$item_eitr	Material	True	True	30	5
+ElakingHairBundle	Elaking Hair Bundle	$item_elakinghairbundle	Material	True	True	50	1
+ElakingMole_AttackClaw	jaws	jaws	OneHandedWeapon	True	False	1	1
+ElakingMole_AttackClaw2	jaws	jaws	OneHandedWeapon	True	False	1	1
+ElakingMole_AttackSandcloud	StagAttack2	StagAttack2	OneHandedWeapon	True	False	1	1
+Elaking_AttackClaw	jaws	jaws	OneHandedWeapon	True	False	1	1
+Elaking_AttackJump	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+Elaking_AttackLantern	Torch	Torch	OneHandedWeapon	False	True	1	1
+ElderBark	Ancient Bark	$item_elderbark	Material	True	True	50	2
+Entrails	Entrails	$item_entrails	Material	True	True	50	0.5
+Eyescream	Eyescream	$item_eyescream	Consumable	True	True	10	0.5
+FaderDrop	Fader Relic	$item_fader_drop	Material	True	True	30	1
+FaderEmber	Embers	$item_faderember	Material	True	True	50	0.5
+Fader_Bite	Fader Bite	Fader Bite	OneHandedWeapon	True	False	1	1
+Fader_Claw_Left	Fader Claw Left	Fader Claw Left	OneHandedWeapon	True	False	1	1
+Fader_Claw_Right	Fader Claw Right	Fader Claw Right	OneHandedWeapon	True	False	1	1
+Fader_Fissure	Fader Fissure	Fader Fissure	OneHandedWeapon	True	False	1	1
+Fader_Fissure_Intense	Fader Fissure	Fader Fissure	OneHandedWeapon	True	False	1	1
+Fader_Flamebreath	Fader Firebreath	Fader Firebreath	OneHandedWeapon	True	False	1	1
+Fader_Jump	Fader Jump	Fader Jump	OneHandedWeapon	True	False	1	1
+Fader_Jump_Left	Fader Jump	Fader Jump	OneHandedWeapon	True	False	1	1
+Fader_Jump_Right	Fader Jump	Fader Jump	OneHandedWeapon	True	False	1	1
+Fader_Meteors	spawn	spawn	OneHandedWeapon	True	False	1	1
+Fader_Meteors_Intense	spawn	spawn	OneHandedWeapon	True	False	1	1
+Fader_Roar	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+Fader_Roar_Intense	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+Fader_Spin	Fader Spin	Fader Spin	OneHandedWeapon	True	False	1	1
+Fader_Taunt	Fader Taunt	Fader Taunt	OneHandedWeapon	True	False	1	1
+Fader_WallOfFire	Fader Wall of Fire	Fader Wall of Fire	OneHandedWeapon	True	False	1	1
+fallenvalkyrie_claws	Fallen Valkyrie Claws	Fallen Valkyrie Claws	OneHandedWeapon	True	True	1	1
+fallenvalkyrie_poisonbreath	Fallen Valkyrie Poison Breath	Fallen Valkyrie Poison Breath	OneHandedWeapon	True	False	1	1
+fallenvalkyrie_screech	Fallen Valkyrie Claws	Fallen Valkyrie Claws	OneHandedWeapon	True	True	1	1
+fallenvalkyrie_spin	Fallen Valkyrie Aoe Spin	Fallen Valkyrie Aoe Spin	OneHandedWeapon	True	True	1	1
+fallenvalkyrie_spit	cold ball	cold ball	OneHandedWeapon	True	False	1	1
+fallenvalkyrie_swoopattack	Fallen Valkyrie swooping	Fallen Valkyrie swooping	OneHandedWeapon	True	True	1	1
+fallenvalkyrie_taunt	Fallen Valkyrie Claws	Fallen Valkyrie Claws	OneHandedWeapon	True	True	1	1
+fallenvalkyrie_wingspin	Fallen Valkyrie Wingspin	Fallen Valkyrie Wingspin	OneHandedWeapon	True	True	1	1
+FeastAshlands	Ashlands Gourmet Bowl	$item_feastashlands	Consumable	True	True	1	1
+FeastAshlands_Material	Ashlands Gourmet Bowl	$item_feastashlands	Material	True	True	5	10
+FeastBlackforest	Black Forest Buffet Platter	$item_feastblackforest	Consumable	True	True	1	1
+FeastBlackforest_Material	Black Forest Buffet Platter	$item_feastblackforest	Material	True	True	5	10
+FeastDeepNorth	Northern Morning Fare	$item_feastdeepnorth	Consumable	True	True	1	1
+FeastDeepNorth_Material	Northern Morning Fare	$item_feastdeepnorth	Material	True	True	5	10
+Feaster	Serving Tray	$item_feaster	Tool	True	True	1	2
+FeastMeadows	Whole Roasted Meadow Boar	$item_feastmeadows	Consumable	True	True	1	1
+FeastMeadows_Material	Whole Roasted Meadow Boar	$item_feastmeadows	Material	True	True	5	10
+FeastMistlands	Mushrooms Galore á la Mistlands	$item_feastmistlands	Consumable	True	True	1	1
+FeastMistlands_Material	Mushrooms Galore á la Mistlands	$item_feastmistlands	Material	True	True	5	10
+FeastMountains	Hearty Mountain Logger's Stew	$item_feastmountains	Consumable	True	True	1	1
+FeastMountains_Material	Hearty Mountain Logger's Stew	$item_feastmountains	Material	True	True	5	10
+FeastOceans	Sailor's Bounty	$item_feastoceans	Consumable	True	True	1	1
+FeastOceans_Material	Sailor's Bounty	$item_feastoceans	Material	True	True	5	10
+FeastPlains	Plains Pie Picnic	$item_feastplains	Consumable	True	True	1	1
+FeastPlains_Material	Plains Pie Picnic	$item_feastplains	Material	True	True	5	10
+FeastSwamps	Swamp Dweller's Delight	$item_feastswamps	Consumable	True	True	1	1
+FeastSwamps_Material	Swamp Dweller's Delight	$item_feastswamps	Material	True	True	5	10
+Feathers	Feathers	$item_feathers	Material	True	True	50	0.1
+Fenring_attack_claw	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_attack_fireclaw	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_attack_fireclaw_double	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_attack_flames	Fenring cultist flames	Fenring cultist flames	OneHandedWeapon	True	False	1	1
+Fenring_attack_frost	Fenring cultist frost	Fenring cultist frost	OneHandedWeapon	True	False	1	1
+Fenring_attack_iceclaw	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_attack_iceclaw_double	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_attack_IceNova	Club	Club	OneHandedWeapon	True	False	1	1
+Fenring_attack_jump	claw	claw	OneHandedWeapon	False	False	1	1
+Fenring_taunt	scream	scream	OneHandedWeapon	False	False	1	1
+Fiddleheadfern	Fiddlehead	$item_fiddleheadfern	Consumable	True	True	50	0.1
+FierySvinstew	Fiery Svinstew	$item_fierysvinstew	Consumable	True	True	10	1
+FineWood	Finewood	$item_finewood	Material	True	True	50	2
+FirCone	Fir Cone	$item_fircone	Material	True	True	100	0.1
+FirConeFrost	Timberwood Cone	$item_fircone_big	Material	True	True	100	0.1
+FireworksRocket_Blue	Blue Fireworks	$item_fireworkrocket_blue	Material	True	True	10	0.5
+FireworksRocket_Cyan	Cyan Fireworks	$item_fireworkrocket_cyan	Material	True	True	10	0.5
+FireworksRocket_Green	Green Fireworks	$item_fireworkrocket_green	Material	True	True	10	0.5
+FireworksRocket_Purple	Purple Fireworks	$item_fireworkrocket_purple	Material	True	True	10	0.5
+FireworksRocket_Red	Red Fireworks	$item_fireworkrocket_red	Material	True	True	10	0.5
+FireworksRocket_White	Basic Fireworks	$item_fireworkrocket_white	Material	True	True	10	0.5
+FireworksRocket_Yellow	Yellow Fireworks	$item_fireworkrocket_yellow	Material	True	True	10	0.5
+Fish1	Perch	$animal_fish1	Fish	True	True	10	2
+Fish10	Northern Salmon	$animal_fish10	Fish	True	True	10	2
+Fish11	Magmafish	$animal_fish11	Fish	True	True	10	2
+Fish12	Pufferfish	$animal_fish12	Fish	True	True	10	2
+Fish2	Pike	$animal_fish2	Fish	True	True	10	2
+Fish3	Tuna	$animal_fish3	Fish	True	True	10	2
+Fish4_cave	Tetra	$animal_fish4	Fish	True	True	10	2
+Fish5	Trollfish	$animal_fish5	Fish	True	True	10	2
+Fish6	Giant Herring	$animal_fish6	Fish	True	True	10	2
+Fish7	Grouper	$animal_fish7	Fish	True	True	10	2
+Fish8	Coral Cod	$animal_fish8	Fish	True	True	10	2
+Fish9	Anglerfish	$animal_fish9	Fish	True	True	10	2
+FishAndBread	Fish 'n' Bread	$item_fishandbread	Consumable	True	True	10	1
+FishAndBreadUncooked	Uncooked Fish 'n' Bread	$item_fishandbreaduncooked	Material	True	True	10	1
+FishAnglerRaw	Raw Fish	$item_fish_raw	Material	True	True	20	0.5
+FishCooked	Cooked Fish	$item_fish_cooked	Consumable	True	True	20	0.5
+FishingBait	Fishing Bait	$item_fishingbait	Ammo	True	True	100	0.1
+FishingBaitAshlands	Hot Fishing Bait	$item_fishingbait_ashlands	Ammo	True	True	100	0.1
+FishingBaitCave	Cold Fishing Bait	$item_fishingbait_cave	Ammo	True	True	100	0.1
+FishingBaitDeepNorth	Frosty Fishing Bait	$item_fishingbait_deepnorth	Ammo	True	True	100	0.1
+FishingBaitForest	Mossy Fishing Bait	$item_fishingbait_forest	Ammo	True	True	100	0.1
+FishingBaitMistlands	Misty Fishing Bait	$item_fishingbait_mistlands	Ammo	True	True	100	0.1
+FishingBaitOcean	Heavy Fishing Bait	$item_fishingbait_ocean	Ammo	True	True	100	0.1
+FishingBaitPlains	Stingy Fishing Bait	$item_fishingbait_plains	Ammo	True	True	100	0.1
+FishingBaitSwamp	Sticky Fishing Bait	$item_fishingbait_swamp	Ammo	True	True	100	0.1
+FishingRod	Fishing Rod	$item_fishingrod	TwoHandedWeapon	True	True	1	1.5
+FishRaw	Raw Fish	$item_fish_raw	Material	True	True	20	0.5
+FishSoup	Fish Soup	$item_fishsoup	Consumable	True	True	10	1
+FishWraps	Fish Wraps	$item_fishwraps	Consumable	True	True	10	1
+FistBjornClaw	Paws of the Bear	$item_fistweapon_bjorn	TwoHandedWeapon	True	True	1	2
+FistBjornUndeadClaw	Vilebone Maulclaws	$item_fistweapon_bjorn_undead	TwoHandedWeapon	True	True	1	2
+FistFenrirClaw	Flesh Rippers	$item_fistweapon_fenris	TwoHandedWeapon	True	True	1	2
+FistGold	Nord Knucklechains	$item_fistweapon_gold	TwoHandedWeapon	True	True	1	2
+FistGoldUncooked	Cast: Nord Knucklechains	$item_fistweapon_gold_uncooked	Material	True	True	1	2
+FistGold_BloodLightning	Thunderblood Knucklechains	$item_fistweapon_gold_bloodlightning	TwoHandedWeapon	True	True	1	2
+FistGold_FrostFire	Frostfire Knucklechains	$item_fistweapon_frostfire_gold	TwoHandedWeapon	True	True	1	2
+Flametal	Ancient Metal	$item_flametal_old	Material	True	True	30	12
+FlametalNew	Flametal	$item_flametal	Material	True	True	30	12
+FlametalOre	Glowing Metal Ore	$item_flametalore_old	Material	True	True	30	12
+FlametalOreNew	Flametal Ore	$item_flametalore	Material	True	True	30	10
+Flax	Flax	$item_flax	Material	True	True	100	0.2
+Flint	Flint	$item_flint	Material	True	True	30	2
+FragrantBundle	Fragrant Bundle	$item_fragrantbundle	Material	True	True	50	0.5
+FreezeGland	Freeze Gland	$item_freezegland	Material	True	True	50	0.5
+FreshSeaweed	Fresh Seaweed	$item_freshseaweed	Material	True	True	50	0.5
+FrostCore	Frostcore	$item_frostcore	Material	True	True	20	1
+Frostwood	Timberwood	$item_frostwood	Material	True	True	50	2
+FrozenFuel	Liquid Frost	$item_frozenfuel	Material	True	True	50	2
+FrozenKingDrop	Sacrificial Blood	$item_frozenking_drop	Material	True	True	30	1
+FrozenKing_ChainFlurry	FrozenKing ChainFlurry	FrozenKing ChainFlurry	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainRush	FrozenKing ChainRush	FrozenKing ChainRush	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSlam_L	FrozenKing ChainSlam L	FrozenKing ChainSlam L	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSlam_L_double	FrozenKing ChainSlam L double	FrozenKing ChainSlam L double	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSlam_R	FrozenKing ChainSlam R	FrozenKing ChainSlam R	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSlam_R_double	FrozenKing ChainSlam R double	FrozenKing ChainSlam R double	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSweep_L	FrozenKing ChainSweep L	FrozenKing ChainSweep L	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainSweep_R	FrozenKing ChainSweep R	FrozenKing ChainSweep R	OneHandedWeapon	True	False	1	1
+FrozenKing_ChainWhirl	FrozenKing ChainWhirl	FrozenKing ChainWhirl	OneHandedWeapon	True	False	1	1
+FrozenKing_DoubleSweep	FrozenKing DoubleSweep	FrozenKing DoubleSweep	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Bonemass	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Eikthyr	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Elder	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Fader	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Moder	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Queen	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P2_Summon_Yagluth	Fader Roar	Fader Roar	OneHandedWeapon	True	False	1	1
+FrozenKing_P3_ChainSlam_L_double	FrozenKing ChainSlam L double	FrozenKing ChainSlam L double	OneHandedWeapon	True	False	1	1
+FrozenKing_P3_ChainSlam_R_double	FrozenKing ChainSlam R double	FrozenKing ChainSlam R double	OneHandedWeapon	True	False	1	1
+FrozenKing_P3_ChainWhirl	FrozenKing ChainWhirl	FrozenKing ChainWhirl	OneHandedWeapon	True	False	1	1
+FrozenKing_Punch_AOE	FrozenKing Punch AOE	FrozenKing Punch AOE	OneHandedWeapon	True	False	1	1
+FrozenKing_SpikeRain	spawn	spawn	OneHandedWeapon	True	False	1	1
+FrozenKing_tendrilspawn	spawn	spawn	OneHandedWeapon	True	False	1	1
+frysling_snowball_attack	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+FW_ArmorBronzeChest	Bronze Plate Tunic	$item_chest_bronze	Chest	True	True	1	10
+FW_ArmorBronzeLegs	Bronze Plate Leggings	$item_legs_bronze	Legs	True	True	1	10
+FW_ArmorFenringChest	Fenris Coat	$item_chest_fenris	Chest	True	True	1	10
+FW_ArmorFenringLegs	Fenris Leggings	$item_legs_fenris	Legs	True	True	1	10
+FW_ArmorMageChest	Eitr-weave Robe	$item_chest_mage	Chest	True	True	1	5
+FW_ArmorMageChest_Ashlands	Robes of Embla	$item_chest_mage_ashlands	Chest	True	True	1	5
+FW_ArmorMageLegs	Eitr-weave Trousers	$item_legs_mage	Legs	True	True	1	5
+FW_ArmorMageLegs_Ashlands	Trousers of Embla	$item_legs_mage_ashlands	Legs	True	True	1	5
+FW_ArmorPaddedCuirass	Padded Cuirass	$item_chest_pcuirass	Chest	True	True	1	10
+FW_ArmorPaddedGreaves	Padded Greaves	$item_legs_pgreaves	Legs	True	True	1	10
+FW_ArmorTrollLeatherChest	Troll Leather Tunic	$item_chest_trollleather	Chest	True	True	1	5
+FW_ArmorTrollLeatherLegs	Troll Leather Trousers	$item_legs_trollleather	Legs	True	True	1	5
+FW_AxeBronze	Bronze Axe	$item_axe_bronze	OneHandedWeapon	True	True	1	2
+FW_BattleaxeCrystal	Crystal Battleaxe	$item_battleaxe_crystal	TwoHandedWeapon	True	True	1	2.5
+FW_BowDraugrFang	Draugr Fang	$item_bow_draugrfang	Bow	True	True	1	1.5
+FW_CapeLinen	Linen Cape	$item_cape_linen	Shoulder	True	True	1	4
+FW_CapeTrollHide	Troll Hide Cape	$item_cape_trollhide	Shoulder	True	True	1	4
+FW_CapeWolf	Wolf Fur Cape	$item_cape_wolf	Shoulder	True	True	1	4
+FW_HelmetBronze	Bronze Helmet	$item_helmet_bronze	Helmet	True	True	1	3
+FW_KnifeSilver	Silver Knife	$item_knife_silver	OneHandedWeapon	True	True	1	0.3
+FW_KnifeSkollAndHati	Skoll and Hati	$item_knife_skollandhati	TwoHandedWeapon	True	True	1	0.3
+FW_ShieldBlackmetalTower	Black Metal Tower Shield	$item_shield_blackmetal_tower	Shield	True	True	1	5
+FW_StaffFireball	Staff of Embers	$item_stafffireball	TwoHandedWeapon	True	True	1	0.3
+FW_StaffLightning	Dundr	$item_staff_lightning	TwoHandedWeapon	True	True	1	1.5
+FW_SwordBlackmetal	Black Metal Sword	$item_sword_blackmetal	OneHandedWeapon	True	True	1	0.8
+gd_king_punch	jaws	jaws	OneHandedWeapon	True	False	1	1
+gd_king_rootspawn	spawn	spawn	OneHandedWeapon	True	False	1	1
+gd_king_scream	scream	scream	OneHandedWeapon	True	False	1	1
+gd_king_shoot	shaman attack	shaman attack	OneHandedWeapon	True	False	1	1
+gd_king_stomp	jaws	jaws	OneHandedWeapon	True	False	1	1
+GemstoneBlue	Iolite	$item_gemstone_blue	Material	True	True	50	2
+GemstoneGreen	Jade	$item_gemstone_green	Material	True	True	50	2
+GemstoneRed	Bloodstone	$item_gemstone_red	Material	True	True	50	2
+GenericMoldUncooked	[item_smallparts_gold_uncooked]	$item_smallparts_gold_uncooked	Material	True	True	10	1
+Ghost_attack	jaws	jaws	OneHandedWeapon	True	False	1	1
+GiantBloodSack	Blood Clot	$item_bloodclot	Material	True	True	50	0.5
+gjall_attack_egg	egg drop	egg drop	OneHandedWeapon	True	False	1	1
+gjall_attack_shake	gjall shake	gjall shake	OneHandedWeapon	True	False	1	1
+gjall_attack_spit	gjall spit	gjall spit	OneHandedWeapon	True	False	1	1
+gjall_attack_taunt	gjall taunt	gjall taunt	OneHandedWeapon	True	False	1	1
+GlowWorm	Luminous Larva	$item_glowworm	Consumable	True	True	50	0.2
+GoblinArmband	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+GoblinBruteBros_Attack	Brute sword	Brute sword	OneHandedWeapon	True	True	1	1
+GoblinBruteBros_RageAttack	Brute sword	Brute sword	OneHandedWeapon	True	True	1	1
+GoblinBrute_ArmGuard	Iron plate armor	Iron plate armor	Chest	True	True	1	1
+GoblinBrute_Attack	Brute sword	Brute sword	OneHandedWeapon	True	True	1	1
+GoblinBrute_Backbones	Iron plate armor	Iron plate armor	Helmet	True	True	1	1
+GoblinBrute_ExecutionerCap	Iron plate armor	Iron plate armor	Helmet	True	True	1	1
+GoblinBrute_HipCloth	Iron plate armor	Iron plate armor	Legs	True	True	1	1
+GoblinBrute_LegBones	Iron plate armor	Iron plate armor	Utility	True	True	1	1
+GoblinBrute_RageAttack	Brute sword	Brute sword	OneHandedWeapon	True	True	1	1
+GoblinBrute_ShoulderGuard	Iron plate armor	Iron plate armor	Shoulder	True	True	1	1
+GoblinBrute_Taunt	Brute taunt	Brute taunt	OneHandedWeapon	True	True	1	1
+GoblinClub	Club	Club	OneHandedWeapon	False	True	1	1
+GoblinClubDeepNorth	Club	Club	OneHandedWeapon	False	True	1	1
+GoblinHelmet	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+GoblinKing_Beam	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+GoblinKing_Meteors	spawn	spawn	OneHandedWeapon	True	False	1	1
+GoblinKing_Nova	slap	slap	OneHandedWeapon	True	False	1	1
+GoblinKing_Taunt	scream	scream	OneHandedWeapon	True	False	1	1
+GoblinLegband	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+GoblinLoin	Iron plate armor	Iron plate armor	Legs	False	True	1	1
+GoblinShaman_attack_fireball	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+GoblinShaman_attack_fireball_hildir	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+GoblinShaman_attack_poke	Club	Club	OneHandedWeapon	True	True	1	1
+GoblinShaman_attack_protect	heal	heal	OneHandedWeapon	True	False	1	1
+GoblinShaman_attack_protect_hildir	heal	heal	OneHandedWeapon	True	False	1	1
+GoblinShaman_Headdress_antlers	Club	Club	Helmet	True	True	1	1
+GoblinShaman_Headdress_feathers	Club	Club	Helmet	True	True	1	1
+GoblinShaman_Staff_Bones	Club	Club	Utility	True	True	1	1
+GoblinShaman_Staff_Feathers	Club	Club	Utility	True	True	1	1
+GoblinShaman_Staff_Hildir	Club	Club	Utility	True	True	1	1
+GoblinShoulders	Iron plate armor	Iron plate armor	Chest	False	True	1	1
+GoblinSpear	Flint spear	Flint spear	OneHandedWeapon	False	True	10	1
+GoblinSpearDeepNorth	Flint spear	Flint spear	OneHandedWeapon	False	True	10	1
+GoblinSword	Bronze sword	Bronze sword	OneHandedWeapon	False	True	1	1
+GoblinSwordDeepNorth	Bronze sword	Bronze sword	OneHandedWeapon	False	True	1	1
+GoblinTorch	Torch	Torch	OneHandedWeapon	False	True	1	1
+GoblinTorchDeepNorth	Torch	Torch	OneHandedWeapon	False	True	1	1
+GoblinTotem	Fuling Totem	$item_goblintotem	Misc	True	True	30	1
+Gold	Bloodgold	$item_gold	Material	True	True	30	14
+GoldOre	Petrified Tissue	$item_goldore	Material	True	True	30	14
+GrapplingHook	Grappling Hook	$item_graplinghook	Bow	True	True	1	1.5
+Grausten	Grausten	$item_grausten	Material	True	True	50	2
+GreydwarfEye	Greydwarf Eye	$item_greydwarfeye	Material	True	True	50	0.2
+Greydwarf_attack	jaws	jaws	OneHandedWeapon	True	False	1	1
+Greydwarf_attack_frozen	jaws	jaws	OneHandedWeapon	True	False	1	1
+Greydwarf_elite_attack	jaws	jaws	OneHandedWeapon	True	False	1	1
+Greydwarf_shaman_attack	shaman attack	shaman attack	OneHandedWeapon	True	False	1	1
+Greydwarf_shaman_heal	heal	heal	OneHandedWeapon	True	False	1	1
+Greydwarf_throw	throw stone	throw stone	OneHandedWeapon	True	False	1	1
+Greydwarf_throw_frozen	throw stone	throw stone	OneHandedWeapon	True	False	1	1
+Greyling_attack	jaws	jaws	OneHandedWeapon	True	False	1	1
+Guck	Guck	$item_guck	Material	True	True	50	0.5
+Hair1	Windswept	$customization_hair01	Customization	True	False	1	1
+Hair10	Side Swept	$customization_hair10	Customization	True	False	1	1
+Hair10_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair11	Long Braid	$customization_hair11	Customization	True	False	1	1
+Hair11_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair11_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair12	Matronly	$customization_hair12	Customization	True	False	1	1
+Hair12_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair13	Twin Braids	$customization_hair13	Customization	True	False	1	1
+Hair13_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair13_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair14	Speed Demon	$customization_hair14	Customization	True	False	1	1
+Hair14_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair15	Pulled Back Curls	$customization_hair15	Customization	True	False	1	1
+Hair15_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair15_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair16	Gathered Braids	$customization_hair16	Customization	True	False	1	1
+Hair16_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair17	Neat Braids	$customization_hair17	Customization	True	False	1	1
+Hair17_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair18	Royal Braids	$customization_hair18	Customization	True	False	1	1
+Hair18_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair19	Painter Curls	$customization_hair19	Customization	True	False	1	1
+Hair2	High Ponytail	$customization_hair02	Customization	True	False	1	1
+Hair20	Tidy Curls	$customization_hair20	Customization	True	False	1	1
+Hair21	Twin Buns	$customization_hair21	Customization	True	False	1	1
+Hair21_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair22	Single Bun	$customization_hair22	Customization	True	False	1	1
+Hair22_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair23	Short Curls	$customization_hair23	Customization	True	False	1	1
+Hair24	Shaved and Braided	$customization_hair24	Customization	True	False	1	1
+Hair24_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair24_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair25	Knot	$customization_hair25	Customization	True	False	1	1
+Hair26	Short Locs	$customization_hair26	Customization	True	False	1	1
+Hair27	Strength Braids	$customization_hair27	Customization	True	False	1	1
+Hair27_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair27_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair28	Merchant's Braid	$customization_hair28	Customization	True	False	1	1
+Hair28_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair28_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair29	Tucked Back	$customization_hair29	Customization	True	False	1	1
+Hair29_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair3	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair30	Loose Waves	$customization_hair30	Customization	True	False	1	1
+Hair30_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair30_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair31	Gathered Locs	$customization_hair31	Customization	True	False	1	1
+Hair31_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair31_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair32	Mullet	$customization_hair32	Customization	True	False	1	1
+Hair32_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair32_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair33	Vinland Shave	$customization_hair33	Customization	True	False	1	1
+Hair33_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair34	Castellan	$customization_hair34	Customization	True	False	1	1
+Hair34_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair34_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair35	Champion	$customization_hair35	Customization	True	False	1	1
+Hair35_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair35_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair36	Chronicler	$customization_hair36	Customization	True	False	1	1
+Hair36_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair36_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair37	Sunbringer	$customization_hair37	Customization	True	False	1	1
+Hair37_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair37_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair38	Masculine	$customization_hair38	Customization	True	False	1	1
+Hair38_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair38_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair3_2	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair3_3	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair4	Low Ponytail	$customization_hair04	Customization	True	False	1	1
+Hair4_2	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair4_3	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair5	Short	$customization_hair05	Customization	True	False	1	1
+Hair5_2	Pigtails	$customization_hair03	Customization	True	False	1	1
+Hair6	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair6_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair6_3	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair7	Dragonslayer	$customization_hair07	Customization	True	False	1	1
+Hair7_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair8	Parted	$customization_hair08	Customization	True	False	1	1
+Hair8_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+Hair9	Old One-Eye	$customization_hair09	Customization	True	False	1	1
+Hair9_2	Long and Loose	$customization_hair06	Customization	True	False	1	1
+HairNone	No Hair	$customization_nohair	Customization	True	False	1	1
+Hammer	Hammer	$item_hammer	Tool	True	True	1	2
+HardAntler	Hard Antler	$item_hardantler	Material	True	True	50	2
+HareMeat	Hare Meat	$item_hare_meat	Material	True	True	20	1
+hatchling_spit_cold	cold ball	cold ball	OneHandedWeapon	True	False	1	1
+HatefulBlood	Malicious Blood	$item_hatefulblood	Misc	True	True	50	1
+HealthUpgrade_Bonemass	Bonemass heart	Bonemass heart	Consumable	True	True	1	1
+HealthUpgrade_GDKing	Elder heart	Elder heart	Consumable	True	True	1	1
+HelmetAshlandsMediumHood	Hood of Ask	$item_helmet_medium_ashlands	Helmet	True	True	1	1
+HelmetBerserkerHood	Headdress of the Bear	$item_helmet_berserker	Helmet	True	True	1	1
+HelmetBerserkerUndead	Vilebone Visage	$item_helmet_berserker_undead	Helmet	True	True	1	1
+HelmetBronze	Bronze Helmet	$item_helmet_bronze	Helmet	True	True	1	3
+HelmetCarapace	Carapace Helmet	$item_helmet_carapace	Helmet	True	True	1	3
+HelmetCelebration	Celebratory Cap	$item_helmet_celebration	Helmet	True	True	1	3
+HelmetCrownofValheim	Crown of Valheim	$item_helmet_crown_of_valheim	Helmet	True	True	1	1
+HelmetDNHeavy	Helmet of the Protector	$item_helmet_heavy_deepnorth	Helmet	True	True	1	1
+HelmetDNMage	Headdress of the Caller	$item_helmet_mage_deepnorth	Helmet	True	True	1	1
+HelmetDNMediumHood	Hood of the Vanguard	$item_helmet_medium_deepnorth	Helmet	True	True	1	1
+HelmetDrake	Drake Helmet	$item_helmet_drake	Helmet	True	True	1	3
+HelmetDverger	Dverger Circlet	$item_helmet_dverger	Helmet	True	True	1	1
+HelmetFenring	Fenris Hood	$item_helmet_fenris	Helmet	True	True	1	1
+HelmetFishingHat	Fishing Hat	$item_helmet_fishinghat	Helmet	True	True	1	3
+HelmetFlametal	Flametal Helmet	$item_helmet_flametal	Helmet	True	True	1	3
+HelmetHat1	Blue Tied Headscarf	$item_helmet_hat1	Helmet	True	True	1	3
+HelmetHat10	Simple Purple Cap	$item_helmet_hat10	Helmet	True	True	1	3
+HelmetHat2	Green Twisted Headscarf	$item_helmet_hat2	Helmet	True	True	1	3
+HelmetHat3	Brown Fur Cap	$item_helmet_hat3	Helmet	True	True	1	3
+HelmetHat4	Extravagant Green Cap	$item_helmet_hat4	Helmet	True	True	1	3
+HelmetHat5	Simple Red Cap	$item_helmet_hat5	Helmet	True	True	1	3
+HelmetHat6	Yellow Tied Headscarf	$item_helmet_hat6	Helmet	True	True	1	3
+HelmetHat7	Red Twisted Headscarf	$item_helmet_hat7	Helmet	True	True	1	3
+HelmetHat8	Grey Fur Cap	$item_helmet_hat8	Helmet	True	True	1	3
+HelmetHat9	Extravagant Orange Cap	$item_helmet_hat9	Helmet	True	True	1	3
+HelmetIron	Iron Helmet	$item_helmet_iron	Helmet	True	True	1	3
+HelmetLeather	Leather Helmet	$item_helmet_leather	Helmet	True	True	1	1
+HelmetLox	Lox Fur Hood	$item_helmet_lox	Helmet	True	True	1	1
+HelmetMage	Eitr-weave Hood	$item_helmet_mage	Helmet	True	True	1	1
+HelmetMage_Ashlands	Hood of Embla	$item_helmet_mage_ashlands	Helmet	True	True	1	1
+HelmetMidsummerCrown	Midsummer Crown	$item_helmet_midsummercrown	Helmet	True	True	1	1
+HelmetOdin	Hood of Oden	$item_helmet_odin	Helmet	True	True	1	1
+HelmetPadded	Padded Helmet	$item_helmet_padded	Helmet	True	True	1	3
+HelmetPointyHat	Pointy Hat	$item_helmet_witchhat	Helmet	True	True	1	3
+HelmetRoot	Root Mask	$item_helmet_root	Helmet	True	True	1	3
+HelmetRootCrown	Crown of Roots	$item_helmet_rootcrown	Helmet	True	True	1	3
+HelmetStrawHat	Straw Hat	$item_helmet_strawhat	Helmet	True	True	1	3
+HelmetSweatBand	Headband	$item_helmet_sweatband	Helmet	True	True	1	1
+HelmetTrollLeather	Troll Leather Hood	$item_helmet_trollleather	Helmet	True	True	1	1
+HelmetYule	Yule Hat	$item_helmet_yule	Helmet	True	True	1	1
+HildirKey_forestcrypt	Hildir's Brass Key	$item_hildirkey1	Misc	True	True	1	0.1
+HildirKey_mountaincave	Hildir's Silver Key	$item_hildirkey2	Misc	True	True	1	0.1
+HildirKey_plainsfortress	Hildir's Bronze Key	$item_hildirkey3	Misc	True	True	1	0.1
+hive_attack_aoe	heal	heal	OneHandedWeapon	True	False	1	1
+hive_attack_punch	slap	slap	OneHandedWeapon	True	False	1	1
+hive_attack_ranged	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+hive_attack_throw	slime throw	slime throw	OneHandedWeapon	True	False	1	1
+Hoe	Hoe	$item_hoe	Tool	True	True	1	2
+Honey	Honey	$item_honey	Consumable	True	True	50	0.2
+HoneyGlazedChicken	Honey Glazed Chicken	$item_honeyglazedchicken	Consumable	True	True	10	1
+HoneyGlazedChickenUncooked	Uncooked Honey Glazed Chicken	$item_honeyglazedchickenuncooked	Material	True	True	10	1
+Hook	Hook	$item_hook	Material	True	True	50	5
+Ice	Ice	$item_ice	Material	True	True	50	1
+IceShoes	[item_iceshoes]	$item_iceshoes	Utility	True	True	1	2
+IceSkates	[item_iceskates]	$item_iceskates	Utility	True	True	1	2
+imp_fireball_attack	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+Iron	Iron	$item_iron	Material	True	True	30	12
+IronNails	Iron Nails	$item_ironnails	Material	True	True	100	0.5
+IronOre	Iron Ore	$item_ironore	Material	True	True	30	10
+Ironpit	Iron Pit	$item_ironpit	Material	True	True	10	10
+IronScrap	Scrap Iron	$item_ironscrap	Material	True	True	30	10
+JotunHairFemale	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale2	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale3	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale4	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale5	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale6	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale7	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunHairMale8	Iron plate armor	Iron plate armor	Helmet	False	True	1	1
+JotunWarrior1HAxe_attack_cleave	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior1HAxe_attack_dodge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior1HAxe_attack_dodger	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior1HAxe_attack_slash	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior1HAxe_attack_slashdw	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HAxe_attack_charge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HAxe_attack_cleave	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HAxe_attack_dodge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HAxe_attack_slash	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HSword_attack_charge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HSword_attack_cleave	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HSword_attack_dodge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior2HSword_attack_slash	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarriorSword2h	Club	Club	OneHandedWeapon	False	True	1	1
+JotunWarrior_attack_charge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior_attack_cleave	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior_attack_dodge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior_attack_slash	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWarrior_attack_sword	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWitch_attack_dodge	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWitch_attack_dodge2	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWitch_attack_dodge_down	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWitch_attack_dodge_up	Charred Sword	Charred Sword	TwoHandedWeapon	False	True	1	1
+JotunWitch_attack_lightningbolt	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+JotunWitch_attack_magicblast	StagAttack2	StagAttack2	OneHandedWeapon	True	False	1	1
+JuteBlue	Blue Jute	$item_juteblue	Material	True	True	50	2
+JuteRed	Red Jute	$item_jutered	Material	True	True	50	2
+Kale	Kale	$item_kale	Consumable	True	True	50	0.1
+KaleChips	Kale Chips	$item_kalechips	Consumable	True	True	10	1
+KaleChipsUncooked	Raw Kale Chips	$item_kalechips_uncooked	Material	True	True	10	1
+KaleSeeds	Kale Seeds	$item_kaleseeds	Material	True	True	100	0.1
+KeysGoldUncooked	Cast: Intricate Key	$item_keys_gold_uncooked	Material	True	True	10	1
+KnifeBlackMetal	Black Metal Knife	$item_knife_blackmetal	OneHandedWeapon	True	True	1	0.3
+KnifeButcher	Butcher Knife	$item_knife_butcher	OneHandedWeapon	True	True	1	0.3
+KnifeChitin	Abyssal Razor	$item_knife_chitin	OneHandedWeapon	True	True	1	0.3
+KnifeCopper	Copper Knife	$item_knife_copper	OneHandedWeapon	True	True	1	0.3
+KnifeFlint	Flint Knife	$item_knife_flint	OneHandedWeapon	True	True	1	0.3
+KnifeGold	Nord Dagger	$item_knife_gold	OneHandedWeapon	True	True	1	0.3
+KnifeGoldUncooked	Cast: Nord Dagger	$item_knife_gold_uncooked	Material	True	True	1	0.3
+KnifeGold_BloodLightning	Thunderblood Dagger	$item_knife_gold_bloodlightning	OneHandedWeapon	True	True	1	0.3
+KnifeGold_FrostFire	Frostfire Dagger	$item_knife_gold_frostfire	OneHandedWeapon	True	True	1	0.3
+KnifeSilver	Silver Knife	$item_knife_silver	OneHandedWeapon	True	True	1	0.3
+KnifeSkollAndHati	Skoll and Hati	$item_knife_skollandhati	TwoHandedWeapon	True	True	1	0.3
+KnifeVoid	Voidcaller	$item_knife_void	OneHandedWeapon	True	True	1	0.3
+KnifeWood	Wooden Knife	$item_knife_wood	OneHandedWeapon	True	True	1	0.3
+Lantern	Dvergr Lantern	$item_lantern	Torch	True	True	1	2
+Lantern_DN	Salvaged Lantern	$item_lanternDN	Torch	True	True	1	2
+Lantern_hooded	Hooded Lantern	$piece_hoodedlantern	Torch	True	True	1	2
+Larva	[item_larva]	$item_larva	Material	True	True	20	1
+LastBossGate_RuneTile	[item_runetile]	$item_runetile	Material	True	True	3	0.5
+LeatherScraps	Leather Scraps	$item_leatherscraps	Material	True	True	50	0.5
+Leatherstraps	Leather Straps	$item_leatherstraps	Material	True	True	50	0.5
+Leech_BiteAttack	jaws	jaws	OneHandedWeapon	True	False	1	1
+LinenThread	Linen Thread	$item_linenthread	Material	True	True	50	2
+Lingonberry	Lingonberries	$item_lingonberries	Consumable	True	True	50	0.1
+Lingondricka	Lingonberry Juice	$item_lingondricka	Consumable	True	True	10	1
+LoxMeat	Lox Meat	$item_loxmeat	Material	True	True	20	2
+LoxPelt	Lox Pelt	$item_loxpelt	Material	True	True	50	1
+LoxPie	Lox Meat Pie	$item_loxpie	Consumable	True	True	10	1
+LoxPieUncooked	Unbaked Lox Pie	$item_loxpie_uncooked	Material	True	True	10	1
+lox_bite	lox bite	lox bite	OneHandedWeapon	True	False	1	1
+lox_stomp	slap	slap	OneHandedWeapon	True	False	1	1
+MaceBronze	Bronze Mace	$item_mace_bronze	OneHandedWeapon	True	True	1	2
+MaceEldner	Flametal Mace	$item_mace_eldner	OneHandedWeapon	True	True	1	2
+MaceEldnerBlood	Bloodgeon	$item_mace_eldner_blood	OneHandedWeapon	True	True	1	2
+MaceEldnerLightning	Storm Star	$item_mace_eldner_lightning	OneHandedWeapon	True	True	1	2
+MaceEldnerNature	Klossen	$item_mace_eldner_nature	OneHandedWeapon	True	True	1	2
+MaceGold	Nord Mace	$item_mace_gold	OneHandedWeapon	True	True	1	2
+MaceGoldUncooked	Cast: Nord Mace	$item_mace_gold_uncooked	Material	True	True	1	2
+MaceGold_BloodLightning	Thunderblood Mace	$item_mace_gold_bloodlightning	OneHandedWeapon	True	True	1	2
+MaceGold_FrostFire	Frostfire Mace	$item_mace_gold_frostfire	OneHandedWeapon	True	True	1	2
+MaceIron	Iron Mace	$item_mace_iron	OneHandedWeapon	True	True	1	2
+MaceNeedle	Porcupine	$item_mace_needle	OneHandedWeapon	True	True	1	2
+MaceSilver	Frostner	$item_mace_silver	OneHandedWeapon	True	True	1	2
+MaceWood	Wooden Mace	$item_mace_wood	OneHandedWeapon	True	True	1	2
+MagicallyStuffedShroom	Stuffed Mushroom	$item_magicallystuffedmushroom	Consumable	True	True	10	1
+MagicallyStuffedShroomUncooked	Uncooked Stuffed Mushroom	$item_magicallystuffedmushroomuncooked	Material	True	True	10	1
+Mandible	Mandible	$item_mandible	Material	True	True	50	0.5
+MarinatedGreens	Marinated Greens	$item_marinatedgreens	Consumable	True	True	10	1
+MashedMeat	Mashed Meat	$item_mashedmeat	Consumable	True	True	10	1
+MeadBaseBugRepellent	Mead Base: Anti-Sting	$item_meadbasebugrepellent	Material	True	True	1	1
+MeadBaseBzerker	Mead base: Berserkir	$item_meadbasebzerker	Material	True	True	1	1
+MeadBaseEitrLingering	Mead Base: Lingering Eitr	$item_meadbaseeitr_lingering	Material	True	True	1	1
+MeadBaseEitrMinor	Mead Base: Minor Eitr	$item_meadbaseeitr	Material	True	True	1	1
+MeadBaseFrostResist	Mead Base: Frost Resistance	$item_meadbasefrostresist	Material	True	True	1	1
+MeadBaseHasty	Mead base: Ratatosk	$item_meadbasehasty	Material	True	True	1	1
+MeadBaseHealthLingering	Mead Base: Lingering Health	$item_meadbasehealth_lingering	Material	True	True	1	1
+MeadBaseHealthMajor	Mead Base: Major Healing	$item_meadbasehealth_major	Material	True	True	1	1
+MeadBaseHealthMedium	Mead Base: Medium Healing	$item_meadbasehealth_medium	Material	True	True	1	1
+MeadBaseHealthMinor	Mead Base: Minor Healing	$item_meadbasehealth	Material	True	True	1	1
+MeadBaseLightFoot	Mead Base: Lightfoot	$item_meadbaselightfoot	Material	True	True	1	1
+MeadBasePoisonResist	Mead Base: Poison Resistance	$item_meadbasepoisonresist	Material	True	True	1	1
+MeadBaseStaminaLingering	Mead Base: Lingering Stamina	$item_meadbasestamina_lingering	Material	True	True	1	1
+MeadBaseStaminaMedium	Mead Base: Medium Stamina	$item_meadbasestamina_medium	Material	True	True	1	1
+MeadBaseStaminaMinor	Mead Base: Minor Stamina	$item_meadbasestamina	Material	True	True	1	1
+MeadBaseStrength	Mead Base: Troll Endurance	$item_meadbasestrength	Material	True	True	1	1
+MeadBaseSwimmer	Mead Base: Vananidir	$item_meadbaseswimmer	Material	True	True	1	1
+MeadBaseTamer	Mead Base: Animal Whispers	$item_meadbasetamer	Material	True	True	1	1
+MeadBaseTasty	Mead Base: Tasty	$item_meadbasetasty	Material	True	True	1	1
+MeadBugRepellent	Anti-Sting Concoction	$item_mead_bugrepellent	Consumable	True	True	10	1
+MeadBzerker	Berserkir Mead	$item_mead_bzerker	Consumable	True	True	10	1
+MeadEitrLingering	Lingering Eitr Mead	$item_mead_eitr_lingering	Consumable	True	True	10	1
+MeadEitrMinor	Minor Eitr Mead	$item_mead_eitr_minor	Consumable	True	True	10	1
+MeadFrostResist	Frost Resistance Mead	$item_mead_frostres	Consumable	True	True	10	1
+MeadHasty	Tonic of Ratatosk	$item_mead_hasty	Consumable	True	True	10	1
+MeadHealthLingering	Lingering Healing Mead	$item_mead_hp_lingering	Consumable	True	True	10	1
+MeadHealthMajor	Major Healing Mead	$item_mead_hp_major	Consumable	True	True	10	1
+MeadHealthMedium	Medium Healing Mead	$item_mead_hp_medium	Consumable	True	True	10	1
+MeadHealthMinor	Minor Healing Mead	$item_mead_hp_minor	Consumable	True	True	10	1
+MeadLightfoot	Lightfoot Mead	$item_mead_lightfoot	Consumable	True	True	10	1
+MeadPoisonResist	Poison Resistance Mead	$item_mead_poisonres	Consumable	True	True	10	1
+MeadStaminaLingering	Lingering Stamina Mead	$item_mead_stamina_lingering	Consumable	True	True	10	1
+MeadStaminaMedium	Medium Stamina Mead	$item_mead_stamina_medium	Consumable	True	True	10	1
+MeadStaminaMinor	Minor Stamina Mead	$item_mead_stamina_minor	Consumable	True	True	10	1
+MeadStrength	Mead of Troll Endurance	$item_mead_strength	Consumable	True	True	10	1
+MeadSwimmer	Draught of Vananidir	$item_mead_swimmer	Consumable	True	True	10	1
+MeadTamer	Brew of Animal Whispers	$item_mead_tamer	Consumable	True	True	10	1
+MeadTasty	Tasty Mead	$item_mead_tasty	Consumable	True	True	10	1
+MeadTrollPheromones	Love Potion	$item_mead_trollpheromones	Consumable	True	True	10	1
+MeatballsMashedPoteitr	Meatballs and Poteitr	$item_meatballsmashedpoteitr	Consumable	True	True	10	1
+MeatPlatter	Meat Platter	$item_meatplatter	Consumable	True	True	10	1
+MeatPlatterUncooked	Uncooked Meat Platter	$item_meatplatteruncooked	Material	True	True	10	1
+MechanicalSpring	Mechanical Spring	$item_mechanicalspring	Material	True	True	10	5
+MemorialCoal	Memorial Coal	$item_memorialcoal	Material	True	True	50	2
+MinceMeatSauce	Minced Meat Sauce	$item_mincemeatsauce	Consumable	True	True	10	1
+MisthareSupreme	Misthare Supreme	$item_mistharesupreme	Consumable	True	True	10	1
+MisthareSupremeUncooked	Uncooked Misthare Supreme	$item_mistharesupremeuncooked	Material	True	True	10	1
+Mistile_kamikaze	Mistile Kamikaze	Mistile Kamikaze	OneHandedWeapon	True	True	1	1
+MoldArmorGoldChest	Mould: Breastplate of the Protector	$item_mold_armor_gold_chest	Material	True	True	10	1
+MoldArmorGoldHelmet	Mould: Helmet of the Protector	$item_mold_armor_gold_helmet	Material	True	True	10	1
+MoldArmorGoldLegs	Mould: Trousers of the Protector	$item_mold_armor_gold_legs	Material	True	True	10	1
+MoldArmorMageChest	Mould: Robes of the Caller	$item_mold_armor_mage_chest	Material	True	True	10	1
+MoldArmorMageHelmet	Mould: Headdress of the Caller	$item_mold_armor_mage_helmet	Material	True	True	10	1
+MoldArmorMageLegs	Mould: Trousers of the Caller	$item_mold_armor_mage_legs	Material	True	True	10	1
+MoldArmormediumChest	Mould: Chestpiece of the Vanguard	$item_mold_armor_medium_chest	Material	True	True	10	1
+MoldArmorMediumHelmet	Mould: Hood of the Vanguard	$item_mold_armor_medium_helmet	Material	True	True	10	1
+MoldArmorMediumLegs	Mould: Trousers of the Vanguard	$item_mold_armor_medium_legs	Material	True	True	10	1
+MoldAtgeir	Mould: Nord Atgeir	$item_mold_atgeir	Material	True	True	10	1
+MoldAxe	Mould: Nord Axe	$item_mold_axe	Material	True	True	10	1
+MoldAxe2H	Mould: Nord Greataxe	$item_mold_axe2h	Material	True	True	10	1
+MoldBow	Mould: Nord Bow	$item_mold_bow	Material	True	True	10	1
+MoldCrossbow	Mould: Nord Crossbow	$item_mold_crossbow	Material	True	True	10	1
+MoldFistweapon	Mould: Nord Knucklechains	$item_mold_fistweapon	Material	True	True	10	1
+MoldKeys	Mould: Intricate Key	$item_mold_keys	Material	True	True	10	1
+MoldKnife	Mould: Nord Dagger	$item_mold_knife	Material	True	True	10	1
+MoldMace	Mould: Nord Mace	$item_mold_mace	Material	True	True	10	1
+MoldMace2H	Mould: Nord Sledge	$item_mold_mace2h	Material	True	True	10	1
+MoldShieldBuckler	Mould: Nord Buckler	$item_mold_shield_buckler	Material	True	True	10	1
+MoldShieldRound	Mould: Nord Shield	$item_mold_shield_round	Material	True	True	10	1
+MoldShieldTower	Mould: Nord Greatshield	$item_mold_shield_tower	Material	True	True	10	1
+MoldSmallParts	[item_mold_smallparts]	$item_mold_smallparts	Material	True	True	10	1
+MoldSpear	Mould: Nord Spear	$item_mold_spear	Material	True	True	10	1
+MoldStafffrostorbs	Mould: Northern Vengeance	$item_mold_stafffrostorbs	Material	True	True	10	1
+MoldStaffOrbofAhri	Mould: Echo Spike	$item_mold_stafforbofahri	Material	True	True	10	1
+MoldStaffspiritcaller	Mould: Spirit Caller	$item_mold_staffspiritcaller	Material	True	True	10	1
+MoldStaffthunderblood	Mould: Lightning Strike	$item_mold_staffthunderblood	Material	True	True	10	1
+MoldSword	Mould: Nord Sword	$item_mold_sword	Material	True	True	10	1
+MoldSword2H	Mould: Nord Greatsword	$item_mold_sword2h	Material	True	True	10	1
+MoleClaws	Long Claws	$item_moleclaws	Material	True	True	50	0.5
+MoltenCore	Molten Core	$item_moltencore	Material	True	True	20	1
+MooseHide	Moose Hide	$item_moosehide	Material	True	True	50	1
+MooseKebab	Meat In Bread	$item_moosekebab	Consumable	True	True	10	1
+MooseMeat	Moose Meat	$item_moose_meat	Material	True	True	20	1
+MooseSinew	Moose Sinew	$item_moosesinew	Material	True	True	50	0.5
+moose_hooves	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+moose_horns	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+moose_horns_sweep	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+MorgenHeart	Morgen Heart	$item_morgenheart	Material	True	True	50	0.5
+MorgenSinew	Morgen Sinew	$item_morgensinew	Material	True	True	50	0.5
+Morgen_bite	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_bodyslam	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_roll_left	Morgen Roll Left	Morgen Roll Left	OneHandedWeapon	True	False	1	1
+Morgen_roll_right	Morgen Roll Right	Morgen Roll Right	OneHandedWeapon	True	False	1	1
+Morgen_swipe_1	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_swipe_2	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_swipe_3	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_swipe_4	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_swipe_5	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Morgen_swipe_6	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+Mushroom	Mushroom	$item_mushroomcommon	Consumable	True	True	50	0.1
+MushroomBlue	Blue Mushroom	$item_mushroomblue	Consumable	True	True	50	0.1
+MushroomBzerker	Toadstool	$item_mushroom_bzerker	Consumable	True	True	50	0.1
+MushroomJotunPuffs	Jotun Puffs	$item_jotunpuffs	Consumable	True	True	50	0.1
+MushroomMagecap	Magecap	$item_magecap	Consumable	True	True	50	0.1
+MushroomOmelette	Mushroom Omelette	$item_mushroomomelette	Consumable	True	True	10	1
+MushroomSmokePuff	Smoke Puff	$item_smokepuff	Consumable	True	True	50	0.1
+MushroomYellow	Yellow Mushroom	$item_mushroomyellow	Consumable	True	True	50	0.1
+NeckTail	Neck Tail	$item_necktail	Material	True	True	50	0.5
+NeckTailGrilled	Grilled Neck Tail	$item_necktailgrilled	Consumable	True	True	20	0.5
+Neck_BiteAttack	jaws	jaws	OneHandedWeapon	True	False	1	1
+Needle	Needle	$item_needle	Material	True	True	50	0.5
+NornThread	Nornathread	$item_nornthread	Material	True	True	50	0.5
+Oat	Oats	$item_oat	Consumable	True	True	50	0.1
+OatFlour	Oat Flour	$item_oatflour	Misc	True	True	50	0.2
+OatmealLingonberryJam	Oatmeal	$item_oatmeallingonberryjam	Consumable	True	True	10	1
+OatMilk	Oat Milk	$item_oatmilk	Consumable	True	True	10	1
+OatSeeds	Oat Seeds	$item_oatseeds	Material	True	True	100	0.1
+Obsidian	Obsidian	$item_obsidian	Material	True	True	50	2
+Onion	Onion	$item_onion	Consumable	True	True	50	0.3
+OnionSeeds	Onion Seeds	$item_onionseeds	Material	True	True	100	0.1
+OnionSoup	Onion Soup	$item_onionsoup	Consumable	True	True	10	1
+Ooze	Ooze	$item_ooze	Material	True	True	50	0.5
+OozeMork	Dead Pulp	$item_ooze_mork	Material	True	True	50	0.5
+OrbFrostFire	Frostfire Essence	$item_orbfrostfire	Material	True	True	50	0.5
+OrbThunderBlood	Thunderblood Essence	$item_orbthunderblood	Material	True	True	50	0.5
+OvenPancake	Oven Pancake	$item_ovenpancake	Consumable	True	True	10	1
+OvenPancakeUncooked	Oven Pancake Batter	$item_ovenpancake_uncooked	Material	True	True	10	1
+Pancakes	Pancakes	$item_pancakes	Consumable	True	True	10	1
+PickaxeAntler	Antler Pickaxe	$item_pickaxe_antler	TwoHandedWeapon	True	True	1	2
+PickaxeBlackMetal	Black Metal Pickaxe	$item_pickaxe_blackmetal	TwoHandedWeapon	True	True	1	2
+PickaxeBronze	Bronze Pickaxe	$item_pickaxe_bronze	TwoHandedWeapon	True	True	1	2
+PickaxeIron	Iron Pickaxe	$item_pickaxe_iron	TwoHandedWeapon	True	True	1	2
+PickaxeStone	Stone Pickaxe	$item_pickaxe_stone	TwoHandedWeapon	True	True	1	2
+PineCone	Pine Cone	$item_pinecone	Material	True	True	100	0.1
+PiquantPie	Piquant Pie	$item_piquantpie	Consumable	True	True	10	1
+PiquantPieUncooked	Uncooked Piquant Pie	$item_piquantpie_uncooked	Material	True	True	10	1
+PlayerUnarmed	Unarmed	Unarmed	OneHandedWeapon	True	True	1	1
+Poteitr	Poteitr	$item_poteitr	Consumable	True	True	50	0.5
+PoteitrSeeds	Seed Poteitr	$item_poteitrseeds	Material	True	True	100	0.1
+Pot_Shard_Green	Pot Shard	$item_pot_shard_green	Material	True	True	50	2
+Pot_Shard_Red	[item_pot_shard_red]	$item_pot_shard_red	Material	True	True	50	2
+PowderedDragonEgg	Powdered Dragon Eggshells	$item_powdereddragonegg	Material	True	True	50	0.5
+ProustitePowder	Proustite Powder	$item_proustitepowder	Material	True	True	50	0.5
+Pukeberries	Bukeperries	$item_pukeberries	Consumable	True	True	50	0.1
+PulledBear	Pulled Bear	$item_pulledbear	Consumable	True	True	10	1
+PungentPebbles	Pungent Pebbles	$item_pungentpebbles	Material	True	True	50	0.5
+QueenBee	Queen Bee	$item_queenbee	Material	True	True	20	0.2
+QueenDrop	Majestic Carapace	$item_seekerqueen_drop	Material	True	True	30	1
+QueensJam	Queen's Jam	$item_queensjam	Consumable	True	True	10	1
+Raspberry	Raspberries	$item_raspberries	Consumable	True	True	50	0.1
+RawMeat	Boar Meat	$item_boar_meat	Material	True	True	20	1
+Resin	Resin	$item_resin	Material	True	True	50	0.3
+RoastedCrustPie	Roasted Crust Pie	$item_roastedcrustpie	Consumable	True	True	10	1
+RoastedCrustPieUncooked	Uncooked Roasted Crust Pie	$item_roastedcrustpie_uncooked	Material	True	True	10	1
+Root	Root	$item_root	Material	True	True	50	0.3
+RottenMeat	Rotten Meat	$item_meat_rotten	Consumable	True	True	20	0.5
+RoundLog	Corewood	$item_roundlog	Material	True	True	50	2
+RoyalJelly	Royal Jelly	$item_royaljelly	Consumable	True	True	50	0.1
+Ruby	Ruby	$item_ruby	Material	True	True	20	0.1
+SaddleAsksvin	Asksvin Saddle	$item_saddleasksvin	Misc	True	True	1	10
+SaddleLox	Lox Saddle	$item_saddlelox	Misc	True	True	1	10
+SaddleMoose	Moose Saddle	$item_saddlemoose	Misc	True	True	1	10
+Salad	Salad	$item_salad	Consumable	True	True	10	1
+Sap	Sap	$item_sap	Material	True	True	50	0.2
+Sausages	Sausages	$item_sausages	Consumable	True	True	20	0.5
+ScaleHide	Scale Hide	$item_scalehide	Material	True	True	50	0.5
+ScorchingMedley	Scorching Medley	$item_scorchingmedley	Consumable	True	True	10	1
+Scythe	Scythe	$item_scythe	TwoHandedWeapon	True	True	1	2
+ScytheHandle	Scythe Handle	$item_scythehandle	Misc	True	True	20	2
+SealBlubber	Seal Blubber	$item_blubber	Material	True	True	20	1
+SealHide	Seal Pelt	$item_sealhide	Material	True	True	50	0.5
+SealSoup	Seal Meat Soup	$item_sealsoup	Consumable	True	True	10	1
+SeekerAspic	Seeker Aspic	$item_seekeraspic	Consumable	True	True	10	1
+SeekerBrute_bite	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+SeekerBrute_groundslam	slap	slap	OneHandedWeapon	True	False	1	1
+SeekerBrute_ram	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+SeekerBrute_Taunt	Brute taunt	Brute taunt	OneHandedWeapon	True	True	1	1
+SeekerQueen_Bite	slap	slap	OneHandedWeapon	True	False	1	1
+SeekerQueen_Call	Brute taunt	Brute taunt	OneHandedWeapon	True	True	1	1
+SeekerQueen_PierceAOE	slap	slap	OneHandedWeapon	True	False	1	1
+SeekerQueen_Rush	slap	slap	OneHandedWeapon	True	False	1	1
+SeekerQueen_Slap	slap	slap	OneHandedWeapon	True	False	1	1
+SeekerQueen_Spit	dragon breath	dragon breath	OneHandedWeapon	True	False	1	1
+SeekerQueen_Teleport	Brute taunt	Brute taunt	OneHandedWeapon	True	True	1	1
+seeker_claw_left	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+seeker_claw_right	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+seeker_groundslam	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+seeker_groundslam_flying	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+seeker_land	land	land	OneHandedWeapon	True	False	1	1
+seeker_pincers	Dragon claw left	Dragon claw left	OneHandedWeapon	True	False	1	1
+seeker_takeoff	takeoff	takeoff	OneHandedWeapon	True	False	1	1
+SerpentMeat	Serpent Meat	$item_serpentmeat	Material	True	True	50	10
+SerpentMeatCooked	Cooked Serpent Meat	$item_serpentmeatcooked	Consumable	True	True	50	10
+SerpentScale	Serpent Scale	$item_serpentscale	Material	True	True	50	2
+SerpentStew	Serpent Stew	$item_serpentstew	Consumable	True	True	10	1
+Serpent_attack	Serpent bite	Serpent bite	OneHandedWeapon	True	False	1	1
+Serpent_taunt	Serpent Taunt	Serpent Taunt	OneHandedWeapon	True	False	1	1
+SharpeningStone	Sharpening Stone	$item_sharpeningstone	Material	True	True	20	6
+ShieldBanded	Banded Shield	$item_shield_banded	Shield	True	True	1	5
+ShieldBlackmetal	Black Metal Shield	$item_shield_blackmetal	Shield	True	True	1	5
+ShieldBlackmetalTower	Black Metal Tower Shield	$item_shield_blackmetal_tower	Shield	True	True	1	5
+ShieldBoneTower	Bone Tower Shield	$item_shield_bonetower	Shield	True	True	1	4
+ShieldBronzeBuckler	Bronze Buckler	$item_shield_bronzebuckler	Shield	True	True	1	3
+ShieldBucklerGoldUncooked	Cast: Nord Buckler	$item_shield_buckler_gold_uncooked	Material	True	True	10	1
+ShieldCarapace	Carapace Shield	$item_shield_carapace	Shield	True	True	1	5
+ShieldCarapaceBuckler	Carapace Buckler	$item_shield_carapacebuckler	Shield	True	True	1	5
+ShieldCore	Shield Core	$item_shieldcore	Material	True	True	20	1
+ShieldFlametal	Flametal Shield	$item_shield_flametal	Shield	True	True	1	5
+ShieldFlametalTower	Flametal Tower Shield	$item_shield_flametal_tower	Shield	True	True	1	5
+ShieldGold	Nord Shield	$item_shield_gold	Shield	True	True	1	5
+ShieldGoldBuckler	Nord Buckler	$item_shield_goldbuckler	Shield	True	True	1	4
+ShieldGoldTower	Nord Greatshield	$item_shield_gold_tower	Shield	True	True	1	5
+ShieldIronBuckler	Iron Buckler	$item_shield_ironbuckler	Shield	True	True	1	4
+ShieldIronSquare	Iron Shield	$item_shield_iron_square	Shield	True	True	1	4
+ShieldIronTower	Iron Tower Shield	$item_shield_iron_tower	Shield	True	True	1	4
+ShieldKnight	Knight shield UNUSED	$item_shield_knight	Shield	True	True	1	4
+ShieldRoots	Shield of Roots	$item_shield_roots	Shield	True	True	1	4
+ShieldRoundGoldUncooked	Cast: Nord Shield	$item_shield_round_gold_uncooked	Material	True	True	10	1
+ShieldSerpentscale	Serpent Scale Shield	$item_shield_serpentscale	Shield	True	True	1	5
+ShieldSilver	Silver Shield	$item_shield_silver	Shield	True	True	1	5
+ShieldTowerGoldUncooked	Cast: Nord Greatshield	$item_shield_tower_gold_uncooked	Material	True	True	10	1
+ShieldWood	Wood Shield	$item_shield_wood	Shield	True	True	1	4
+ShieldWoodTower	Wood Tower Shield	$item_shield_woodtower	Shield	True	True	1	4
+ShocklateSmoothie	Muckshake	$item_shocklatesmoothie	Consumable	True	True	10	1
+Shovel	Snow Shovel	$item_snowshovel	TwoHandedWeapon	True	True	1	2
+Silver	Silver	$item_silver	Material	True	True	30	14
+SilverNecklace	Silver Necklace	$item_silvernecklace	Material	True	True	20	0.1
+SilverOre	Silver Ore	$item_silverore	Material	True	True	30	14
+SizzlingBerryBroth	Sizzling Berry Broth	$item_sizzlingberrybroth	Consumable	True	True	10	1
+skeleton_bow	Bow	Bow	Bow	False	True	1	1
+skeleton_bow2	Bow	Bow	Bow	False	True	1	1
+skeleton_bow_meadows	Bow	Bow	Bow	False	True	1	1
+skeleton_bow_mountains	Bow	Bow	Bow	False	True	1	1
+skeleton_bow_swamps	Bow	Bow	Bow	False	True	1	1
+skeleton_hildir_firenova	Fire Skeleton Sword	Fire Skeleton Sword	OneHandedWeapon	False	True	1	1
+skeleton_mace	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_mace_DeepNorth	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_sword	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_sword2	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_sword_hildir	Fire Skeleton Sword	Fire Skeleton Sword	OneHandedWeapon	False	True	1	1
+skeleton_sword_meadows	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_sword_mountains	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+skeleton_sword_swamps	Dragur axe	Dragur axe	OneHandedWeapon	False	True	1	1
+SledgeCheat	Cheat sledge	Cheat sledge	TwoHandedWeapon	True	True	1	4
+SledgeDemolisher	Demolisher	$item_sledge_demolisher	TwoHandedWeapon	True	True	1	4
+SledgeGold	Nord Sledge	$item_sledge_gold	TwoHandedWeapon	True	True	1	4
+SledgeGoldUncooked	Cast: Nord Sledge	$item_sledge_gold_uncooked	Material	True	True	1	4
+SledgeGold_BloodLightning	Thunderblood Sledge	$item_mace2h_gold_bloodlightning	TwoHandedWeapon	True	True	1	4
+SledgeGold_FrostFire	Frostfire Sledge	$item_mace2h_gold_frostfire	TwoHandedWeapon	True	True	1	4
+SledgeIron	Iron Sledge	$item_sledge_iron	TwoHandedWeapon	True	True	1	4
+SledgeStagbreaker	Stagbreaker	$item_stagbreaker	TwoHandedWeapon	True	True	1	4
+SledgeWood	Wooden Sledge	$item_sledge_wood	TwoHandedWeapon	True	True	1	4
+SmallPartsGoldUncooked	[item_smallparts_gold_uncooked]	$item_smallparts_gold_uncooked	Material	True	True	10	1
+SmokedFish	Smoked Fish	$item_smokedfish	Consumable	True	True	10	1
+SmokedMooseMeat	Smoked Moose Meat	$item_smokedmoosemeat	Consumable	True	True	10	1
+Snowball	Snowball	$item_snowball	OneHandedWeapon	True	True	50	0.3
+SnowballBig	Big Snowball	Big $item_snowball	OneHandedWeapon	True	True	50	0.3
+Softtissue	Soft Tissue	$item_softtissue	Material	True	True	40	1
+Sparkler	Sparkler	$item_sparkler	Torch	True	True	1	1
+SparklingShroomshake	Sparkling Shroomshake	$item_sparklingshroomshake	Consumable	True	True	10	1
+SpearBronze	Bronze Spear	$item_spear_bronze	OneHandedWeapon	True	True	1	1.5
+SpearCarapace	Carapace Spear	$item_spear_carapace	OneHandedWeapon	True	True	1	1.5
+SpearChitin	Abyssal Harpoon	$item_spear_chitin	OneHandedWeapon	True	True	1	1.5
+SpearElderbark	Ancient Bark Spear	$item_spear_ancientbark	OneHandedWeapon	True	True	1	1.5
+SpearFlint	Flint Spear	$item_spear_flint	OneHandedWeapon	True	True	1	1.5
+SpearGold	Nord Spear	$item_spear_gold	OneHandedWeapon	True	True	1	1.5
+SpearGoldUncooked	Cast: Nord Spear	$item_spear_gold_uncooked	Material	True	True	1	1.5
+SpearGold_BloodLightning	Thunderblood Spear	$item_spear_gold_bloodlightning	OneHandedWeapon	True	True	1	1.5
+SpearGold_FrostFire	Frostfire Spear	$item_spear_gold_frostfire	OneHandedWeapon	True	True	1	1.5
+SpearSplitner	Splitnir	$item_spear_splitner	OneHandedWeapon	True	True	1	1.5
+SpearSplitner_Blood	Splitnir the Bleeding	$item_spear_splitner_blood	OneHandedWeapon	True	True	1	1.5
+SpearSplitner_Lightning	Splitnir the Storming	$item_spear_splitner_lightning	OneHandedWeapon	True	True	1	1.5
+SpearSplitner_Nature	Splitnir the Primal	$item_spear_splitner_nature	OneHandedWeapon	True	True	1	1.5
+SpearWolfFang	Fang Spear	$item_spear_wolffang	OneHandedWeapon	True	True	1	1.5
+SpearWood	Wooden Spear	$item_spear_wood	OneHandedWeapon	True	True	1	1.5
+SpiceAshlands	Fiery Spice Powder	$item_spiceashlands	Material	True	True	100	0.1
+SpiceDeepNorth	Seasoning of the Gourd	$item_spicedeepnorth	Material	True	True	100	0.1
+SpiceForests	Woodland Herb Blend	$item_spiceforests	Material	True	True	100	0.1
+SpiceMistlands	Herbs of the Hidden Hills	$item_spicemistlands	Material	True	True	100	0.1
+SpiceMountains	Mountain Peak Pepper Powder	$item_spicemountains	Material	True	True	100	0.1
+SpiceOceans	Seafarer's Herbs	$item_spiceoceans	Material	True	True	100	0.1
+SpicePlains	Grasslands Herbalist Harvest	$item_spiceplains	Material	True	True	100	0.1
+SpicyMarmalade	Spicy Marmalade	$item_spicymarmalade	Consumable	True	True	10	1
+spiritbjorn_bite	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+spiritbjorn_claws	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+spiritbjorn_slam	slap	slap	OneHandedWeapon	True	False	1	1
+spiritbjorn_swipe_combo	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+spiritbjorn_swipe_l	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+spiritbjorn_swipe_r	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+spiritboar_base_attack	boar attack1	boar attack1	OneHandedWeapon	True	False	1	1
+spiritmoose_hooves	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+spiritmoose_horns	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+spiritmoose_horns_sweep	moose horns	moose horns	OneHandedWeapon	True	False	1	1
+SpiritWolf_Attack1	WolfAttack1	WolfAttack1	OneHandedWeapon	True	False	1	1
+SpiritWolf_Attack2	WolfAttack2	WolfAttack2	OneHandedWeapon	True	False	1	1
+SpiritWolf_Attack3	WolfAttack3	WolfAttack3	OneHandedWeapon	True	False	1	1
+SP_ArmorBronzeChest	Bronze Plate Tunic	$item_chest_bronze	Chest	True	True	1	10
+SP_ArmorBronzeLegs	Bronze Plate Leggings	$item_legs_bronze	Legs	True	True	1	10
+SP_ArmorDress1	Plain Brown Dress	$item_chest_dress1	Chest	True	True	1	10
+SP_ArmorFenringChest	Fenris Coat	$item_chest_fenris	Chest	True	True	1	10
+SP_ArmorFenringLegs	Fenris Leggings	$item_legs_fenris	Legs	True	True	1	10
+SP_ArmorLeatherLegs	Leather Trousers	$item_legs_leather	Legs	True	True	1	5
+SP_ArmorMageChest	Eitr-weave Robe	$item_chest_mage	Chest	True	True	1	5
+SP_ArmorMageChest_Ashlands	Robes of Embla	$item_chest_mage_ashlands	Chest	True	True	1	5
+SP_ArmorMageLegs	Eitr-weave Trousers	$item_legs_mage	Legs	True	True	1	5
+SP_ArmorMageLegs_Ashlands	Trousers of Embla	$item_legs_mage_ashlands	Legs	True	True	1	5
+SP_ArmorPaddedCuirass	Padded Cuirass	$item_chest_pcuirass	Chest	True	True	1	10
+SP_ArmorPaddedGreaves	Padded Greaves	$item_legs_pgreaves	Legs	True	True	1	10
+SP_ArmorTrollLeatherChest	Troll Leather Tunic	$item_chest_trollleather	Chest	True	True	1	5
+SP_ArmorTrollLeatherLegs	Troll Leather Trousers	$item_legs_trollleather	Legs	True	True	1	5
+SP_ArmorTunic5	Red Tunic with Cape	$item_chest_tunic5	Chest	True	True	1	10
+SP_AxeBronze	Bronze Axe	$item_axe_bronze	OneHandedWeapon	True	True	1	2
+SP_BattleaxeCrystal	Crystal Battleaxe	$item_battleaxe_crystal	TwoHandedWeapon	True	True	1	2.5
+SP_BowDraugrFang	Draugr Fang	$item_bow_draugrfang	Bow	True	True	1	1.5
+SP_CapeLinen	Linen Cape	$item_cape_linen	Shoulder	True	True	1	4
+SP_CapeTrollHide	Troll Hide Cape	$item_cape_trollhide	Shoulder	True	True	1	4
+SP_CapeWolf	Wolf Fur Cape	$item_cape_wolf	Shoulder	True	True	1	4
+SP_HelmetBronze	Bronze Helmet	$item_helmet_bronze	Helmet	True	True	1	3
+SP_KnifeSilver	Silver Knife	$item_knife_silver	OneHandedWeapon	True	True	1	0.3
+SP_KnifeSkollAndHati	Skoll and Hati	$item_knife_skollandhati	TwoHandedWeapon	True	True	1	0.3
+SP_ShieldBlackmetalTower	Black Metal Tower Shield	$item_shield_blackmetal_tower	Shield	True	True	1	5
+SP_StaffFireball	Staff of Embers	$item_stafffireball	TwoHandedWeapon	True	True	1	0.3
+SP_StaffLightning	Dundr	$item_staff_lightning	TwoHandedWeapon	True	True	1	1.5
+SP_SwordBlackmetal	Black Metal Sword	$item_sword_blackmetal	OneHandedWeapon	True	True	1	0.8
+StaffClusterbomb	Staff of Fracturing	$item_staffclusterbomb	TwoHandedWeapon	True	True	1	0.3
+StaffFireball	Staff of Embers	$item_stafffireball	TwoHandedWeapon	True	True	1	0.3
+StaffFrostOrbs	Northern Vengeance	$item_staff_frostorbs	TwoHandedWeaponLeft	True	True	1	0.3
+StaffFrostOrbsUncooked	Cast: Northern Vengeance	$item_frostorbs_uncooked	Material	True	True	1	2.5
+StaffGreenRoots	Staff of the Wild	$item_staffgreenroots	TwoHandedWeapon	True	True	1	0.3
+StaffIceShards	Staff of Frost	$item_stafficeshards	TwoHandedWeapon	True	True	1	0.3
+StaffLightning	Dundr	$item_staff_lightning	TwoHandedWeapon	True	True	1	1.5
+StaffOrbofAhri	Echo Spike	$item_staff_orbofahri	TwoHandedWeapon	True	True	1	0.3
+StaffOrbofAhriUncooked	Cast: Echo Spike	$item_staff_orbofahri_uncooked	Material	True	True	1	2.5
+StaffRedTroll	Trollstav	$item_staffredtroll	TwoHandedWeapon	True	True	1	0.3
+StaffShield	Staff of Protection	$item_staffshield	TwoHandedWeapon	True	True	1	0.3
+StaffSkeleton	Dead Raiser	$item_staffskeleton	TwoHandedWeaponLeft	True	True	1	0.3
+StaffSpiritCaller	Spirit Caller	$item_staff_spiritcaller	TwoHandedWeaponLeft	True	True	1	0.3
+StaffSpiritCallerUncooked	Cast: Spirit Caller	$item_staff_spiritcaller_uncooked	Material	True	True	1	2.5
+StaffThunderBlood	Lightning Strike	$item_staff_thunderblood	TwoHandedWeapon	True	True	1	0.3
+StaffThunderbloodUncooked	Cast: Lightning Strike	$item_staff_thunderblood_uncooked	Material	True	True	1	2.5
+staff_greenroots_tentaroot_attack	Dragur axe	Dragur axe	OneHandedWeapon	True	True	1	1
+StaminaUpgrade_Greydwarf	Stamina Greydwarf	Stamina Greydwarf	Consumable	True	True	1	1
+StaminaUpgrade_Troll	Stamina Troll	Stamina Troll	Consumable	True	True	1	1
+StaminaUpgrade_Wraith	Stamina Wraith	Stamina Wraith	Consumable	True	True	1	1
+Stone	Stone	$item_stone	Material	True	True	50	2
+stonegolem_attack1_spike	Spike attack	Spike attack	OneHandedWeapon	True	True	1	1
+stonegolem_attack2_left_groundslam	One hand ground slam	One hand ground slam	OneHandedWeapon	True	False	1	1
+stonegolem_attack3_spikesweep	Spike sweep	Spike sweep	OneHandedWeapon	True	False	1	1
+stonegolem_attack_doublesmash	slap	slap	OneHandedWeapon	True	False	1	1
+stonegolem_attack_sonicboom_NOTUSED	slap	slap	OneHandedWeapon	True	False	1	1
+StoneGolem_clubs			Chest	True	True	1	1
+StoneGolem_hat			Helmet	True	True	1	1
+StoneGolem_spikes			Chest	True	True	1	1
+StoneRock	Rock	$item_stonerock	Material	True	True	50	2
+SulfurStone	Sulfur	$item_sulfurstone	Material	True	True	50	2
+SurtlingCore	Surtling Core	$item_surtlingcore	Material	True	True	10	5
+Sword2h_JotunWarrior	Club	Club	OneHandedWeapon	False	True	1	1
+SwordBlackmetal	Black Metal Sword	$item_sword_blackmetal	OneHandedWeapon	True	True	1	0.8
+SwordBronze	Bronze Sword	$item_sword_bronze	OneHandedWeapon	True	True	1	0.8
+SwordCheat	Cheat sword	Cheat sword	OneHandedWeapon	True	True	1	2
+SwordDyrnwyn	Dyrnwyn	$item_sword_dyrnwyn	OneHandedWeapon	True	True	1	0.8
+SwordGold	Nord Sword	$item_sword_gold	OneHandedWeapon	True	True	1	0.8
+SwordGoldUncooked	Cast: Nord Sword	$item_sword_gold_uncooked	Material	True	True	1	0.8
+SwordGold_BloodLightning	Thunderblood Sword	$item_sword_gold_bloodlightning	OneHandedWeapon	True	True	1	0.8
+SwordGold_FrostFire	Frostfire Sword	$item_sword_gold_frostfire	OneHandedWeapon	True	True	1	0.8
+SwordIron	Iron Sword	$item_sword_iron	OneHandedWeapon	True	True	1	0.8
+SwordIronFire	Dyrnwyn	$item_sword_fire	OneHandedWeapon	True	True	1	1
+SwordMistwalker	Mistwalker	$item_sword_mistwalker	OneHandedWeapon	True	True	1	0.8
+SwordNiedhogg	Nidhögg	$item_sword_niedhogg	OneHandedWeapon	True	True	1	0.8
+SwordNiedhoggBlood	Nidhögg the Bleeding	$item_sword_niedhogg_blood	OneHandedWeapon	True	True	1	0.8
+SwordNiedhoggLightning	Nidhögg the Thundering	$item_sword_niedhogg_lightning	OneHandedWeapon	True	True	1	0.8
+SwordNiedhoggNature	Nidhögg the Primal	$item_sword_niedhogg_nature	OneHandedWeapon	True	True	1	0.8
+SwordSilver	Silver Sword	$item_sword_silver	OneHandedWeapon	True	True	1	1
+SwordWood	Wooden Sword	$item_sword_wood	OneHandedWeapon	True	True	1	0.8
+Tankard	Tankard	$item_tankard	OneHandedWeapon	True	True	1	1
+TankardAnniversary	Horn of Celebration	$item_tankard_anniversary	OneHandedWeapon	True	True	1	1
+TankardOdin	Mead Horn of Oden	$item_tankard_odin	OneHandedWeapon	True	True	1	1
+Tankard_dvergr	Dvergr Tankard	$item_dvergrtankard	OneHandedWeapon	True	True	1	1
+Tar	Tar	$item_tar	Material	True	True	50	2
+tendril_attack	Dragur axe	Dragur axe	OneHandedWeapon	True	True	1	1
+tentaroot_attack	Dragur axe	Dragur axe	OneHandedWeapon	True	True	1	1
+Thistle	Thistle	$item_thistle	Material	True	True	50	0.1
+THSwordGold	Nord Greatsword	$item_sword2h_gold	TwoHandedWeapon	True	True	1	4
+THSwordGoldUncooked	Cast: Nord Greatsword	$item_sword2h_gold_uncooked	Material	True	True	1	4
+THSwordGold_BloodLightning	Thunderblood Greatsword	$item_sword2h_gold_bloodlightning	TwoHandedWeapon	True	True	1	4
+THSwordGold_FrostFire	Frostfire Greatsword	$item_sword2h_gold_frostfire	TwoHandedWeapon	True	True	1	4
+THSwordKrom	Krom	$item_sword_krom	TwoHandedWeapon	True	True	1	4
+THSwordSlayer	Slayer	$item_sword_slayer	TwoHandedWeapon	True	True	1	4
+THSwordSlayerBlood	Brutal Slayer	$item_sword_slayer_blood	TwoHandedWeapon	True	True	1	4
+THSwordSlayerLightning	Scourging Slayer	$item_sword_slayer_lightning	TwoHandedWeapon	True	True	1	4
+THSwordSlayerNature	Primal Slayer	$item_sword_slayer_nature	TwoHandedWeapon	True	True	1	4
+THSwordWood	Wooden Greatsword	$item_sword_wood_2h	TwoHandedWeapon	True	True	1	4
+Thunderstone	Thunder Stone	$item_thunderstone	Material	True	True	20	10
+tick_attack	boar attack1	boar attack1	OneHandedWeapon	True	False	1	1
+tick_attack_attach	boar attack1	boar attack1	OneHandedWeapon	True	False	1	1
+Tin	Tin	$item_tin	Material	True	True	30	8
+TinOre	Tin Ore	$item_tinore	Material	True	True	30	8
+Torch	Torch	$item_torch	Torch	True	True	1	1
+TorchMist	[item_torchmist]	$item_torchmist	Torch	True	True	1	1
+TrainingDummy_attack	dummy attack	dummy attack	OneHandedWeapon	True	False	1	1
+TrainingDummy_attack2	dummy attack	dummy attack	OneHandedWeapon	True	False	1	1
+TrainingDummy_attack3	dummy attack	dummy attack	OneHandedWeapon	True	False	1	1
+TrainingDummy_throw	dummy throw stone	dummy throw stone	OneHandedWeapon	True	False	1	1
+TrinketBlackDamageHealth	Bracelets of the Brave	$item_trinketblackdamagedealth	Trinket	True	True	1	2
+TrinketBlackStamina	Evasion Mantle	$item_trinketblackdtamina	Trinket	True	True	1	2
+TrinketBloodGoldHealth	Neckstabber	$item_trinketbloodgoldhealth	Trinket	True	True	1	2
+TrinketBloodGoldStamina	Witch Crown	$item_trinketbloodgoldstamina	Trinket	True	True	1	2
+TrinketBronzeHealth	Heart of the Forest	$item_trinketbronzehealth	Trinket	True	True	1	2
+TrinketBronzeStamina	Bronze Pendant	$item_trinketbronzestamina	Trinket	True	True	1	2
+TrinketCarapaceEitr	Pulsating Earrings	$item_trinketcarapaceeitr	Trinket	True	True	1	2
+TrinketChitinSwim	Fins of Destiny	$item_trinketchitinswim	Trinket	True	True	1	2
+TrinketFlametalEitr	Jörmundling	$item_trinketflametaleitr	Trinket	True	True	1	2
+TrinketFlametalStaminaHealth	Brimstone	$item_trinketflametalstaminahealth	Trinket	True	True	1	2
+TrinketIronHealth	Iron Brooch	$item_trinketironhealth	Trinket	True	True	1	2
+TrinketIronStamina	Nimble Anklet	$item_trinketironstamina	Trinket	True	True	1	2
+TrinketScaleStaminaDamage	Resounding Shackle	$item_trinketscalestaminadamage	Trinket	True	True	1	2
+TrinketSilverDamage	Wolf Sight	$item_trinketsilverdamage	Trinket	True	True	1	2
+TrinketSilverResist	Crystal Heart	$item_trinketsilverresist	Trinket	True	True	1	2
+TrollHide	Troll Hide	$item_trollhide	Material	True	True	20	2
+trollsnow_groundslam	slap	slap	OneHandedWeapon	True	False	1	1
+trollsnow_groundslam_r	slap	slap	OneHandedWeapon	True	False	1	1
+trollsnow_punch	slap	slap	OneHandedWeapon	True	False	1	1
+trollsnow_punch_r	slap	slap	OneHandedWeapon	True	False	1	1
+trollsnow_throw	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+troll_groundslam	slap	slap	OneHandedWeapon	True	False	1	1
+troll_log_swing_h	LOG	LOG	OneHandedWeapon	True	True	1	1
+troll_log_swing_v	LOG	LOG	OneHandedWeapon	True	True	1	1
+troll_punch	slap	slap	OneHandedWeapon	True	False	1	1
+troll_summoned_groundslam	slap	slap	OneHandedWeapon	True	False	1	1
+troll_summoned_log_swing_h	LOG	LOG	OneHandedWeapon	True	True	1	1
+troll_summoned_log_swing_v	LOG	LOG	OneHandedWeapon	True	True	1	1
+troll_summoned_punch	slap	slap	OneHandedWeapon	True	False	1	1
+troll_summoned_throw	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+troll_throw	fireballattack	fireballattack	OneHandedWeapon	True	False	1	1
+TrophyAbomination	Abomination Trophy	$item_trophy_abomination	Trophy	True	True	20	4
+TrophyAsksvin	Asksvin Trophy	$item_trophy_asksvin	Trophy	True	True	20	2
+TrophyBarka	Barka Trophy	$item_trophy_barka	Trophy	True	True	20	2
+TrophyBjorn	Bear Trophy	$item_trophy_bjorn	Trophy	True	True	20	2
+TrophyBjornUndead	Vile Trophy	$item_trophy_bjorn_undead	Trophy	True	True	20	2
+TrophyBlob	Blob Trophy	$item_trophy_blob	Trophy	True	True	20	1
+TrophyBlob_Frost	Frost Blob Trophy	$item_trophy_blob_frost	Trophy	True	True	20	1
+TrophyBlob_Lava	Lava Blob Trophy	$item_trophy_blob_lava	Trophy	True	True	20	1
+TrophyBlob_Morkhalla	Pulp Trophy	$item_trophy_blob_morkhalla	Trophy	True	True	20	1
+TrophyBoar	Boar Trophy	$item_trophy_boar	Trophy	True	True	20	2
+TrophyBonemass	Bonemass Trophy	$item_trophy_bonemass	Trophy	True	True	20	2
+TrophyBonemawSerpent	Bonemaw Trophy	$item_trophy_bonemaw	Trophy	True	True	20	25
+TrophyCharredArcher	Marksman Trophy	$item_trophy_charredarcher	Trophy	True	True	20	0.5
+TrophyCharredMage	Warlock Trophy	$item_trophy_charredmage	Trophy	True	True	20	0.5
+TrophyCharredMelee	Warrior Trophy	$item_trophy_charredmelee	Trophy	True	True	20	0.5
+TrophyCultist	Cultist Trophy	$item_trophy_cultist	Trophy	True	True	20	3
+TrophyCultist_Hildir	Geirrhafa Trophy	$item_trophy_cultist_hildir	Trophy	True	True	20	3
+TrophyDeathsquito	Deathsquito Trophy	$item_trophy_deathsquito	Trophy	True	True	20	0.5
+TrophyDeer	Deer Trophy	$item_trophy_deer	Trophy	True	True	20	2
+TrophyDeerWhite	[item_trophy_deer_white]	$item_trophy_deer_white	Trophy	True	True	20	2
+TrophyDragonQueen	Moder Trophy	$item_trophy_dragonqueen	Trophy	True	True	20	2
+TrophyDraugr	Draugr Trophy	$item_trophy_draugr	Trophy	True	True	20	1
+TrophyDraugrElite	Draugr Elite Trophy	$item_trophy_draugrelite	Trophy	True	True	20	1
+TrophyDraugrFem	Draugr Trophy	$item_trophy_draugr	Trophy	True	True	20	1
+TrophyDvergr	Dvergr Trophy	$item_trophy_dvergr	Trophy	True	True	20	2
+TrophyEikthyr	Eikthyr Trophy	$item_trophy_eikthyr	Trophy	True	True	20	2
+TrophyElaking	Elaking Trophy	$item_trophy_elaking	Trophy	True	True	20	2
+TrophyFader	Fader Trophy	$item_trophy_fader	Trophy	True	True	20	2
+TrophyFallenValkyrie	Fallen Valkyrie Trophy	$item_trophy_fallenvalkyrie	Trophy	True	True	20	0.5
+TrophyFenring	Fenring Trophy	$item_trophy_fenring	Trophy	True	True	20	1.5
+TrophyForestTroll	Troll Trophy	$item_trophy_troll	Trophy	True	True	20	4
+TrophyFrostTroll	Troll Trophy	$item_trophy_troll	Trophy	True	True	20	4
+TrophyGhost	Ghost Trophy	$item_trophy_ghost	Trophy	True	True	20	2
+TrophyGjall	Gjall Trophy	$item_trophy_gjall	Trophy	True	True	20	2
+TrophyGoblin	Fuling Trophy	$item_trophy_goblin	Trophy	True	True	20	1
+TrophyGoblinBrute	Fuling Berserker Trophy	$item_trophy_goblinbrute	Trophy	True	True	20	2
+TrophyGoblinBruteBrosBrute	Thungr Trophy	$item_trophy_brutebro	Trophy	True	True	20	2
+TrophyGoblinBruteBrosShaman	Zil Trophy	$item_trophy_shamanbro	Trophy	True	True	20	2
+TrophyGoblinKing	Yagluth Trophy	$item_trophy_goblinking	Trophy	True	True	20	1
+TrophyGoblinShaman	Fuling Shaman Trophy	$item_trophy_goblinshaman	Trophy	True	True	20	0.5
+TrophyGreydwarf	Greydwarf Trophy	$item_trophy_greydwarf	Trophy	True	True	20	1
+TrophyGreydwarfBrute	Greydwarf Brute Trophy	$item_trophy_greydwarfbrute	Trophy	True	True	20	1.5
+TrophyGreydwarfShaman	Greydwarf Shaman Trophy	$item_trophy_greydwarfshaman	Trophy	True	True	20	1
+TrophyGrowth	Growth Trophy	$item_trophy_growth	Trophy	True	True	20	1
+TrophyHare	Hare Trophy	$item_trophy_hare	Trophy	True	True	20	2
+TrophyHatchling	Drake Trophy	$item_trophy_hatchling	Trophy	True	True	20	2
+TrophyJotunWarrior	Krigen Trophy	$item_trophy_jotunwarrior	Trophy	True	True	20	2
+TrophyJotunWitch	Hexen Trophy	$item_trophy_jotunwitch	Trophy	True	True	20	2
+TrophyKvastur	Kvastur	$enemy_kvastur	Trophy	True	True	20	2
+TrophyLeech	Leech Trophy	$item_trophy_leech	Trophy	True	True	20	2
+TrophyLox	Lox Trophy	$item_trophy_lox	Trophy	True	True	20	2
+TrophyMole	Eyeless One Trophy	$item_trophy_mole	Trophy	True	True	20	1.5
+TrophyMoose	Moose Trophy	$item_trophy_moose	Trophy	True	True	20	2
+TrophyMorgen	Morgen Trophy	$item_trophy_morgen	Trophy	True	True	20	0.5
+TrophyNeck	Neck Trophy	$item_trophy_neck	Trophy	True	True	20	0.5
+TrophySeal	Seal Trophy	$item_trophy_seal	Trophy	True	True	20	2
+TrophySeeker	Seeker Trophy	$item_trophy_seeker	Trophy	True	True	20	2
+TrophySeekerBrute	Seeker Soldier Trophy	$item_trophy_seeker_brute	Trophy	True	True	20	2
+TrophySeekerQueen	The Queen Trophy	$item_trophy_seekerqueen	Trophy	True	True	20	2
+TrophySerpent	Serpent Trophy	$item_trophy_serpent	Trophy	True	True	20	25
+TrophySGolem	Stone Golem Trophy	$item_trophy_sgolem	Trophy	True	True	20	2
+TrophySkeleton	Skeleton Trophy	$item_trophy_skeleton	Trophy	True	True	20	0.5
+TrophySkeletonHildir	Brenna Trophy	$item_trophy_skeleton_hildir	Trophy	True	True	20	0.5
+TrophySkeletonPoison	Rancid Remains Trophy	$item_trophy_skeletonpoison	Trophy	True	True	20	0.5
+TrophySurtling	Surtling Trophy	$item_trophy_surtling	Trophy	True	True	20	1
+TrophyTheElder	The Elder Trophy	$item_trophy_elder	Trophy	True	True	20	4
+TrophyTick	Tick Trophy	$item_trophy_tick	Trophy	True	True	20	2
+TrophyUlv	Ulv Trophy	$item_trophy_ulv	Trophy	True	True	20	1.5
+TrophyVolture	Volture Trophy	$item_trophy_volture	Trophy	True	True	20	2
+TrophyWolf	Wolf Trophy	$item_trophy_wolf	Trophy	True	True	20	1.5
+TrophyWraith	Wraith Trophy	$item_trophy_wraith	Trophy	True	True	20	1
+TrophyWrithan	Writhan Trophy	$item_trophy_writhan	Trophy	True	True	20	2
+Turnip	Turnip	$item_turnip	Material	True	True	50	0.3
+TurnipSeeds	Turnip Seeds	$item_turnipseeds	Material	True	True	100	0.1
+TurnipStew	Turnip Stew	$item_turnipstew	Consumable	True	True	10	1
+TurretBolt	Black Metal Missile	$item_turretbolt	AmmoNonEquipable	True	True	100	0.5
+TurretBoltBloodgold	Bloodgold Missile	$item_turretbolt_bloodgold	AmmoNonEquipable	True	True	100	0.5
+TurretBoltBone	[item_turretboltbone]	$item_turretboltbone	AmmoNonEquipable	True	True	100	0.5
+TurretBoltFlametal	Flametal Missile	$item_turretbolt_flametal	AmmoNonEquipable	True	True	100	0.5
+TurretBoltWood	Wooden Missile	$item_turretboltwood	AmmoNonEquipable	True	True	100	0.5
+Ulv_attack1_bite	Bite Attack	Bite Attack	OneHandedWeapon	True	True	1	1
+Ulv_attack2_slash	Slash Attack	Slash Attack	OneHandedWeapon	True	True	1	1
+unbjorn_bite	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+unbjorn_claws	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+unbjorn_slam	slap	slap	OneHandedWeapon	True	False	1	1
+unbjorn_swipe_combo	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+unbjorn_swipe_l	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+unbjorn_swipe_r	bjorn bite	bjorn bite	OneHandedWeapon	True	True	1	1
+UndeadBjornRibcage	Vile Ribcage	$item_UndeadBjornRibcage	Material	True	True	50	5
+Upgrader0Armor	Wooden Protection Idol	$item_upgrader_tier0 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader0Weapon	Wooden Battle Idol	$item_upgrader_tier0 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader1Armor	Bronze Protection Idol	$item_upgrader_tier1 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader1Weapon	Bronze Battle Idol	$item_upgrader_tier1 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader2Armor	Iron Protection Idol	$item_upgrader_tier2 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader2Weapon	Iron Battle Idol	$item_upgrader_tier2 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader3Armor	Silver Protection Idol	$item_upgrader_tier3 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader3Weapon	Silver Battle Idol	$item_upgrader_tier3 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader4Armor	Black Metal Protection Idol	$item_upgrader_tier4 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader4Weapon	Black Metal Battle Idol	$item_upgrader_tier4 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader5Armor	Black Marble Protection Idol	$item_upgrader_tier5 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader5Weapon	Black Marble Battle Idol	$item_upgrader_tier5 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader6Armor	Flametal Protection Idol	$item_upgrader_tier6 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader6Weapon	Flametal Battle Idol	$item_upgrader_tier6 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+Upgrader7Armor	Bloodgold Protection Idol	$item_upgrader_tier7 $item_upgrader_armor $item_upgrader_name	Material	True	True	20	0.5
+Upgrader7Weapon	Bloodgold Battle Idol	$item_upgrader_tier7 $item_upgrader_weapon $item_upgrader_name	Material	True	True	20	0.5
+VegvisirShard_Bonemass	Yagluth thing	Yagluth thing	Material	True	True	30	1
+VikingCupcake	Frosted Sweetbread	$item_vikingcupcake	Consumable	True	True	10	1
+VikingCupcakeUncooked	Unbaked Sweetbread	$item_vikingcupcake_uncooked	Material	True	True	10	1
+Vineberry	Vineberry Cluster	$item_vineberry	Consumable	True	True	50	0.1
+VineberrySeeds	Vineberry Seeds	$item_vineberryseeds	Material	True	True	100	0.1
+VineGreenSeeds	Ivy Seeds	$item_vinegreenseeds	Material	True	True	100	0.1
+Voidplasm	Ectoplasm	$item_ectoplasm	Material	True	True	50	2
+VoltureEgg	Volture Egg	$item_voltureegg	Misc	True	True	20	1
+VoltureMeat	Volture Meat	$item_volture_meat	Material	True	True	20	1
+volture_talons	Volture Talons	Volture Talons	OneHandedWeapon	True	True	1	1
+Wishbone	Wishbone	$item_wishbone	Utility	True	True	1	0.1
+Wisp	Wisp	$item_wisp	Material	True	True	50	0.5
+WitheredBone	Withered Bone	$item_witheredbone	Material	True	True	30	1
+WolfClaw	Fenris Claw	$item_wolfclaw	Material	True	True	20	0.5
+WolfFang	Wolf Fang	$item_wolffang	Material	True	True	50	0.1
+WolfHairBundle	Fenris Hair	$item_wolfhairbundle	Material	True	True	50	1
+WolfJerky	Wolf Jerky	$item_wolfjerky	Consumable	True	True	20	0.5
+WolfMeat	Wolf Meat	$item_wolf_meat	Material	True	True	20	1
+WolfMeatSkewer	Wolf Skewer	$item_wolf_skewer	Consumable	True	True	20	0.5
+WolfPelt	Wolf Pelt	$item_wolfpelt	Material	True	True	50	1
+Wolf_Attack1	WolfAttack1	WolfAttack1	OneHandedWeapon	True	False	1	1
+Wolf_Attack2	WolfAttack2	WolfAttack2	OneHandedWeapon	True	False	1	1
+Wolf_Attack3	WolfAttack3	WolfAttack3	OneHandedWeapon	True	False	1	1
+Wood	Wood	$item_wood	Material	True	True	50	2
+wraith_melee	Wraith melee	Wraith melee	OneHandedWeapon	True	True	1	1
+WrithanRoots	Writhan Roots	$item_writhanroots	Material	True	True	50	0.5
+writhan_bite	writhan bite	writhan bite	OneHandedWeapon	True	True	1	1
+writhan_explode_aoe			OneHandedWeapon	True	False	1	1
+YagluthDrop	Torn Spirit	$item_yagluththing	Misc	True	True	30	1
+YggdrasilPorridge	Yggdrasil Porridge	$item_yggdrasilporridge	Consumable	True	True	10	1
+YggdrasilWood	Yggdrasil Wood	$item_yggdrasilwood	Material	True	True	50	2
+YmirRemains	Ymir Flesh	$item_ymirremains	Material	True	True	50	0.3

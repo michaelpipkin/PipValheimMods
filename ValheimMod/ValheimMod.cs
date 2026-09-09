@@ -3,8 +3,10 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEngine;
 
 namespace ValheimMod
@@ -21,9 +23,9 @@ namespace ValheimMod
 
         // Keyboard shortcuts
         private static ConfigEntry<KeyboardShortcut> RepairHotkey;
+        private static ConfigEntry<KeyboardShortcut> DumpItemListHotkey;
 
         // Config values
-        private static ConfigEntry<float> CustomIncomingDamageRate;
         private static ConfigEntry<float> CustomStaminaRate;
         private static ConfigEntry<float> CustomEitrRate;
         private static ConfigEntry<float> CustomMaxCarryWeight;
@@ -40,11 +42,14 @@ namespace ValheimMod
         // Module variables
         private static List<string> _favoriteFoods;
         private static List<string> _favoriteAmmo;
-        private static Player _player;
         private static MessageHud _messageHud;
 
+        // m_inventory is declared on Humanoid, not Player. AccessTools walks the base chain and
+        // ignores access level; typeof(Player).GetField(..., NonPublic) does neither for a private
+        // base-class field. Resolved once rather than on every hotkey press.
+        private static readonly FieldInfo m_inventoryField = AccessTools.Field(typeof(Humanoid), "m_inventory");
+
         private void Awake() {
-            CustomIncomingDamageRate = Config.Bind("General", "CustomIncomingDamageRate", 1f, "Custom incoming damage rate");
             CustomStaminaRate = Config.Bind("General", "CustomStaminaRate", 1f, "Custom stamina rate");
             CustomEitrRate = Config.Bind("General", "CustomEitrRate", 1f, "Custom Eitr usage rate");
             CustomMaxCarryWeight = Config.Bind("General", "CustomMaxCarryWeight", 300f, "Custom base max carry weight");
@@ -57,6 +62,7 @@ namespace ValheimMod
             NegateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
 
             RepairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, heal player, replenish ammo, and spawn or replenish favorite foods");
+            DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,FishAndBread,SeekerAspic", "Comma-separated list of foods to spawn");
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
@@ -70,9 +76,13 @@ namespace ValheimMod
 
         private void Update() {
             if (RepairHotkey.Value.IsDown()) {
-                // Use reflection to get the m_inventory field
-                var inventoryField = typeof(Player).GetField("m_inventory", BindingFlags.NonPublic | BindingFlags.Instance);
-                var inventory = (Inventory)inventoryField.GetValue(_player);
+                // Read the local player at point of use; m_localPlayer isn't assigned until
+                // SetLocalPlayer runs, which is after Player.Awake
+                Player player = Player.m_localPlayer;
+                if (player == null) {
+                    return;
+                }
+                var inventory = (Inventory)m_inventoryField.GetValue(player);
 
                 foreach (var item in inventory.GetAllItems().Where(i => i.IsEquipable() && i.m_durability < i.GetMaxDurability())) {
                     item.m_durability = item.GetMaxDurability();
@@ -99,16 +109,96 @@ namespace ValheimMod
                         inventory.AddItem(prefab, itemData.m_maxStackSize - count);
                     }
                 }
-                if (_player.GetHealthPercentage() < 1f) {
-                    _player.SetHealth(_player.GetMaxHealth());
+                if (player.GetHealthPercentage() < 1f) {
+                    player.SetHealth(player.GetMaxHealth());
                 }
-                if (_player.GetStaminaPercentage() < 1f) {
-                    _player.AddStamina(_player.GetMaxStamina());
+                if (player.GetStaminaPercentage() < 1f) {
+                    player.AddStamina(player.GetMaxStamina());
                 }
-                if (_player.GetEitrPercentage() < 1f) {
-                    _player.AddEitr(_player.GetMaxEitr());
+                if (player.GetEitrPercentage() < 1f) {
+                    player.AddEitr(player.GetMaxEitr());
                 }
             }
+
+            if (DumpItemListHotkey.Value.IsDown()) {
+                DumpItemList();
+            }
+        }
+
+        /// <summary>
+        /// Writes every item prefab known to ObjectDB out to two files in the BepInEx config folder:
+        /// a tab-separated reference table, and a ready-to-paste AutoPickupIgnorer ignore list.
+        /// ObjectDB isn't fully populated until a world is loaded, so this does nothing at the menu.
+        /// </summary>
+        private static void DumpItemList() {
+            ObjectDB odb = ObjectDB.instance;
+            if (odb == null || odb.m_items == null || odb.m_items.Count == 0) {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Item list unavailable - load a world first");
+                return;
+            }
+
+            var rows = new List<ItemRow>();
+            foreach (var prefab in odb.m_items) {
+                if (prefab == null) {
+                    continue;
+                }
+                var drop = prefab.GetComponent<ItemDrop>();
+                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+                    continue;
+                }
+                var shared = drop.m_itemData.m_shared;
+                // Localization can be unavailable very early; fall back to the raw token
+                string display = Localization.instance != null
+                    ? Localization.instance.Localize(shared.m_name)
+                    : shared.m_name;
+                rows.Add(new ItemRow {
+                    PrefabName = prefab.name,
+                    DisplayName = display,
+                    NameToken = shared.m_name,
+                    ItemType = shared.m_itemType.ToString(),
+                    AutoPickup = drop.m_autoPickup,
+                    // Registered in ZNetScene means the prefab can exist as a world object, which
+                    // is what separates real drops from creature attack prefabs and cosmetics.
+                    InZNetScene = ZNetScene.instance != null && ZNetScene.instance.GetPrefab(prefab.name) != null,
+                    MaxStackSize = shared.m_maxStackSize,
+                    Weight = shared.m_weight,
+                });
+            }
+            rows.Sort((a, b) => string.Compare(a.PrefabName, b.PrefabName, StringComparison.OrdinalIgnoreCase));
+
+            string dir = Paths.ConfigPath;
+
+            // Reference table: prefab name is the id the "spawn" console command takes
+            var table = new StringBuilder();
+            table.AppendLine("PrefabName\tDisplayName\tNameToken\tItemType\tAutoPickup\tInZNetScene\tMaxStack\tWeight");
+            foreach (var r in rows) {
+                table.AppendLine($"{r.PrefabName}\t{r.DisplayName}\t{r.NameToken}\t{r.ItemType}\t{r.AutoPickup}\t{r.InZNetScene}\t{r.MaxStackSize}\t{r.Weight:0.##}");
+            }
+            string tablePath = Path.Combine(dir, "PipsMod_ItemList.tsv");
+            File.WriteAllText(tablePath, table.ToString());
+
+            // An item can only be ignored if it auto-picks-up AND can exist as a world drop.
+            // Creature attack prefabs and cosmetics live in ObjectDB but never in ZNetScene.
+            // Every entry is commented out with #, matching AutoPickupIgnorer's default convention.
+            var eligible = rows.Where(r => r.AutoPickup && r.InZNetScene).Select(r => "#" + r.PrefabName).ToList();
+            string listPath = Path.Combine(dir, "PipsMod_AutoPickupIgnoreList.txt");
+            File.WriteAllText(listPath, string.Join(", ", eligible));
+
+            Debug.Log($"Dumped {rows.Count} items ({eligible.Count} auto-pickup) to {dir}");
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                $"Dumped {rows.Count} items ({eligible.Count} auto-pickup) to BepInEx/config");
+        }
+
+        private class ItemRow
+        {
+            public string PrefabName;
+            public string DisplayName;
+            public string NameToken;
+            public string ItemType;
+            public bool AutoPickup;
+            public bool InZNetScene;
+            public int MaxStackSize;
+            public float Weight;
         }
 
         [HarmonyPatch(typeof(MessageHud), "Awake")]
@@ -123,12 +213,11 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), "Awake")]
         class Player_Awake_Patch
         {
-            static void Postfix(ref float ___m_maxCarryWeight, ref bool ___m_noPlacementCost, ref Player __instance) {
+            static void Postfix(ref float ___m_maxCarryWeight, ref bool ___m_noPlacementCost) {
                 Debug.Log($"Setting base maximum carry weight.");
                 ___m_maxCarryWeight = (float)CustomMaxCarryWeight.Value;
                 Debug.Log($"Base max carry weight: {___m_maxCarryWeight}");
                 ___m_noPlacementCost = NoPlacementCost.Value;
-                _player = __instance;
             }
         }
 
@@ -149,7 +238,9 @@ namespace ValheimMod
         class Character_UseHealth_Patch
         {
             static void Prefix(ref Character __instance, ref float hp) {
-                if (__instance is Player) {
+                // Blood magic spends health instead of eitr, so the eitr rate doubles as the
+                // magic-cost multiplier. Local player only, matching UseEitr and UseStamina.
+                if (__instance == Player.m_localPlayer) {
                     hp *= CustomEitrRate.Value;
                 }
             }
@@ -205,25 +296,14 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), "AddAdrenaline")]
         class Player_AddAdrenaline_Patch
         {
+            // Gain and degeneration are both scaled here. Applying degeneration from a postfix that
+            // called AddAdrenaline again re-entered this patch, and the correction diverged once the
+            // degen rate reached 2.
             static void Prefix(ref float v) {
                 if (v > 0f) {
                     v *= CustomAdrenalineGainRate.Value;
-                }
-            }
-        }
-
-        // Store original adrenaline for degeneration rate modification
-        private static float _lastAdrenalineDegenModification = 0f;
-
-        [HarmonyPatch(typeof(Player), "AddAdrenaline")]
-        class Player_AddAdrenaline_Degeneration_Patch
-        {
-            static void Postfix(Player __instance, float v) {
-                // Apply custom degeneration rate by adjusting adrenaline after negative addition (degeneration)
-                if (v < 0f && CustomAdrenalineDegenRate.Value != 1f) {
-                    // Calculate the difference to apply based on our custom rate
-                    float adjustedDegenAmount = v * (CustomAdrenalineDegenRate.Value - 1f);
-                    __instance.AddAdrenaline(adjustedDegenAmount);
+                } else if (v < 0f) {
+                    v *= CustomAdrenalineDegenRate.Value;
                 }
             }
         }
