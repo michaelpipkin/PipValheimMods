@@ -1,4 +1,5 @@
 ﻿using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using HarmonyLib;
 using System;
@@ -26,6 +27,13 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> DumpItemListHotkey;
 
         // Config values
+        private static ConfigEntry<float> CustomResourceRate;
+        private static ConfigEntry<float> CustomStackSizeMultiplier;
+        private static ConfigEntry<float> CustomSmelterOutputRate;
+        private static ConfigEntry<float> CustomFermenterOutputRate;
+        private static ConfigEntry<float> CustomCookingOutputRate;
+        private static ConfigEntry<float> CustomProcessingTimeRate;
+        private static ConfigEntry<int> CustomInventoryRows;
         private static ConfigEntry<float> CustomStaminaRate;
         private static ConfigEntry<float> CustomEitrRate;
         private static ConfigEntry<float> CustomMaxCarryWeight;
@@ -34,6 +42,7 @@ namespace ValheimMod
         private static ConfigEntry<float> CustomAdrenalineGainRate;
         private static ConfigEntry<float> CustomAdrenalineDegenRate;
         private static ConfigEntry<bool> NoPlacementCost;
+        private static ConfigEntry<bool> SkipIntroCinematic;
         private static ConfigEntry<bool> NegateKnockback;
         private static ConfigEntry<bool> NegateEquipmentMovementPenalty;
         private static ConfigEntry<string> FavoriteFoodList;
@@ -44,12 +53,34 @@ namespace ValheimMod
         private static List<string> _favoriteAmmo;
         private static MessageHud _messageHud;
 
+        // Inventory row management is a shared resource: other mods patch Player.SetInventorySize
+        // too. Cap the retries so a disagreement can never become a per-frame fight.
+        private const int MaxInventoryRowAttempts = 5;
+        private const string ExtraSlotsGuid = "shudnal.ExtraSlots";
+        private static int _inventoryRowAttempts;
+        private static bool _inventoryRowsDisabled;
+        private static bool _rowManagerChecked;
+
+        // Vanilla max stack size per item type, captured before we ever change it, so the
+        // multiplier is applied to the original value rather than to our own previous result.
+        private static readonly Dictionary<ItemDrop.ItemData.SharedData, int> _baseStackSizes =
+            new Dictionary<ItemDrop.ItemData.SharedData, int>();
+
         // m_inventory is declared on Humanoid, not Player. AccessTools walks the base chain and
         // ignores access level; typeof(Player).GetField(..., NonPublic) does neither for a private
         // base-class field. Resolved once rather than on every hotkey press.
         private static readonly FieldInfo m_inventoryField = AccessTools.Field(typeof(Humanoid), "m_inventory");
 
         private void Awake() {
+            CustomResourceRate = Config.Bind("General", "CustomResourceRate", 1f, "Multiplier for resource drops (wood, ore, food, monster parts). 1 leaves the world's own Resources setting alone. Equipment and other types the game marks as non-scaling are unaffected, and a single drop still can't exceed one stack.");
+            CustomStackSizeMultiplier = Config.Bind("General", "CustomStackSizeMultiplier", 1f, "Multiplier for the max stack size of every stackable item. 1 leaves vanilla stack sizes alone. Items that don't stack in vanilla (equipment) are unaffected. Warning: stacks larger than vanilla get written into your save, so lowering this later can clamp or lose the excess.");
+            CustomInventoryRows = Config.Bind("General", "CustomInventoryRows", 0,
+                new ConfigDescription("Number of rows in the player inventory (8 slots per row). Vanilla starts at 4 and the game itself allows up to 9, which Haldor sells. 0 leaves it alone. Affects only your own inventory, never containers. Warning: lowering this drops any items in the removed slots on the ground. Ignored when Extra Slots is installed - use its own 'Amount of extra inventory rows' setting instead.",
+                    new AcceptableValueRange<int>(0, 9)));
+            CustomSmelterOutputRate = Config.Bind("General", "CustomSmelterOutputRate", 1f, "Multiplier for what smelting stations produce per process - charcoal kiln, smelter, blast furnace, windmill, spinning wheel and anything else built on the Smelter component. Input cost is unchanged, so one wood still yields one batch, just a bigger one. Capped at the output item's max stack size.");
+            CustomFermenterOutputRate = Config.Bind("General", "CustomFermenterOutputRate", 1f, "Multiplier for how many items a fermenter yields per batch. Mead normally produces 4, so 2 gives 8. Rounded to a whole number of items.");
+            CustomCookingOutputRate = Config.Bind("General", "CustomCookingOutputRate", 1f, "Multiplier for how many items a cooking station produces per cooked slot. Whole items only, so this rounds to the nearest integer.");
+            CustomProcessingTimeRate = Config.Bind("General", "CustomProcessingTimeRate", 1f, "Multiplier on how long processing takes for smelting stations, fermenters and cooking stations. Lower is faster, so 0.05 is twenty times quicker. Fuel cost per item is unchanged. Note that smelting steps in whole seconds, so values below 0.1 stop helping, and cooking stations burn food proportionally sooner.");
             CustomStaminaRate = Config.Bind("General", "CustomStaminaRate", 1f, "Custom stamina rate");
             CustomEitrRate = Config.Bind("General", "CustomEitrRate", 1f, "Custom Eitr usage rate");
             CustomMaxCarryWeight = Config.Bind("General", "CustomMaxCarryWeight", 300f, "Custom base max carry weight");
@@ -58,6 +89,7 @@ namespace ValheimMod
             CustomAdrenalineGainRate = Config.Bind("General", "CustomAdrenalineGainRate", 1f, "Custom adrenaline gain rate multiplier");
             CustomAdrenalineDegenRate = Config.Bind("General", "CustomAdrenalineDegenRate", 1f, "Custom adrenaline degeneration rate multiplier");
             NoPlacementCost = Config.Bind("General", "NoPlacementCost", false, "No material cost for building/crafting");
+            SkipIntroCinematic = Config.Bind("General", "SkipIntroCinematic", true, "Skip the intro cinematic that plays on launch and go straight to the main menu. Cinematics remain replayable from the menu.");
             NegateKnockback = Config.Bind("General", "NegateKnockback", true, "Turn off knockback when hit");
             NegateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
 
@@ -123,6 +155,55 @@ namespace ValheimMod
             if (DumpItemListHotkey.Value.IsDown()) {
                 DumpItemList();
             }
+
+            ApplyInventoryRows();
+        }
+
+        /// <summary>
+        /// Valheim supports a resizable player inventory natively - Haldor sells extra rows, and
+        /// Player.OnSpawned restores the count from the "invrows" unique key. Reusing that keeps the
+        /// change scoped to the player, persisted on the character, and resizes the inventory panel;
+        /// containers keep vanilla slot counts and stack limits.
+        ///
+        /// Driven from Update rather than a spawn patch because SetInventorySize dereferences
+        /// InventoryGui.instance, and the player can spawn before that singleton exists.
+        ///
+        /// Polling means another mod that also manages rows can be fought frame by frame, so this
+        /// gives up after MaxInventoryRowAttempts rather than looping forever. ExtraSlots owns rows
+        /// deliberately - it runs a skipping prefix on Player.SetInventorySize and adds rows of its
+        /// own - so it is detected up front and this feature stands down entirely.
+        /// </summary>
+        private static void ApplyInventoryRows() {
+            int rows = CustomInventoryRows.Value;
+            if (rows <= 0 || _inventoryRowsDisabled) {
+                return;
+            }
+            // Checked here rather than in Awake because plugins load in sequence and Extra Slots
+            // loads after this one, so it isn't registered yet while Awake is running.
+            if (!_rowManagerChecked) {
+                _rowManagerChecked = true;
+                if (Chainloader.PluginInfos.ContainsKey(ExtraSlotsGuid)) {
+                    _inventoryRowsDisabled = true;
+                    Debug.LogWarning($"CustomInventoryRows is {rows}, but Extra Slots is installed and manages inventory rows itself. Standing down to avoid fighting it. Set CustomInventoryRows to 0 and use 'Amount of extra inventory rows' under [Extra slots] in shudnal.ExtraSlots.cfg instead.");
+                    return;
+                }
+            }
+            Player player = Player.m_localPlayer;
+            if (player == null || InventoryGui.instance == null) {
+                return;
+            }
+            Inventory inventory = player.GetInventory();
+            if (inventory == null || inventory.GetHeight() == rows) {
+                return;
+            }
+            if (_inventoryRowAttempts >= MaxInventoryRowAttempts) {
+                _inventoryRowsDisabled = true;
+                Debug.LogWarning($"Giving up on CustomInventoryRows: asked for {rows} rows {MaxInventoryRowAttempts} times and the height keeps changing back, so another mod is managing inventory size. Set CustomInventoryRows to 0 and use that mod's own setting.");
+                return;
+            }
+            _inventoryRowAttempts++;
+            player.SetInventorySize(rows);
+            Debug.Log($"Inventory size set to {rows} rows ({inventory.GetWidth() * rows} slots)");
         }
 
         /// <summary>
@@ -221,7 +302,251 @@ namespace ValheimMod
             }
         }
 
-        // Removed Game_UpdateWorldRates_Patch - no longer needed with player-specific patches
+        // Valheim already has a global resource multiplier that every drop path consults:
+        // CharacterDrop (monster parts), DropTable (trees, rocks, destructibles, chests),
+        // Pickable / PickableItem (foraging), Beehive and SapCollector all route their counts
+        // through Game.ScaleDrops, which reads Game.m_resourceRate. So rather than patching six
+        // systems, override the one value they share. UpdateWorldRates is the only place the game
+        // assigns it, and it re-runs on world load and whenever global keys change, so a postfix
+        // here survives the game resetting it back to the world's own setting.
+        [HarmonyPatch(typeof(Game), nameof(Game.UpdateWorldRates))]
+        class Game_UpdateWorldRates_Patch
+        {
+            static void Postfix() {
+                // A rate of 1 means "don't interfere", leaving the world's Resources modifier intact
+                if (CustomResourceRate.Value > 0f && CustomResourceRate.Value != 1f) {
+                    Game.m_resourceRate = CustomResourceRate.Value;
+                }
+            }
+        }
+
+        // Every ItemData created from a prefab is a MemberwiseClone, so m_shared is copied by
+        // reference rather than duplicated - which is why ObjectDB can key m_itemByData on it.
+        // That means editing the prefab's SharedData.m_maxStackSize reaches every stack of that
+        // item already sitting in an inventory, not just newly created ones.
+        //
+        // UpdateRegisters is the hook because both ObjectDB.Awake and ObjectDB.CopyOtherDB call it,
+        // so this covers the menu DB and the world DB without patching each separately.
+        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.UpdateRegisters))]
+        class ObjectDB_UpdateRegisters_Patch
+        {
+            static void Postfix(ObjectDB __instance) {
+                ApplyStackSizeMultiplier(__instance);
+            }
+        }
+
+        /// <summary>
+        /// Scales every stackable item's max stack size. Safe to call repeatedly: the game's own
+        /// value is remembered the first time each item is seen, so the multiplier is always
+        /// recomputed from that baseline instead of compounding on each call. Setting the
+        /// multiplier back to 1 therefore restores vanilla stack sizes.
+        /// </summary>
+        private static void ApplyStackSizeMultiplier(ObjectDB odb) {
+            if (odb == null || odb.m_items == null) {
+                return;
+            }
+            float multiplier = CustomStackSizeMultiplier.Value;
+            int changed = 0;
+            foreach (var prefab in odb.m_items) {
+                if (prefab == null) {
+                    continue;
+                }
+                var drop = prefab.GetComponent<ItemDrop>();
+                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+                    continue;
+                }
+                var shared = drop.m_itemData.m_shared;
+                if (!_baseStackSizes.TryGetValue(shared, out int baseSize)) {
+                    baseSize = shared.m_maxStackSize;
+                    _baseStackSizes[shared] = baseSize;
+                }
+                // Equipment and other one-per-slot items stay unstackable
+                if (baseSize <= 1) {
+                    continue;
+                }
+                int target = Mathf.Max(1, Mathf.RoundToInt(baseSize * multiplier));
+                if (shared.m_maxStackSize != target) {
+                    shared.m_maxStackSize = target;
+                    changed++;
+                }
+            }
+            if (changed > 0) {
+                Debug.Log($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
+            }
+        }
+
+        // FejdStartup.PlayIntroCinematic only plays the intro when m_introOnStartup is set;
+        // otherwise it takes its else branch and shows the main menu straight away. Nothing in the
+        // game ever writes that field, which is why there's no in-game option for it. Clearing it
+        // during Awake reuses the game's own skip path rather than suppressing playback, so no
+        // "Failed to play intro cinematic" error is logged and the Cinematics menu still works.
+        // Every smelting station routes its output through Smelter.Spawn, both the one-at-a-time
+        // path (QueueProcessed calls Spawn(ore, 1) when m_spawnStack is off, which is what the
+        // charcoal kiln does) and the batched path via SpawnProcessed. Scaling the stack here
+        // therefore covers all of them, and leaves input cost untouched.
+        [HarmonyPatch(typeof(Smelter), "Spawn")]
+        class Smelter_Spawn_Patch
+        {
+            static void Prefix(Smelter __instance, string ore, ref int stack) {
+                float multiplier = CustomSmelterOutputRate.Value;
+                if (multiplier <= 1f || stack <= 0) {
+                    return;
+                }
+                int scaled = Mathf.Max(1, Mathf.RoundToInt(stack * multiplier));
+
+                // Cap at what the produced item can actually hold in one stack. GetItemConversion
+                // is non-public in the shipped assembly, so match on m_conversion the same way.
+                foreach (var conversion in __instance.m_conversion) {
+                    if (conversion.m_from == null || conversion.m_from.gameObject.name == ore) {
+                        if (conversion.m_to != null) {
+                            scaled = Mathf.Min(scaled, conversion.m_to.m_itemData.m_shared.m_maxStackSize);
+                        }
+                        break;
+                    }
+                }
+                stack = scaled;
+            }
+        }
+
+        // A fermenter drops m_producedItems copies in a loop, so the count lives on the conversion
+        // rather than in a stack. Scaling it transiently - raise in the prefix, restore in the
+        // finalizer - avoids permanently mutating prefab-derived data, so nothing compounds if the
+        // method runs again and nothing is left modified if it throws partway.
+        [HarmonyPatch(typeof(Fermenter), "DropAllItems")]
+        class Fermenter_DropAllItems_Patch
+        {
+            static void Prefix(Fermenter __instance, out int[] __state) {
+                __state = null;
+                float multiplier = CustomFermenterOutputRate.Value;
+                if (multiplier <= 1f || __instance.m_conversion == null) {
+                    return;
+                }
+                var conversions = __instance.m_conversion;
+                __state = new int[conversions.Count];
+                for (int i = 0; i < conversions.Count; i++) {
+                    __state[i] = conversions[i].m_producedItems;
+                    conversions[i].m_producedItems = Mathf.Max(1, Mathf.RoundToInt(__state[i] * multiplier));
+                }
+            }
+
+            static void Finalizer(Fermenter __instance, int[] __state) {
+                if (__state == null || __instance.m_conversion == null) {
+                    return;
+                }
+                var conversions = __instance.m_conversion;
+                for (int i = 0; i < conversions.Count && i < __state.Length; i++) {
+                    conversions[i].m_producedItems = __state[i];
+                }
+            }
+        }
+
+        // A cooking station spawns exactly one item per finished slot with no stack to scale, so
+        // extra copies are produced by re-entering SpawnItem. The guard stops those re-entries
+        // from each triggering this postfix again.
+        [HarmonyPatch(typeof(CookingStation), "SpawnItem")]
+        class CookingStation_SpawnItem_Patch
+        {
+            private static readonly MethodInfo SpawnItemMethod = AccessTools.Method(typeof(CookingStation), "SpawnItem");
+            private static bool _spawningExtras;
+
+            static void Postfix(CookingStation __instance, string name, int slot, Vector3 userPoint, bool cheated) {
+                if (_spawningExtras || SpawnItemMethod == null) {
+                    return;
+                }
+                int total = Mathf.Max(1, Mathf.RoundToInt(CustomCookingOutputRate.Value));
+                if (total <= 1) {
+                    return;
+                }
+                _spawningExtras = true;
+                try {
+                    for (int i = 1; i < total; i++) {
+                        SpawnItemMethod.Invoke(__instance, new object[] { name, slot, userPoint, cheated });
+                    }
+                }
+                finally {
+                    _spawningExtras = false;
+                }
+            }
+        }
+
+        // Processing duration lives in a field each station reads while it ticks, so the same
+        // transient scale-and-restore used for fermenter output applies: raise in the prefix,
+        // put it back in the finalizer. Nothing prefab-derived is left modified, config changes
+        // take effect immediately, and a throw mid-update can't strand a scaled value.
+        //
+        // Fuel is unaffected by design. UpdateSmelter burns m_secPerProduct / m_fuelPerProduct per
+        // second over m_secPerProduct seconds, so fuel per item is always m_fuelPerProduct
+        // regardless of how the time is scaled.
+        [HarmonyPatch(typeof(Smelter), "UpdateSmelter")]
+        class Smelter_UpdateSmelter_Patch
+        {
+            static void Prefix(Smelter __instance, out float __state) {
+                __state = __instance.m_secPerProduct;
+                float multiplier = CustomProcessingTimeRate.Value;
+                if (multiplier > 0f && multiplier != 1f) {
+                    // UpdateSmelter treats a non-positive value as "disabled", so keep it above zero
+                    __instance.m_secPerProduct = Mathf.Max(0.01f, __state * multiplier);
+                }
+            }
+
+            static void Finalizer(Smelter __instance, float __state) {
+                __instance.m_secPerProduct = __state;
+            }
+        }
+
+        [HarmonyPatch(typeof(Fermenter), "GetStatus")]
+        class Fermenter_GetStatus_Patch
+        {
+            static void Prefix(Fermenter __instance, out float __state) {
+                __state = __instance.m_fermentationDuration;
+                float multiplier = CustomProcessingTimeRate.Value;
+                if (multiplier > 0f && multiplier != 1f) {
+                    __instance.m_fermentationDuration = Mathf.Max(1f, __state * multiplier);
+                }
+            }
+
+            static void Finalizer(Fermenter __instance, float __state) {
+                __instance.m_fermentationDuration = __state;
+            }
+        }
+
+        [HarmonyPatch(typeof(CookingStation), "UpdateCooking")]
+        class CookingStation_UpdateCooking_Patch
+        {
+            static void Prefix(CookingStation __instance, out float[] __state) {
+                __state = null;
+                float multiplier = CustomProcessingTimeRate.Value;
+                if (multiplier <= 0f || multiplier == 1f || __instance.m_conversion == null) {
+                    return;
+                }
+                var conversions = __instance.m_conversion;
+                __state = new float[conversions.Count];
+                for (int i = 0; i < conversions.Count; i++) {
+                    __state[i] = conversions[i].m_cookTime;
+                    conversions[i].m_cookTime = Mathf.Max(0.1f, __state[i] * multiplier);
+                }
+            }
+
+            static void Finalizer(CookingStation __instance, float[] __state) {
+                if (__state == null || __instance.m_conversion == null) {
+                    return;
+                }
+                var conversions = __instance.m_conversion;
+                for (int i = 0; i < conversions.Count && i < __state.Length; i++) {
+                    conversions[i].m_cookTime = __state[i];
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(CinematicsManager), "Awake")]
+        class CinematicsManager_Awake_Patch
+        {
+            static void Postfix(CinematicsManager __instance) {
+                if (SkipIntroCinematic.Value) {
+                    __instance.m_introOnStartup = false;
+                }
+            }
+        }
 
         [HarmonyPatch(typeof(Player), "UseEitr")]
         class Player_UseEitr_Patch
