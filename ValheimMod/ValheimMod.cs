@@ -55,6 +55,13 @@ namespace ValheimMod
         private static ConfigEntry<string> SmelterInputPriority;
         private static ConfigEntry<string> CookingStationInputPriority;
         private static ConfigEntry<float> ContainerRange;
+        private static ConfigEntry<bool> AlwaysSlowFall;
+        private static ConfigEntry<float> SlowFallMaxSpeed;
+        private static ConfigEntry<bool> SlowFallNegatesFallDamage;
+        private static ConfigEntry<bool> AlwaysCircletLight;
+        private static ConfigEntry<float> CircletLightRange;
+        private static ConfigEntry<float> CircletLightIntensity;
+        private static ConfigEntry<float> CircletLightHeight;
         private static ConfigEntry<bool> WeightlessPlayerInventory;
         private static ConfigEntry<bool> SuppressPickupMessages;
         private static ConfigEntry<bool> SuppressRemovedMessages;
@@ -143,6 +150,13 @@ namespace ValheimMod
             _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
+            AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
+            SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
+            SlowFallNegatesFallDamage = Config.Bind("General", "SlowFallNegatesFallDamage", true, "Also apply the Feather Cape's fall-damage reduction. Fall damage in Valheim is based on distance fallen, not speed, so capping the speed alone does not prevent it.");
+            AlwaysCircletLight = Config.Bind("General", "AlwaysCircletLight", false, "Emit the Dvergr Circlet's light permanently, whatever headgear you are wearing.");
+            CircletLightRange = Config.Bind("General", "CircletLightRange", 0f, "Light radius in metres while AlwaysCircletLight is on. 0 copies the Dvergr Circlet's own value.");
+            CircletLightIntensity = Config.Bind("General", "CircletLightIntensity", 0f, "Light brightness while AlwaysCircletLight is on. 0 copies the Dvergr Circlet's own value.");
+            CircletLightHeight = Config.Bind("General", "CircletLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
             WeightlessPlayerInventory = Config.Bind("General", "WeightlessPlayerInventory", false, "Treat everything in your own inventory as weighing nothing, so slots are the only limit. Containers, carts and other players are unaffected. Makes CustomMaxCarryWeight irrelevant while enabled.");
             SuppressPickupMessages = Config.Bind("General", "SuppressPickupMessages", false, "Stop 'picked up <item>' notifications from being queued in the top-left message HUD, so they can't delay more important messages.");
             SuppressRemovedMessages = Config.Bind("General", "SuppressRemovedMessages", false, "Stop 'removed <item>' notifications from being queued in the top-left message HUD.");
@@ -216,6 +230,84 @@ namespace ValheimMod
             }
 
             ApplyInventoryRows();
+            ApplyCircletLight();
+        }
+
+        // ---------------- Permanent circlet light ----------------
+        // Unlike slow fall, this is not a status effect at all. VisEquipment.AttachArmor walks an
+        // item prefab's "attach_" children and instantiates them onto the character model, so the
+        // Dvergr Circlet's glow is simply a Light component living inside HelmetDverger's own
+        // hierarchy. There is nothing to apply through SEMan - the light has to be recreated.
+        //
+        // Its settings are copied off that prefab rather than invented, so the result matches the
+        // real circlet and follows any change the game makes to it.
+        private static bool _circletLightResolved;
+        private static float _circletRange;
+        private static float _circletIntensity;
+        private static Color _circletColor = Color.white;
+        private static LightType _circletType = LightType.Point;
+        private static GameObject _circletLightObject;
+        private static Light _circletLight;
+
+        private static void ResolveCircletLight() {
+            if (_circletLightResolved) {
+                return;
+            }
+            ObjectDB odb = ObjectDB.instance;
+            if (odb == null) {
+                return;   // not loaded yet; retry next frame
+            }
+            _circletLightResolved = true;
+            GameObject prefab = odb.GetItemPrefab("HelmetDverger");
+            if (prefab == null) {
+                return;
+            }
+            // The prefab and its attach nodes are inactive, so inactive children must be included
+            Light source = prefab.GetComponentInChildren<Light>(includeInactive: true);
+            if (source == null) {
+                Debug.LogWarning("AlwaysCircletLight: no Light found inside the HelmetDverger prefab");
+                return;
+            }
+            _circletRange = source.range;
+            _circletIntensity = source.intensity;
+            _circletColor = source.color;
+            _circletType = source.type;
+            Debug.Log($"Dvergr Circlet light: type={_circletType}, range={_circletRange}, intensity={_circletIntensity}");
+        }
+
+        private static void ApplyCircletLight() {
+            Player player = Player.m_localPlayer;
+            if (!AlwaysCircletLight.Value || player == null) {
+                if (_circletLightObject != null) {
+                    UnityEngine.Object.Destroy(_circletLightObject);
+                    _circletLightObject = null;
+                    _circletLight = null;
+                }
+                return;
+            }
+
+            ResolveCircletLight();
+            float range = CircletLightRange.Value > 0f ? CircletLightRange.Value : _circletRange;
+            float intensity = CircletLightIntensity.Value > 0f ? CircletLightIntensity.Value : _circletIntensity;
+            if (range <= 0f) {
+                return;   // couldn't read the circlet and no override configured
+            }
+
+            if (_circletLightObject == null) {
+                _circletLightObject = new GameObject("PipsMod_CircletLight");
+                _circletLight = _circletLightObject.AddComponent<Light>();
+                _circletLight.type = _circletType;
+                _circletLight.color = _circletColor;
+                // Real-time point-light shadows are expensive and the circlet doesn't cast them
+                _circletLight.shadows = LightShadows.None;
+            }
+            // Re-parent after a respawn, which replaces the player object
+            if (_circletLightObject.transform.parent != player.transform) {
+                _circletLightObject.transform.SetParent(player.transform, worldPositionStays: false);
+            }
+            _circletLightObject.transform.localPosition = new Vector3(0f, CircletLightHeight.Value, 0f);
+            _circletLight.range = range;
+            _circletLight.intensity = intensity;
         }
 
         // ---------------- On-screen clock ----------------
@@ -1572,6 +1664,80 @@ namespace ValheimMod
                     if (fuelItem != null && EnsureOneInInventory(playerInventory, fuelItem.m_itemData.m_shared.m_name)) {
                         return;
                     }
+                }
+            }
+        }
+
+        // ---------------- Permanent slow fall ----------------
+        // The Feather Cape's effect is an SE_Stats whose ModifyWalkVelocity clamps downward speed
+        // to m_maxMaxFallSpeed, with m_fallDamageModifier handling the landing separately. Rather
+        // than forcing that status effect onto the player - which would occupy a buff slot and
+        // fight equipment changes - the same two modifiers are applied at the aggregator the game
+        // already funnels every status effect through.
+        //
+        // The numbers are read off the cape itself instead of being hardcoded, so this stays
+        // faithful to whatever the game ships and survives a balance change.
+        private static readonly FieldInfo SemanCharacterField = AccessTools.Field(typeof(SEMan), "m_character");
+        private static bool _featherCapeResolved;
+        private static float _featherCapeMaxFallSpeed;
+        private static float _featherCapeFallDamageModifier;
+
+        private static void ResolveFeatherCape() {
+            if (_featherCapeResolved) {
+                return;
+            }
+            ObjectDB odb = ObjectDB.instance;
+            if (odb == null) {
+                return;   // not loaded yet; try again on the next call
+            }
+            _featherCapeResolved = true;
+            GameObject prefab = odb.GetItemPrefab("CapeFeather");
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+                return;
+            }
+            if (drop.m_itemData.m_shared.m_equipStatusEffect is SE_Stats stats) {
+                _featherCapeMaxFallSpeed = stats.m_maxMaxFallSpeed;
+                _featherCapeFallDamageModifier = stats.m_fallDamageModifier;
+                Debug.Log($"Feather Cape slow fall: maxFallSpeed={_featherCapeMaxFallSpeed}, fallDamageModifier={_featherCapeFallDamageModifier}");
+            }
+        }
+
+        private static bool IsLocalPlayerSeman(SEMan seman) {
+            return SemanCharacterField != null
+                && ReferenceEquals(SemanCharacterField.GetValue(seman), Player.m_localPlayer);
+        }
+
+        [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyWalkVelocity))]
+        class SEMan_ModifyWalkVelocity_Patch
+        {
+            static void Postfix(SEMan __instance, ref Vector3 vel) {
+                if (!AlwaysSlowFall.Value || !IsLocalPlayerSeman(__instance)) {
+                    return;
+                }
+                float limit = SlowFallMaxSpeed.Value;
+                if (limit <= 0f) {
+                    ResolveFeatherCape();
+                    limit = _featherCapeMaxFallSpeed;
+                }
+                // Clamping is idempotent, so this is harmless while actually wearing the cape
+                if (limit > 0f && vel.y < 0f - limit) {
+                    vel.y = 0f - limit;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyFallDamage))]
+        class SEMan_ModifyFallDamage_Patch
+        {
+            static void Postfix(SEMan __instance, float baseDamage, ref float damage) {
+                if (!AlwaysSlowFall.Value || !SlowFallNegatesFallDamage.Value || !IsLocalPlayerSeman(__instance)) {
+                    return;
+                }
+                ResolveFeatherCape();
+                damage += baseDamage * _featherCapeFallDamageModifier;
+                if (damage < 0f) {
+                    damage = 0f;
                 }
             }
         }
