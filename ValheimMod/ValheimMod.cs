@@ -58,10 +58,11 @@ namespace ValheimMod
         private static ConfigEntry<bool> AlwaysSlowFall;
         private static ConfigEntry<float> SlowFallMaxSpeed;
         private static ConfigEntry<bool> SlowFallNegatesFallDamage;
-        private static ConfigEntry<bool> AlwaysCircletLight;
-        private static ConfigEntry<float> CircletLightRange;
-        private static ConfigEntry<float> CircletLightIntensity;
-        private static ConfigEntry<float> CircletLightHeight;
+        private static ConfigEntry<KeyboardShortcut> PlayerLightHotkey;
+        private static ConfigEntry<string> PlayerLightSourceItem;
+        private static ConfigEntry<float> PlayerLightRange;
+        private static ConfigEntry<float> PlayerLightIntensity;
+        private static ConfigEntry<float> PlayerLightHeight;
         private static ConfigEntry<bool> WeightlessPlayerInventory;
         private static ConfigEntry<bool> SuppressPickupMessages;
         private static ConfigEntry<bool> SuppressRemovedMessages;
@@ -153,10 +154,11 @@ namespace ValheimMod
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
             SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
             SlowFallNegatesFallDamage = Config.Bind("General", "SlowFallNegatesFallDamage", true, "Also apply the Feather Cape's fall-damage reduction. Fall damage in Valheim is based on distance fallen, not speed, so capping the speed alone does not prevent it.");
-            AlwaysCircletLight = Config.Bind("General", "AlwaysCircletLight", false, "Emit the Dvergr Circlet's light permanently, whatever headgear you are wearing.");
-            CircletLightRange = Config.Bind("General", "CircletLightRange", 0f, "Light radius in metres while AlwaysCircletLight is on. 0 copies the Dvergr Circlet's own value.");
-            CircletLightIntensity = Config.Bind("General", "CircletLightIntensity", 0f, "Light brightness while AlwaysCircletLight is on. 0 copies the Dvergr Circlet's own value.");
-            CircletLightHeight = Config.Bind("General", "CircletLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            PlayerLightHotkey = Config.Bind("Hotkeys", "PlayerLightHotkey", new KeyboardShortcut(KeyCode.Semicolon), "Toggles a personal light on and off. Starts off each time the game launches.");
+            PlayerLightSourceItem = Config.Bind("General", "PlayerLightSourceItem", "Torch", "Prefab name of the item whose light is copied for the personal light. Torch gives a warm point light that lights all around you; HelmetDverger gives the circlet's narrower forward beam.");
+            PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
+            PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
+            PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
             WeightlessPlayerInventory = Config.Bind("General", "WeightlessPlayerInventory", false, "Treat everything in your own inventory as weighing nothing, so slots are the only limit. Containers, carts and other players are unaffected. Makes CustomMaxCarryWeight irrelevant while enabled.");
             SuppressPickupMessages = Config.Bind("General", "SuppressPickupMessages", false, "Stop 'picked up <item>' notifications from being queued in the top-left message HUD, so they can't delay more important messages.");
             SuppressRemovedMessages = Config.Bind("General", "SuppressRemovedMessages", false, "Stop 'removed <item>' notifications from being queued in the top-left message HUD.");
@@ -230,84 +232,126 @@ namespace ValheimMod
             }
 
             ApplyInventoryRows();
-            ApplyCircletLight();
+            UpdatePlayerLight();
         }
 
-        // ---------------- Permanent circlet light ----------------
+        // ---------------- Toggleable personal light ----------------
         // Unlike slow fall, this is not a status effect at all. VisEquipment.AttachArmor walks an
-        // item prefab's "attach_" children and instantiates them onto the character model, so the
-        // Dvergr Circlet's glow is simply a Light component living inside HelmetDverger's own
-        // hierarchy. There is nothing to apply through SEMan - the light has to be recreated.
+        // item prefab's "attach_" children and instantiates them onto the character model, so an
+        // item's glow is simply a Light component living inside its own prefab hierarchy. There is
+        // nothing to apply through SEMan - the light has to be recreated.
         //
-        // Its settings are copied off that prefab rather than invented, so the result matches the
-        // real circlet and follows any change the game makes to it.
-        private static bool _circletLightResolved;
-        private static float _circletRange;
-        private static float _circletIntensity;
-        private static Color _circletColor = Color.white;
-        private static LightType _circletType = LightType.Point;
-        private static GameObject _circletLightObject;
-        private static Light _circletLight;
+        // Settings are copied off whichever item PlayerLightSourceItem names rather than invented,
+        // so the result matches the real thing and follows any change the game makes to it. A torch
+        // is a point light that illuminates all around; the Dvergr Circlet is a narrow forward spot,
+        // which is why swapping the source item changes the character of the light so much.
+        private static readonly FieldInfo LightFlickerLightField = AccessTools.Field(typeof(LightFlicker), "m_light");
+        private static readonly FieldInfo LightFlickerBaseIntensityField = AccessTools.Field(typeof(LightFlicker), "m_baseIntensity");
 
-        private static void ResolveCircletLight() {
-            if (_circletLightResolved) {
+        private static bool _playerLightOn;
+        private static string _playerLightResolvedFor;
+        private static float _playerLightSourceRange;
+        private static float _playerLightSourceIntensity;
+        private static Color _playerLightColor = Color.white;
+        private static LightType _playerLightType = LightType.Point;
+        private static GameObject _playerLightObject;
+        private static Light _playerLight;
+
+        private static void ResolvePlayerLightSource() {
+            string itemName = PlayerLightSourceItem.Value;
+            if (_playerLightResolvedFor == itemName) {
                 return;
             }
             ObjectDB odb = ObjectDB.instance;
             if (odb == null) {
                 return;   // not loaded yet; retry next frame
             }
-            _circletLightResolved = true;
-            GameObject prefab = odb.GetItemPrefab("HelmetDverger");
+            _playerLightResolvedFor = itemName;
+            _playerLightSourceRange = 0f;
+            _playerLightSourceIntensity = 0f;
+
+            GameObject prefab = odb.GetItemPrefab(itemName);
             if (prefab == null) {
+                Debug.LogWarning($"PlayerLightSourceItem: no item prefab named '{itemName}'");
                 return;
             }
-            // The prefab and its attach nodes are inactive, so inactive children must be included
+            // Prefabs and their attach nodes are inactive, so inactive children must be included
             Light source = prefab.GetComponentInChildren<Light>(includeInactive: true);
             if (source == null) {
-                Debug.LogWarning("AlwaysCircletLight: no Light found inside the HelmetDverger prefab");
+                Debug.LogWarning($"PlayerLightSourceItem: '{itemName}' has no Light in its prefab");
                 return;
             }
-            _circletRange = source.range;
-            _circletIntensity = source.intensity;
-            _circletColor = source.color;
-            _circletType = source.type;
-            Debug.Log($"Dvergr Circlet light: type={_circletType}, range={_circletRange}, intensity={_circletIntensity}");
+            _playerLightSourceRange = source.range;
+            _playerLightColor = source.color;
+            _playerLightType = source.type;
+
+            // A flickering light's authored intensity is whatever the flicker happened to leave it
+            // at, so prefer the value it oscillates around. Both LightFlicker fields are private in
+            // the shipped assembly - reading them directly makes Mono refuse to compile this whole
+            // method with a FieldAccessException, so they go through AccessTools.
+            _playerLightSourceIntensity = source.intensity;
+            if (LightFlickerLightField != null && LightFlickerBaseIntensityField != null) {
+                foreach (LightFlicker flicker in prefab.GetComponentsInChildren<LightFlicker>(includeInactive: true)) {
+                    if (!ReferenceEquals(LightFlickerLightField.GetValue(flicker), source)) {
+                        continue;
+                    }
+                    float baseIntensity = (float)LightFlickerBaseIntensityField.GetValue(flicker);
+                    if (baseIntensity > 0f) {
+                        _playerLightSourceIntensity = baseIntensity;
+                    }
+                    break;
+                }
+            }
+            Debug.Log($"Personal light from '{itemName}': type={_playerLightType}, range={_playerLightSourceRange}, intensity={_playerLightSourceIntensity}");
         }
 
-        private static void ApplyCircletLight() {
+        private static void DestroyPlayerLight() {
+            if (_playerLightObject != null) {
+                UnityEngine.Object.Destroy(_playerLightObject);
+                _playerLightObject = null;
+                _playerLight = null;
+            }
+        }
+
+        private static void UpdatePlayerLight() {
             Player player = Player.m_localPlayer;
-            if (!AlwaysCircletLight.Value || player == null) {
-                if (_circletLightObject != null) {
-                    UnityEngine.Object.Destroy(_circletLightObject);
-                    _circletLightObject = null;
-                    _circletLight = null;
-                }
+            if (player == null) {
+                DestroyPlayerLight();
                 return;
             }
 
-            ResolveCircletLight();
-            float range = CircletLightRange.Value > 0f ? CircletLightRange.Value : _circletRange;
-            float intensity = CircletLightIntensity.Value > 0f ? CircletLightIntensity.Value : _circletIntensity;
-            if (range <= 0f) {
-                return;   // couldn't read the circlet and no override configured
+            if (PlayerLightHotkey.Value.IsDown()) {
+                _playerLightOn = !_playerLightOn;
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, _playerLightOn ? "Light on" : "Light off");
             }
 
-            if (_circletLightObject == null) {
-                _circletLightObject = new GameObject("PipsMod_CircletLight");
-                _circletLight = _circletLightObject.AddComponent<Light>();
-                _circletLight.type = _circletType;
-                _circletLight.color = _circletColor;
-                // Real-time point-light shadows are expensive and the circlet doesn't cast them
-                _circletLight.shadows = LightShadows.None;
+            if (!_playerLightOn) {
+                DestroyPlayerLight();
+                return;
+            }
+
+            ResolvePlayerLightSource();
+            float range = PlayerLightRange.Value > 0f ? PlayerLightRange.Value : _playerLightSourceRange;
+            float intensity = PlayerLightIntensity.Value > 0f ? PlayerLightIntensity.Value : _playerLightSourceIntensity;
+            if (range <= 0f) {
+                return;   // couldn't read the source item and no override configured
+            }
+
+            if (_playerLightObject == null) {
+                _playerLightObject = new GameObject("PipsMod_PlayerLight");
+                _playerLight = _playerLightObject.AddComponent<Light>();
+                _playerLight.type = _playerLightType;
+                _playerLight.color = _playerLightColor;
+                // Real-time point-light shadows are expensive and a carried torch doesn't cast them
+                _playerLight.shadows = LightShadows.None;
             }
             // Re-parent after a respawn, which replaces the player object
-            if (_circletLightObject.transform.parent != player.transform) {
-                _circletLightObject.transform.SetParent(player.transform, worldPositionStays: false);
+            if (_playerLightObject.transform.parent != player.transform) {
+                _playerLightObject.transform.SetParent(player.transform, worldPositionStays: false);
             }
-            _circletLightObject.transform.localPosition = new Vector3(0f, CircletLightHeight.Value, 0f);
-            _circletLight.range = range;
-            _circletLight.intensity = intensity;
+            _playerLightObject.transform.localPosition = new Vector3(0f, PlayerLightHeight.Value, 0f);
+            _playerLight.range = range;
+            _playerLight.intensity = intensity;
         }
 
         // ---------------- On-screen clock ----------------
@@ -1164,7 +1208,13 @@ namespace ValheimMod
             return addSucceeded && !_fillingStation && Input.GetKey(FillStationKey.Value);
         }
 
-        private static void RunStationFill(MethodInfo addOne, object station, object[] args) {
+        /// <param name="sameModeStill">
+        /// Optional guard checked before each repeat. CookingStation.OnInteract both unloads cooked
+        /// food and loads raw food, returning true either way, so without this a single fill would
+        /// empty the station and immediately refill it. The guard stops the repeat at the moment the
+        /// station would switch from one job to the other.
+        /// </param>
+        private static void RunStationFill(MethodInfo addOne, object station, object[] args, Func<bool> sameModeStill = null) {
             if (addOne == null) {
                 return;
             }
@@ -1174,6 +1224,9 @@ namespace ValheimMod
             int added = 0;
             try {
                 while (added < MaxStationFillSteps) {
+                    if (sameModeStill != null && !sameModeStill()) {
+                        break;
+                    }
                     if (!(addOne.Invoke(station, args) is bool success) || !success) {
                         break;
                     }
@@ -1212,13 +1265,26 @@ namespace ValheimMod
             }
         }
 
+        private static readonly MethodInfo CookingHaveDoneItemMethod = AccessTools.Method(typeof(CookingStation), "HaveDoneItem");
+
+        private static bool CookingHasDoneItem(CookingStation station) {
+            return CookingHaveDoneItemMethod != null
+                && (bool)CookingHaveDoneItemMethod.Invoke(station, null);
+        }
+
         [HarmonyPatch(typeof(CookingStation), "OnInteract")]
         class CookingStation_OnInteract_FillPatch
         {
             static void Postfix(CookingStation __instance, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
-                    RunStationFill(CookingInteractMethod, __instance, new object[] { user });
+                if (!ShouldFillStation(__result)) {
+                    return;
                 }
+                // OnInteract unloads cooked food when any is ready and otherwise loads raw food.
+                // Sampling that state now means the fill only ever does one of those two jobs:
+                // collect everything that's ready, or fill every empty slot - never both.
+                bool unloading = CookingHasDoneItem(__instance);
+                RunStationFill(CookingInteractMethod, __instance, new object[] { user },
+                    () => CookingHasDoneItem(__instance) == unloading);
             }
         }
 
