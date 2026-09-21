@@ -55,6 +55,7 @@ namespace ValheimMod
         private static ConfigEntry<string> SmelterInputPriority;
         private static ConfigEntry<string> CookingStationInputPriority;
         private static ConfigEntry<float> ContainerRange;
+        private static ConfigEntry<float> TamingSpeedMultiplier;
         private static ConfigEntry<bool> AlwaysSlowFall;
         private static ConfigEntry<float> SlowFallMaxSpeed;
         private static ConfigEntry<bool> SlowFallNegatesFallDamage;
@@ -151,6 +152,7 @@ namespace ValheimMod
             _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
+            TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
             SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
             SlowFallNegatesFallDamage = Config.Bind("General", "SlowFallNegatesFallDamage", true, "Also apply the Feather Cape's fall-damage reduction. Fall damage in Valheim is based on distance fallen, not speed, so capping the speed alone does not prevent it.");
@@ -1730,6 +1732,21 @@ namespace ValheimMod
                     if (fuelItem != null && EnsureOneInInventory(playerInventory, fuelItem.m_itemData.m_shared.m_name)) {
                         return;
                     }
+                }
+            }
+        }
+
+        // Taming progress is a countdown in the creature's ZDO, and TamingUpdate credits it three
+        // seconds at a time via DecreaseRemainingTime. Scaling that argument is how the game itself
+        // speeds taming up - the vanilla TamingBoost status attribute multiplies the very same
+        // value - so this reuses the existing mechanism rather than touching the stored timer.
+        [HarmonyPatch(typeof(Tameable), "DecreaseRemainingTime")]
+        class Tameable_DecreaseRemainingTime_Patch
+        {
+            static void Prefix(ref float time) {
+                float multiplier = TamingSpeedMultiplier.Value;
+                if (multiplier > 0f && multiplier != 1f) {
+                    time *= multiplier;
                 }
             }
         }
