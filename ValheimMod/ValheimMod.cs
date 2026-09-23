@@ -1,13 +1,13 @@
-﻿using BepInEx;
-using BepInEx.Bootstrap;
-using BepInEx.Configuration;
-using HarmonyLib;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using BepInEx;
+using BepInEx.Bootstrap;
+using BepInEx.Configuration;
+using HarmonyLib;
 using UnityEngine;
 
 namespace ValheimMod
@@ -52,9 +52,13 @@ namespace ValheimMod
         private static ConfigEntry<bool> FeedStationsFromContainers;
         private static ConfigEntry<KeyCode> FillStationKey;
         private static ConfigEntry<bool> ShowFillStationHint;
+        private static ConfigEntry<bool> LogStationInputs;
         private static ConfigEntry<string> SmelterInputPriority;
         private static ConfigEntry<string> CookingStationInputPriority;
         private static ConfigEntry<float> ContainerRange;
+        private static ConfigEntry<float> MinHealthPercent;
+        private static ConfigEntry<bool> LogPlayerDamage;
+        private static ConfigEntry<float> WorkstationRangeMultiplier;
         private static ConfigEntry<float> TamingSpeedMultiplier;
         private static ConfigEntry<bool> AlwaysSlowFall;
         private static ConfigEntry<float> SlowFallMaxSpeed;
@@ -69,7 +73,6 @@ namespace ValheimMod
         private static ConfigEntry<bool> SuppressRemovedMessages;
         private static ConfigEntry<bool> SuppressStationAddedMessages;
         private static ConfigEntry<bool> SuppressSkillMessages;
-        private static ConfigEntry<bool> SkipIntroCinematic;
         private static ConfigEntry<bool> NegateKnockback;
         private static ConfigEntry<bool> NegateEquipmentMovementPenalty;
         private static ConfigEntry<string> FavoriteFoodList;
@@ -118,7 +121,8 @@ namespace ValheimMod
         // base-class field. Resolved once rather than on every hotkey press.
         private static readonly FieldInfo m_inventoryField = AccessTools.Field(typeof(Humanoid), "m_inventory");
 
-        private void Awake() {
+        private void Awake()
+        {
             CustomResourceRate = Config.Bind("General", "CustomResourceRate", 1f, "Multiplier for resource drops (wood, ore, food, monster parts). 1 leaves the world's own Resources setting alone. Equipment and other types the game marks as non-scaling are unaffected, and a single drop still can't exceed one stack.");
             CustomStackSizeMultiplier = Config.Bind("General", "CustomStackSizeMultiplier", 1f, "Multiplier for the max stack size of every stackable item. 1 leaves vanilla stack sizes alone. Items that don't stack in vanilla (equipment) are unaffected. Warning: stacks larger than vanilla get written into your save, so lowering this later can clamp or lose the excess.");
             CustomInventoryRows = Config.Bind("General", "CustomInventoryRows", 0,
@@ -145,13 +149,17 @@ namespace ValheimMod
             CraftFromContainers = Config.Bind("Containers", "CraftFromContainers", false, "Let crafting, building, upgrading and repairing draw materials from nearby containers instead of only your own inventory. Only containers you could open by hand are used, so wards and private chests are still respected.");
             FeedStationsFromContainers = Config.Bind("Containers", "FeedStationsFromContainers", false, "Let smelters, kilns, cooking stations, fermenters, fireplaces, turrets and shield generators take ore, fuel, food and ammo from nearby containers when you interact with them. Uses the same range as CraftFromContainers.");
             FillStationKey = Config.Bind("Containers", "FillStationKey", KeyCode.LeftShift, "Hold this key while interacting with a station to fill it in one go instead of adding a single item. Works whether the materials come from your inventory or from nearby containers.");
+            LogStationInputs = Config.Bind("Containers", "LogStationInputs", false, "Diagnostic. Logs every input a hovered station accepts, in the order the priority list puts them, with how many of each you are carrying and how many are in nearby containers. Use it to check that the names in the priority lists match the prefab names the station actually uses.");
             ShowFillStationHint = Config.Bind("Containers", "ShowFillStationHint", true, "Add a line to a station's hover tooltip showing the fill shortcut.");
             const string priorityHelp = " Comma-separated prefab names, earlier meaning higher priority. Anything not listed keeps the station's own order, after everything that is listed. Leave empty to always use the station's own order. This only orders items within a source: whatever you are carrying is always used before anything in a container, so you can force a choice by putting it in your inventory.";
-            SmelterInputPriority = Config.Bind("Containers", "SmelterInputPriority", "FlametalOre,BlackMetalScrap,SilverOre,IronScrap,CopperOre,TinOre", "Which ore a smelter, kiln or blast furnace reaches for first when several are available." + priorityHelp);
+            SmelterInputPriority = Config.Bind("Containers", "SmelterInputPriority", "FlametalOreNew,FlametalOre,BlackMetalScrap,SilverOre,IronScrap,CopperOre,TinOre", "Which ore a smelter, kiln or blast furnace reaches for first when several are available." + priorityHelp);
             CookingStationInputPriority = Config.Bind("Containers", "CookingStationInputPriority", "SerpentMeat,LoxMeat,BugMeat,ChickenMeat,HareMeat,WolfMeat,DeerMeat,RawMeat,NeckTail,FishRaw", "Which raw item a cooking station or oven reaches for first when several are available. The default is ordered roughly by biome progression and is only a starting point - reorder it to taste." + priorityHelp);
             _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
+            MinHealthPercent = Config.Bind("General", "MinHealthPercent", 0.25f, new ConfigDescription("Damage can never take you below this fraction of your maximum health. 0.25 keeps you at a quarter health no matter how big the hit. Set to 0 to disable the floor and take damage normally.", new AcceptableValueRange<float>(0f, 0.95f)));
+            LogPlayerDamage = Config.Bind("General", "LogPlayerDamage", false, "Diagnostic. Logs every hit that reaches the damage gate, with its type, the raw amount, what the gate allowed through and your health at the time. Use it to find out what actually killed you.");
+            WorkstationRangeMultiplier = Config.Bind("General", "WorkstationRangeMultiplier", 1f, "Multiplier for how far a workbench, forge or other crafting station reaches for building. 2 doubles the radius. The on-screen coverage circle scales with it. Applies to stations as they load, so change it before entering a world.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
             SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
@@ -166,7 +174,6 @@ namespace ValheimMod
             SuppressRemovedMessages = Config.Bind("General", "SuppressRemovedMessages", false, "Stop 'removed <item>' notifications from being queued in the top-left message HUD.");
             SuppressStationAddedMessages = Config.Bind("General", "SuppressStationAddedMessages", false, "Stop the centre-screen 'added <item>' confirmation shown when loading ore or fuel into a smelter, kiln, cooking station, turret or shield generator.");
             SuppressSkillMessages = Config.Bind("General", "SuppressSkillMessages", false, "Stop skill notifications from being queued in the message HUD. Covers both Valheim's own skill level-up messages and this mod's per-tick skill progress readout.");
-            SkipIntroCinematic = Config.Bind("General", "SkipIntroCinematic", true, "Skip the intro cinematic that plays on launch and go straight to the main menu. Cinematics remain replayable from the menu.");
             NegateKnockback = Config.Bind("General", "NegateKnockback", true, "Turn off knockback when hit");
             NegateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
 
@@ -183,53 +190,67 @@ namespace ValheimMod
             harmony.PatchAll();
         }
 
-        private void Update() {
-            if (RepairHotkey.Value.IsDown()) {
+        private void Update()
+        {
+            if (RepairHotkey.Value.IsDown())
+            {
                 // Read the local player at point of use; m_localPlayer isn't assigned until
                 // SetLocalPlayer runs, which is after Player.Awake
                 Player player = Player.m_localPlayer;
-                if (player == null) {
+                if (player == null)
+                {
                     return;
                 }
                 var inventory = (Inventory)m_inventoryField.GetValue(player);
 
-                foreach (var item in inventory.GetAllItems().Where(i => i.IsEquipable() && i.m_durability < i.GetMaxDurability())) {
+                foreach (var item in inventory.GetAllItems().Where(i => i.IsEquipable() && i.m_durability < i.GetMaxDurability()))
+                {
                     item.m_durability = item.GetMaxDurability();
                 }
-                foreach (var ammo in _favoriteAmmo) {
+                foreach (var ammo in _favoriteAmmo)
+                {
                     int count = 0;
                     var prefab = ZNetScene.instance.GetPrefab(ammo.Trim());
                     var itemData = prefab.GetComponent<ItemDrop>().m_itemData.m_shared;
-                    if (inventory.ContainsItemByName(itemData.m_name)) {
+                    if (inventory.ContainsItemByName(itemData.m_name))
+                    {
                         count = inventory.CountItems(itemData.m_name);
                     }
-                    if (count < itemData.m_maxStackSize) {
+                    if (count < itemData.m_maxStackSize)
+                    {
                         inventory.AddItem(prefab, itemData.m_maxStackSize - count);
                     }
                 }
-                foreach (var food in _favoriteFoods) {
+                foreach (var food in _favoriteFoods)
+                {
                     int count = 0;
                     var prefab = ZNetScene.instance.GetPrefab(food.Trim());
                     var itemData = prefab.GetComponent<ItemDrop>().m_itemData.m_shared;
-                    if (inventory.ContainsItemByName(itemData.m_name)) {
+                    if (inventory.ContainsItemByName(itemData.m_name))
+                    {
                         count = inventory.CountItems(itemData.m_name);
                     }
-                    if (count < itemData.m_maxStackSize) {
+                    if (count < itemData.m_maxStackSize)
+                    {
                         inventory.AddItem(prefab, itemData.m_maxStackSize - count);
                     }
                 }
-                if (player.GetHealthPercentage() < 1f) {
+                if (player.GetHealthPercentage() < 1f)
+                {
                     player.SetHealth(player.GetMaxHealth());
                 }
-                if (player.GetStaminaPercentage() < 1f) {
+                if (player.GetStaminaPercentage() < 1f)
+                {
                     player.AddStamina(player.GetMaxStamina());
                 }
-                if (player.GetEitrPercentage() < 1f) {
+                if (player.GetEitrPercentage() < 1f)
+                {
                     player.AddEitr(player.GetMaxEitr());
                 }
             }
 
-            if (DumpItemListHotkey.Value.IsDown()) {
+            if (DumpItemListHotkey.Value.IsDown())
+            {
                 DumpItemList();
             }
 
@@ -259,13 +280,16 @@ namespace ValheimMod
         private static GameObject _playerLightObject;
         private static Light _playerLight;
 
-        private static void ResolvePlayerLightSource() {
+        private static void ResolvePlayerLightSource()
+        {
             string itemName = PlayerLightSourceItem.Value;
-            if (_playerLightResolvedFor == itemName) {
+            if (_playerLightResolvedFor == itemName)
+            {
                 return;
             }
             ObjectDB odb = ObjectDB.instance;
-            if (odb == null) {
+            if (odb == null)
+            {
                 return;   // not loaded yet; retry next frame
             }
             _playerLightResolvedFor = itemName;
@@ -273,13 +297,15 @@ namespace ValheimMod
             _playerLightSourceIntensity = 0f;
 
             GameObject prefab = odb.GetItemPrefab(itemName);
-            if (prefab == null) {
+            if (prefab == null)
+            {
                 Debug.LogWarning($"PlayerLightSourceItem: no item prefab named '{itemName}'");
                 return;
             }
             // Prefabs and their attach nodes are inactive, so inactive children must be included
             Light source = prefab.GetComponentInChildren<Light>(includeInactive: true);
-            if (source == null) {
+            if (source == null)
+            {
                 Debug.LogWarning($"PlayerLightSourceItem: '{itemName}' has no Light in its prefab");
                 return;
             }
@@ -292,13 +318,17 @@ namespace ValheimMod
             // the shipped assembly - reading them directly makes Mono refuse to compile this whole
             // method with a FieldAccessException, so they go through AccessTools.
             _playerLightSourceIntensity = source.intensity;
-            if (LightFlickerLightField != null && LightFlickerBaseIntensityField != null) {
-                foreach (LightFlicker flicker in prefab.GetComponentsInChildren<LightFlicker>(includeInactive: true)) {
-                    if (!ReferenceEquals(LightFlickerLightField.GetValue(flicker), source)) {
+            if (LightFlickerLightField != null && LightFlickerBaseIntensityField != null)
+            {
+                foreach (LightFlicker flicker in prefab.GetComponentsInChildren<LightFlicker>(includeInactive: true))
+                {
+                    if (!ReferenceEquals(LightFlickerLightField.GetValue(flicker), source))
+                    {
                         continue;
                     }
                     float baseIntensity = (float)LightFlickerBaseIntensityField.GetValue(flicker);
-                    if (baseIntensity > 0f) {
+                    if (baseIntensity > 0f)
+                    {
                         _playerLightSourceIntensity = baseIntensity;
                     }
                     break;
@@ -307,27 +337,33 @@ namespace ValheimMod
             Debug.Log($"Personal light from '{itemName}': type={_playerLightType}, range={_playerLightSourceRange}, intensity={_playerLightSourceIntensity}");
         }
 
-        private static void DestroyPlayerLight() {
-            if (_playerLightObject != null) {
+        private static void DestroyPlayerLight()
+        {
+            if (_playerLightObject != null)
+            {
                 UnityEngine.Object.Destroy(_playerLightObject);
                 _playerLightObject = null;
                 _playerLight = null;
             }
         }
 
-        private static void UpdatePlayerLight() {
+        private static void UpdatePlayerLight()
+        {
             Player player = Player.m_localPlayer;
-            if (player == null) {
+            if (player == null)
+            {
                 DestroyPlayerLight();
                 return;
             }
 
-            if (PlayerLightHotkey.Value.IsDown()) {
+            if (PlayerLightHotkey.Value.IsDown())
+            {
                 _playerLightOn = !_playerLightOn;
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, _playerLightOn ? "Light on" : "Light off");
             }
 
-            if (!_playerLightOn) {
+            if (!_playerLightOn)
+            {
                 DestroyPlayerLight();
                 return;
             }
@@ -335,11 +371,13 @@ namespace ValheimMod
             ResolvePlayerLightSource();
             float range = PlayerLightRange.Value > 0f ? PlayerLightRange.Value : _playerLightSourceRange;
             float intensity = PlayerLightIntensity.Value > 0f ? PlayerLightIntensity.Value : _playerLightSourceIntensity;
-            if (range <= 0f) {
+            if (range <= 0f)
+            {
                 return;   // couldn't read the source item and no override configured
             }
 
-            if (_playerLightObject == null) {
+            if (_playerLightObject == null)
+            {
                 _playerLightObject = new GameObject("PipsMod_PlayerLight");
                 _playerLight = _playerLightObject.AddComponent<Light>();
                 _playerLight.type = _playerLightType;
@@ -348,7 +386,8 @@ namespace ValheimMod
                 _playerLight.shadows = LightShadows.None;
             }
             // Re-parent after a respawn, which replaces the player object
-            if (_playerLightObject.transform.parent != player.transform) {
+            if (_playerLightObject.transform.parent != player.transform)
+            {
                 _playerLightObject.transform.SetParent(player.transform, worldPositionStays: false);
             }
             _playerLightObject.transform.localPosition = new Vector3(0f, PlayerLightHeight.Value, 0f);
@@ -361,18 +400,23 @@ namespace ValheimMod
         // mods here rearrange that hierarchy (ExtraSlots resizes the inventory panel, ImprovedBuildHud
         // rebuilds the piece info) and a transform added into it is easy to lose or fight over.
         // The text is plain: no rich-text markup, so nothing can leak a colour tag as visible glyphs.
-        private void OnGUI() {
-            if (!ShowClock.Value || Player.m_localPlayer == null || Hud.IsUserHidden()) {
+        private void OnGUI()
+        {
+            if (!ShowClock.Value || Player.m_localPlayer == null || Hud.IsUserHidden())
+            {
                 return;
             }
             EnvMan env = EnvMan.instance;
-            if (env == null || ZNet.instance == null) {
+            if (env == null || ZNet.instance == null)
+            {
                 return;
             }
-            if (_clockStyle == null || _clockStyle.fontSize != ClockFontSize.Value) {
+            if (_clockStyle == null || _clockStyle.fontSize != ClockFontSize.Value)
+            {
                 // Inherits the skin's default upper-left alignment; setting it explicitly would
                 // pull in UnityEngine.TextRenderingModule for no visual difference
-                _clockStyle = new GUIStyle(GUI.skin.label) {
+                _clockStyle = new GUIStyle(GUI.skin.label)
+                {
                     fontSize = ClockFontSize.Value,
                 };
                 _clockStyle.normal.textColor = Color.white;
@@ -381,18 +425,23 @@ namespace ValheimMod
             GUI.Label(area, BuildClockText(env), _clockStyle);
         }
 
-        private static string BuildClockText(EnvMan env) {
+        private static string BuildClockText(EnvMan env)
+        {
             float fraction = Mathf.Repeat(env.GetDayFraction(), 1f);
             float hours = fraction * 24f;
             int hour = Mathf.FloorToInt(hours) % 24;
             int minute = Mathf.FloorToInt((hours - Mathf.Floor(hours)) * 60f);
 
             string time;
-            if (Clock24Hour.Value) {
+            if (Clock24Hour.Value)
+            {
                 time = $"{hour:00}:{minute:00}";
-            } else {
+            }
+            else
+            {
                 int hour12 = hour % 12;
-                if (hour12 == 0) {
+                if (hour12 == 0)
+                {
                     hour12 = 12;
                 }
                 time = $"{hour12}:{minute:00} {(hour < 12 ? "AM" : "PM")}";
@@ -409,14 +458,18 @@ namespace ValheimMod
         /// 0.25-0.75 of the day as daytime and 0.5-0.75 as afternoon, leaving 0.25-0.5 as morning.
         /// On that scale a day fraction maps directly onto a 24-hour clock, dawn landing at 06:00.
         /// </summary>
-        private static string DayPhaseName(float fraction) {
-            if (fraction < 0.25f) {
+        private static string DayPhaseName(float fraction)
+        {
+            if (fraction < 0.25f)
+            {
                 return "Night";
             }
-            if (fraction < 0.5f) {
+            if (fraction < 0.5f)
+            {
                 return "Morning";
             }
-            if (fraction < 0.75f) {
+            if (fraction < 0.75f)
+            {
                 return "Afternoon";
             }
             return "Night";
@@ -436,30 +489,37 @@ namespace ValheimMod
         /// deliberately - it runs a skipping prefix on Player.SetInventorySize and adds rows of its
         /// own - so it is detected up front and this feature stands down entirely.
         /// </summary>
-        private static void ApplyInventoryRows() {
+        private static void ApplyInventoryRows()
+        {
             int rows = CustomInventoryRows.Value;
-            if (rows <= 0 || _inventoryRowsDisabled) {
+            if (rows <= 0 || _inventoryRowsDisabled)
+            {
                 return;
             }
             // Checked here rather than in Awake because plugins load in sequence and Extra Slots
             // loads after this one, so it isn't registered yet while Awake is running.
-            if (!_rowManagerChecked) {
+            if (!_rowManagerChecked)
+            {
                 _rowManagerChecked = true;
-                if (Chainloader.PluginInfos.ContainsKey(ExtraSlotsGuid)) {
+                if (Chainloader.PluginInfos.ContainsKey(ExtraSlotsGuid))
+                {
                     _inventoryRowsDisabled = true;
                     Debug.LogWarning($"CustomInventoryRows is {rows}, but Extra Slots is installed and manages inventory rows itself. Standing down to avoid fighting it. Set CustomInventoryRows to 0 and use 'Amount of extra inventory rows' under [Extra slots] in shudnal.ExtraSlots.cfg instead.");
                     return;
                 }
             }
             Player player = Player.m_localPlayer;
-            if (player == null || InventoryGui.instance == null) {
+            if (player == null || InventoryGui.instance == null)
+            {
                 return;
             }
             Inventory inventory = player.GetInventory();
-            if (inventory == null || inventory.GetHeight() == rows) {
+            if (inventory == null || inventory.GetHeight() == rows)
+            {
                 return;
             }
-            if (_inventoryRowAttempts >= MaxInventoryRowAttempts) {
+            if (_inventoryRowAttempts >= MaxInventoryRowAttempts)
+            {
                 _inventoryRowsDisabled = true;
                 Debug.LogWarning($"Giving up on CustomInventoryRows: asked for {rows} rows {MaxInventoryRowAttempts} times and the height keeps changing back, so another mod is managing inventory size. Set CustomInventoryRows to 0 and use that mod's own setting.");
                 return;
@@ -474,20 +534,25 @@ namespace ValheimMod
         /// a tab-separated reference table, and a ready-to-paste AutoPickupIgnorer ignore list.
         /// ObjectDB isn't fully populated until a world is loaded, so this does nothing at the menu.
         /// </summary>
-        private static void DumpItemList() {
+        private static void DumpItemList()
+        {
             ObjectDB odb = ObjectDB.instance;
-            if (odb == null || odb.m_items == null || odb.m_items.Count == 0) {
+            if (odb == null || odb.m_items == null || odb.m_items.Count == 0)
+            {
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Item list unavailable - load a world first");
                 return;
             }
 
             var rows = new List<ItemRow>();
-            foreach (var prefab in odb.m_items) {
-                if (prefab == null) {
+            foreach (var prefab in odb.m_items)
+            {
+                if (prefab == null)
+                {
                     continue;
                 }
                 var drop = prefab.GetComponent<ItemDrop>();
-                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null)
+                {
                     continue;
                 }
                 var shared = drop.m_itemData.m_shared;
@@ -495,7 +560,8 @@ namespace ValheimMod
                 string display = Localization.instance != null
                     ? Localization.instance.Localize(shared.m_name)
                     : shared.m_name;
-                rows.Add(new ItemRow {
+                rows.Add(new ItemRow
+                {
                     PrefabName = prefab.name,
                     DisplayName = display,
                     NameToken = shared.m_name,
@@ -515,7 +581,8 @@ namespace ValheimMod
             // Reference table: prefab name is the id the "spawn" console command takes
             var table = new StringBuilder();
             table.AppendLine("PrefabName\tDisplayName\tNameToken\tItemType\tAutoPickup\tInZNetScene\tMaxStack\tWeight");
-            foreach (var r in rows) {
+            foreach (var r in rows)
+            {
                 table.AppendLine($"{r.PrefabName}\t{r.DisplayName}\t{r.NameToken}\t{r.ItemType}\t{r.AutoPickup}\t{r.InZNetScene}\t{r.MaxStackSize}\t{r.Weight:0.##}");
             }
             string tablePath = Path.Combine(dir, "PipsMod_ItemList.tsv");
@@ -549,7 +616,8 @@ namespace ValheimMod
         class MessageHud_Awake_Patch
         {
             [HarmonyPostfix]
-            static void GetMessageHud(ref MessageHud ___m_instance) {
+            static void GetMessageHud(ref MessageHud ___m_instance)
+            {
                 _messageHud = ___m_instance;
             }
         }
@@ -557,7 +625,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), "Awake")]
         class Player_Awake_Patch
         {
-            static void Postfix(ref float ___m_maxCarryWeight, ref bool ___m_noPlacementCost) {
+            static void Postfix(ref float ___m_maxCarryWeight, ref bool ___m_noPlacementCost)
+            {
                 Debug.Log($"Setting base maximum carry weight.");
                 ___m_maxCarryWeight = (float)CustomMaxCarryWeight.Value;
                 Debug.Log($"Base max carry weight: {___m_maxCarryWeight}");
@@ -575,9 +644,11 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Game), nameof(Game.UpdateWorldRates))]
         class Game_UpdateWorldRates_Patch
         {
-            static void Postfix() {
+            static void Postfix()
+            {
                 // A rate of 1 means "don't interfere", leaving the world's Resources modifier intact
-                if (CustomResourceRate.Value > 0f && CustomResourceRate.Value != 1f) {
+                if (CustomResourceRate.Value > 0f && CustomResourceRate.Value != 1f)
+                {
                     Game.m_resourceRate = CustomResourceRate.Value;
                 }
             }
@@ -593,7 +664,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.UpdateRegisters))]
         class ObjectDB_UpdateRegisters_Patch
         {
-            static void Postfix(ObjectDB __instance) {
+            static void Postfix(ObjectDB __instance)
+            {
                 ApplyStackSizeMultiplier(__instance);
             }
         }
@@ -604,45 +676,49 @@ namespace ValheimMod
         /// recomputed from that baseline instead of compounding on each call. Setting the
         /// multiplier back to 1 therefore restores vanilla stack sizes.
         /// </summary>
-        private static void ApplyStackSizeMultiplier(ObjectDB odb) {
-            if (odb == null || odb.m_items == null) {
+        private static void ApplyStackSizeMultiplier(ObjectDB odb)
+        {
+            if (odb == null || odb.m_items == null)
+            {
                 return;
             }
             float multiplier = CustomStackSizeMultiplier.Value;
             int changed = 0;
-            foreach (var prefab in odb.m_items) {
-                if (prefab == null) {
+            foreach (var prefab in odb.m_items)
+            {
+                if (prefab == null)
+                {
                     continue;
                 }
                 var drop = prefab.GetComponent<ItemDrop>();
-                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null)
+                {
                     continue;
                 }
                 var shared = drop.m_itemData.m_shared;
-                if (!_baseStackSizes.TryGetValue(shared, out int baseSize)) {
+                if (!_baseStackSizes.TryGetValue(shared, out int baseSize))
+                {
                     baseSize = shared.m_maxStackSize;
                     _baseStackSizes[shared] = baseSize;
                 }
                 // Equipment and other one-per-slot items stay unstackable
-                if (baseSize <= 1) {
+                if (baseSize <= 1)
+                {
                     continue;
                 }
                 int target = Mathf.Max(1, Mathf.RoundToInt(baseSize * multiplier));
-                if (shared.m_maxStackSize != target) {
+                if (shared.m_maxStackSize != target)
+                {
                     shared.m_maxStackSize = target;
                     changed++;
                 }
             }
-            if (changed > 0) {
+            if (changed > 0)
+            {
                 Debug.Log($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
             }
         }
 
-        // FejdStartup.PlayIntroCinematic only plays the intro when m_introOnStartup is set;
-        // otherwise it takes its else branch and shows the main menu straight away. Nothing in the
-        // game ever writes that field, which is why there's no in-game option for it. Clearing it
-        // during Awake reuses the game's own skip path rather than suppressing playback, so no
-        // "Failed to play intro cinematic" error is logged and the Cinematics menu still works.
         // Every smelting station routes its output through Smelter.Spawn, both the one-at-a-time
         // path (QueueProcessed calls Spawn(ore, 1) when m_spawnStack is off, which is what the
         // charcoal kiln does) and the batched path via SpawnProcessed. Scaling the stack here
@@ -650,18 +726,23 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "Spawn")]
         class Smelter_Spawn_Patch
         {
-            static void Prefix(Smelter __instance, string ore, ref int stack) {
+            static void Prefix(Smelter __instance, string ore, ref int stack)
+            {
                 float multiplier = CustomSmelterOutputRate.Value;
-                if (multiplier <= 1f || stack <= 0) {
+                if (multiplier <= 1f || stack <= 0)
+                {
                     return;
                 }
                 int scaled = Mathf.Max(1, Mathf.RoundToInt(stack * multiplier));
 
                 // Cap at what the produced item can actually hold in one stack. GetItemConversion
                 // is non-public in the shipped assembly, so match on m_conversion the same way.
-                foreach (var conversion in __instance.m_conversion) {
-                    if (conversion.m_from == null || conversion.m_from.gameObject.name == ore) {
-                        if (conversion.m_to != null) {
+                foreach (var conversion in __instance.m_conversion)
+                {
+                    if (conversion.m_from == null || conversion.m_from.gameObject.name == ore)
+                    {
+                        if (conversion.m_to != null)
+                        {
                             scaled = Mathf.Min(scaled, conversion.m_to.m_itemData.m_shared.m_maxStackSize);
                         }
                         break;
@@ -678,26 +759,32 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Fermenter), "DropAllItems")]
         class Fermenter_DropAllItems_Patch
         {
-            static void Prefix(Fermenter __instance, out int[] __state) {
+            static void Prefix(Fermenter __instance, out int[] __state)
+            {
                 __state = null;
                 float multiplier = CustomFermenterOutputRate.Value;
-                if (multiplier <= 1f || __instance.m_conversion == null) {
+                if (multiplier <= 1f || __instance.m_conversion == null)
+                {
                     return;
                 }
                 var conversions = __instance.m_conversion;
                 __state = new int[conversions.Count];
-                for (int i = 0; i < conversions.Count; i++) {
+                for (int i = 0; i < conversions.Count; i++)
+                {
                     __state[i] = conversions[i].m_producedItems;
                     conversions[i].m_producedItems = Mathf.Max(1, Mathf.RoundToInt(__state[i] * multiplier));
                 }
             }
 
-            static void Finalizer(Fermenter __instance, int[] __state) {
-                if (__state == null || __instance.m_conversion == null) {
+            static void Finalizer(Fermenter __instance, int[] __state)
+            {
+                if (__state == null || __instance.m_conversion == null)
+                {
                     return;
                 }
                 var conversions = __instance.m_conversion;
-                for (int i = 0; i < conversions.Count && i < __state.Length; i++) {
+                for (int i = 0; i < conversions.Count && i < __state.Length; i++)
+                {
                     conversions[i].m_producedItems = __state[i];
                 }
             }
@@ -712,21 +799,27 @@ namespace ValheimMod
             private static readonly MethodInfo SpawnItemMethod = AccessTools.Method(typeof(CookingStation), "SpawnItem");
             private static bool _spawningExtras;
 
-            static void Postfix(CookingStation __instance, string name, int slot, Vector3 userPoint, bool cheated) {
-                if (_spawningExtras || SpawnItemMethod == null) {
+            static void Postfix(CookingStation __instance, string name, int slot, Vector3 userPoint, bool cheated)
+            {
+                if (_spawningExtras || SpawnItemMethod == null)
+                {
                     return;
                 }
                 int total = Mathf.Max(1, Mathf.RoundToInt(CustomCookingOutputRate.Value));
-                if (total <= 1) {
+                if (total <= 1)
+                {
                     return;
                 }
                 _spawningExtras = true;
-                try {
-                    for (int i = 1; i < total; i++) {
+                try
+                {
+                    for (int i = 1; i < total; i++)
+                    {
                         SpawnItemMethod.Invoke(__instance, new object[] { name, slot, userPoint, cheated });
                     }
                 }
-                finally {
+                finally
+                {
                     _spawningExtras = false;
                 }
             }
@@ -743,16 +836,19 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "UpdateSmelter")]
         class Smelter_UpdateSmelter_Patch
         {
-            static void Prefix(Smelter __instance, out float __state) {
+            static void Prefix(Smelter __instance, out float __state)
+            {
                 __state = __instance.m_secPerProduct;
                 float multiplier = CustomProcessingTimeRate.Value;
-                if (multiplier > 0f && multiplier != 1f) {
+                if (multiplier > 0f && multiplier != 1f)
+                {
                     // UpdateSmelter treats a non-positive value as "disabled", so keep it above zero
                     __instance.m_secPerProduct = Mathf.Max(0.01f, __state * multiplier);
                 }
             }
 
-            static void Finalizer(Smelter __instance, float __state) {
+            static void Finalizer(Smelter __instance, float __state)
+            {
                 __instance.m_secPerProduct = __state;
             }
         }
@@ -760,15 +856,18 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Fermenter), "GetStatus")]
         class Fermenter_GetStatus_Patch
         {
-            static void Prefix(Fermenter __instance, out float __state) {
+            static void Prefix(Fermenter __instance, out float __state)
+            {
                 __state = __instance.m_fermentationDuration;
                 float multiplier = CustomProcessingTimeRate.Value;
-                if (multiplier > 0f && multiplier != 1f) {
+                if (multiplier > 0f && multiplier != 1f)
+                {
                     __instance.m_fermentationDuration = Mathf.Max(1f, __state * multiplier);
                 }
             }
 
-            static void Finalizer(Fermenter __instance, float __state) {
+            static void Finalizer(Fermenter __instance, float __state)
+            {
                 __instance.m_fermentationDuration = __state;
             }
         }
@@ -776,26 +875,32 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), "UpdateCooking")]
         class CookingStation_UpdateCooking_Patch
         {
-            static void Prefix(CookingStation __instance, out float[] __state) {
+            static void Prefix(CookingStation __instance, out float[] __state)
+            {
                 __state = null;
                 float multiplier = CustomProcessingTimeRate.Value;
-                if (multiplier <= 0f || multiplier == 1f || __instance.m_conversion == null) {
+                if (multiplier <= 0f || multiplier == 1f || __instance.m_conversion == null)
+                {
                     return;
                 }
                 var conversions = __instance.m_conversion;
                 __state = new float[conversions.Count];
-                for (int i = 0; i < conversions.Count; i++) {
+                for (int i = 0; i < conversions.Count; i++)
+                {
                     __state[i] = conversions[i].m_cookTime;
                     conversions[i].m_cookTime = Mathf.Max(0.1f, __state[i] * multiplier);
                 }
             }
 
-            static void Finalizer(CookingStation __instance, float[] __state) {
-                if (__state == null || __instance.m_conversion == null) {
+            static void Finalizer(CookingStation __instance, float[] __state)
+            {
+                if (__state == null || __instance.m_conversion == null)
+                {
                     return;
                 }
                 var conversions = __instance.m_conversion;
-                for (int i = 0; i < conversions.Count && i < __state.Length; i++) {
+                for (int i = 0; i < conversions.Count && i < __state.Length; i++)
+                {
                     conversions[i].m_cookTime = __state[i];
                 }
             }
@@ -807,8 +912,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Container), "Awake")]
         class Container_Awake_Patch
         {
-            static void Postfix(Container __instance) {
-                if (!_containers.Contains(__instance)) {
+            static void Postfix(Container __instance)
+            {
+                if (!_containers.Contains(__instance))
+                {
                     _containers.Add(__instance);
                 }
             }
@@ -817,7 +924,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Container), "OnDestroyed")]
         class Container_OnDestroyed_Patch
         {
-            static void Postfix(Container __instance) {
+            static void Postfix(Container __instance)
+            {
                 _containers.Remove(__instance);
             }
         }
@@ -827,50 +935,74 @@ namespace ValheimMod
         /// to open. Destroyed entries are pruned while walking the list, because unloading a zone
         /// destroys the object without calling OnDestroyed.
         /// </summary>
-        private static void CollectNearbyInventories(Player player) {
+        private static void CollectNearbyInventories(Player player)
+        {
             _nearbyInventories.Clear();
             float rangeSqr = ContainerRange.Value * ContainerRange.Value;
             Vector3 origin = player.transform.position;
             long playerId = player.GetPlayerID();
-            for (int i = _containers.Count - 1; i >= 0; i--) {
+            for (int i = _containers.Count - 1; i >= 0; i--)
+            {
                 Container container = _containers[i];
-                if (container == null) {
+                if (container == null)
+                {
                     _containers.RemoveAt(i);
                     continue;
                 }
-                if ((container.transform.position - origin).sqrMagnitude > rangeSqr) {
+                if ((container.transform.position - origin).sqrMagnitude > rangeSqr)
+                {
+                    continue;
+                }
+                // Checked before CheckAccess, not after. Container.Awake only builds the inventory
+                // and resolves m_piece when the object has a ZDO, so a placement ghost - the
+                // preview shown while positioning a piece - has neither. CheckAccess dereferences
+                // m_piece for a private chest, so calling it on a ghost throws.
+                Inventory inventory = container.GetInventory();
+                if (inventory == null)
+                {
                     continue;
                 }
                 // CheckAccess covers wards and private chests, so this never reaches into
                 // something the player couldn't walk up and open. It's non-public, hence AccessTools.
-                if (CheckAccessMethod != null && !(bool)CheckAccessMethod.Invoke(container, new object[] { playerId })) {
-                    continue;
+                try
+                {
+                    if (CheckAccessMethod != null && !(bool)CheckAccessMethod.Invoke(container, new object[] { playerId }))
+                    {
+                        continue;
+                    }
                 }
-                Inventory inventory = container.GetInventory();
-                if (inventory != null) {
-                    _nearbyInventories.Add(inventory);
+                catch (Exception)
+                {
+                    continue;   // a container that can't answer is one we shouldn't be reaching into
                 }
+                _nearbyInventories.Add(inventory);
             }
         }
 
-        private static bool BeginContainerScope() {
-            if (!CraftFromContainers.Value || Player.m_localPlayer == null) {
+        private static bool BeginContainerScope()
+        {
+            if (!CraftFromContainers.Value || Player.m_localPlayer == null)
+            {
                 return false;
             }
-            if (_containerScopeDepth == 0) {
+            if (_containerScopeDepth == 0)
+            {
                 CollectNearbyInventories(Player.m_localPlayer);
             }
             _containerScopeDepth++;
             return true;
         }
 
-        private static void EndContainerScope(bool entered) {
-            if (entered && _containerScopeDepth > 0) {
+        private static void EndContainerScope(bool entered)
+        {
+            if (entered && _containerScopeDepth > 0)
+            {
                 _containerScopeDepth--;
             }
         }
 
-        private static bool IsLocalPlayerInventory(Inventory inventory) {
+        private static bool IsLocalPlayerInventory(Inventory inventory)
+        {
             Player player = Player.m_localPlayer;
             return player != null && ReferenceEquals(inventory, player.GetInventory());
         }
@@ -909,18 +1041,23 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.CountItems))]
         class Inventory_CountItems_Patch
         {
-            static void Postfix(Inventory __instance, string name, int quality, ref int __result) {
-                if (_containerScopeDepth <= 0 || _summingContainers || !IsLocalPlayerInventory(__instance)) {
+            static void Postfix(Inventory __instance, string name, int quality, ref int __result)
+            {
+                if (_containerScopeDepth <= 0 || _summingContainers || !IsLocalPlayerInventory(__instance))
+                {
                     return;
                 }
                 // Counting the containers re-enters this method; the flag stops it recursing
                 _summingContainers = true;
-                try {
-                    for (int i = 0; i < _nearbyInventories.Count; i++) {
+                try
+                {
+                    for (int i = 0; i < _nearbyInventories.Count; i++)
+                    {
                         __result += _nearbyInventories[i].CountItems(name, quality);
                     }
                 }
-                finally {
+                finally
+                {
                     _summingContainers = false;
                 }
             }
@@ -930,20 +1067,26 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.HaveItem), new Type[] { typeof(string), typeof(bool) })]
         class Inventory_HaveItem_Patch
         {
-            static void Postfix(Inventory __instance, string name, ref bool __result) {
-                if (__result || _containerScopeDepth <= 0 || _summingContainers || !IsLocalPlayerInventory(__instance)) {
+            static void Postfix(Inventory __instance, string name, ref bool __result)
+            {
+                if (__result || _containerScopeDepth <= 0 || _summingContainers || !IsLocalPlayerInventory(__instance))
+                {
                     return;
                 }
                 _summingContainers = true;
-                try {
-                    for (int i = 0; i < _nearbyInventories.Count; i++) {
-                        if (_nearbyInventories[i].HaveItem(name)) {
+                try
+                {
+                    for (int i = 0; i < _nearbyInventories.Count; i++)
+                    {
+                        if (_nearbyInventories[i].HaveItem(name))
+                        {
                             __result = true;
                             return;
                         }
                     }
                 }
-                finally {
+                finally
+                {
                     _summingContainers = false;
                 }
             }
@@ -956,39 +1099,49 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), nameof(Player.ConsumeResources))]
         class Player_ConsumeResources_Patch
         {
-            static void Prefix(Player __instance, Piece.Requirement[] requirements, int qualityLevel, int itemQuality, int multiplier) {
-                if (!CraftFromContainers.Value || requirements == null) {
+            static void Prefix(Player __instance, Piece.Requirement[] requirements, int qualityLevel, int itemQuality, int multiplier)
+            {
+                if (!CraftFromContainers.Value || requirements == null)
+                {
                     return;
                 }
-                if (!ReferenceEquals(__instance, Player.m_localPlayer)) {
+                if (!ReferenceEquals(__instance, Player.m_localPlayer))
+                {
                     return;
                 }
                 CollectNearbyInventories(__instance);
-                if (_nearbyInventories.Count == 0) {
+                if (_nearbyInventories.Count == 0)
+                {
                     return;
                 }
                 Inventory playerInventory = __instance.GetInventory();
-                if (playerInventory == null) {
+                if (playerInventory == null)
+                {
                     return;
                 }
                 CraftingStation station = __instance.GetCurrentCraftingStation();
-                foreach (Piece.Requirement requirement in requirements) {
-                    if (requirement == null || !requirement.m_resItem) {
+                foreach (Piece.Requirement requirement in requirements)
+                {
+                    if (requirement == null || !requirement.m_resItem)
+                    {
                         continue;
                     }
                     // Mirrors the station/upgrader filter in ConsumeResources so nothing is pulled
                     // for a requirement vanilla is about to skip
                     if ((station != null && station.m_upgrader != requirement.m_upgraderResource)
-                        || (station == null && requirement.m_upgraderResource)) {
+                        || (station == null && requirement.m_upgraderResource))
+                    {
                         continue;
                     }
                     int needed = requirement.GetAmount(qualityLevel) * multiplier;
-                    if (needed <= 0) {
+                    if (needed <= 0)
+                    {
                         continue;
                     }
                     string itemName = requirement.m_resItem.m_itemData.m_shared.m_name;
                     int shortfall = needed - playerInventory.CountItems(itemName, itemQuality);
-                    if (shortfall > 0) {
+                    if (shortfall > 0)
+                    {
                         PullFromContainers(playerInventory, itemName, itemQuality, shortfall);
                     }
                 }
@@ -1000,24 +1153,30 @@ namespace ValheimMod
         /// player's inventory. Stops early if the inventory has no room, which leaves the shortfall
         /// in place and lets vanilla fail the craft rather than silently destroying anything.
         /// </summary>
-        private static int PullFromContainers(Inventory playerInventory, string itemName, int itemQuality, int amount) {
+        private static int PullFromContainers(Inventory playerInventory, string itemName, int itemQuality, int amount)
+        {
             int wanted = amount;
-            for (int i = 0; i < _nearbyInventories.Count && amount > 0; i++) {
+            for (int i = 0; i < _nearbyInventories.Count && amount > 0; i++)
+            {
                 Inventory source = _nearbyInventories[i];
                 _tempItems.Clear();
                 source.GetAllItems(itemName, _tempItems);
-                for (int j = _tempItems.Count - 1; j >= 0 && amount > 0; j--) {
+                for (int j = _tempItems.Count - 1; j >= 0 && amount > 0; j--)
+                {
                     ItemDrop.ItemData item = _tempItems[j];
-                    if (item == null || item.m_stack <= 0) {
+                    if (item == null || item.m_stack <= 0)
+                    {
                         continue;
                     }
-                    if (itemQuality >= 0 && item.m_quality != itemQuality) {
+                    if (itemQuality >= 0 && item.m_quality != itemQuality)
+                    {
                         continue;
                     }
                     int take = Mathf.Min(amount, item.m_stack);
                     ItemDrop.ItemData moved = item.Clone();
                     moved.m_stack = take;
-                    if (!playerInventory.AddItem(moved)) {
+                    if (!playerInventory.AddItem(moved))
+                    {
                         return wanted - amount;
                     }
                     source.RemoveItem(item, take);
@@ -1032,17 +1191,21 @@ namespace ValheimMod
         /// local player's inventory and refreshes the nearby-container list. Returns false when
         /// there's nothing to do, so each patch stays a couple of lines.
         /// </summary>
-        private static bool BeginStationFeed(Humanoid user, out Inventory playerInventory) {
+        private static bool BeginStationFeed(Humanoid user, out Inventory playerInventory)
+        {
             playerInventory = null;
-            if (!FeedStationsFromContainers.Value) {
+            if (!FeedStationsFromContainers.Value)
+            {
                 return false;
             }
             Player player = Player.m_localPlayer;
-            if (player == null || !ReferenceEquals(user, player)) {
+            if (player == null || !ReferenceEquals(user, player))
+            {
                 return false;
             }
             playerInventory = player.GetInventory();
-            if (playerInventory == null) {
+            if (playerInventory == null)
+            {
                 return false;
             }
             CollectNearbyInventories(player);
@@ -1054,11 +1217,14 @@ namespace ValheimMod
         /// single one out of a nearby container if not. The station code then finds and removes it
         /// from the player's own inventory exactly as it normally would.
         /// </summary>
-        private static bool EnsureOneInInventory(Inventory playerInventory, string itemName) {
-            if (string.IsNullOrEmpty(itemName)) {
+        private static bool EnsureOneInInventory(Inventory playerInventory, string itemName)
+        {
+            if (string.IsNullOrEmpty(itemName))
+            {
                 return false;
             }
-            if (playerInventory.HaveItem(itemName)) {
+            if (playerInventory.HaveItem(itemName))
+            {
                 return true;
             }
             return PullFromContainers(playerInventory, itemName, -1, 1) > 0;
@@ -1079,40 +1245,48 @@ namespace ValheimMod
         private static readonly MethodInfo FermenterGetContentMethod = AccessTools.Method(typeof(Fermenter), "GetContent");
         private static readonly FieldInfo FireplaceNviewField = AccessTools.Field(typeof(Fireplace), "m_nview");
 
-        private static bool SmelterHasOreRoom(Smelter smelter) {
+        private static bool SmelterHasOreRoom(Smelter smelter)
+        {
             return SmelterGetQueueSizeMethod != null
                 && (int)SmelterGetQueueSizeMethod.Invoke(smelter, null) < smelter.m_maxOre;
         }
 
-        private static bool SmelterHasFuelRoom(Smelter smelter) {
+        private static bool SmelterHasFuelRoom(Smelter smelter)
+        {
             return SmelterGetFuelMethod != null
                 && (float)SmelterGetFuelMethod.Invoke(smelter, null) <= smelter.m_maxFuel - 1f;
         }
 
-        private static bool CookingHasFuelRoom(CookingStation station) {
+        private static bool CookingHasFuelRoom(CookingStation station)
+        {
             return CookingGetFuelMethod != null
                 && (float)CookingGetFuelMethod.Invoke(station, null) <= station.m_maxFuel - 1f;
         }
 
-        private static bool FireplaceHasFuelRoom(Fireplace fireplace) {
+        private static bool FireplaceHasFuelRoom(Fireplace fireplace)
+        {
             ZNetView nview = FireplaceNviewField?.GetValue(fireplace) as ZNetView;
-            if (nview == null || !nview.IsValid()) {
+            if (nview == null || !nview.IsValid())
+            {
                 return false;
             }
             return Mathf.CeilToInt(nview.GetZDO().GetFloat(ZDOVars.s_fuel)) < fireplace.m_maxFuel;
         }
 
-        private static bool TurretHasAmmoRoom(Turret turret) {
+        private static bool TurretHasAmmoRoom(Turret turret)
+        {
             // m_maxAmmo of 0 means the turret has no declared limit
             return turret.m_maxAmmo <= 0 || turret.GetAmmo() < turret.m_maxAmmo;
         }
 
-        private static bool ShieldGeneratorHasFuelRoom(ShieldGenerator generator) {
+        private static bool ShieldGeneratorHasFuelRoom(ShieldGenerator generator)
+        {
             return ShieldGeneratorGetFuelMethod != null
                 && (float)ShieldGeneratorGetFuelMethod.Invoke(generator, null) <= generator.m_maxFuel - 1f;
         }
 
-        private static bool FermenterIsEmpty(Fermenter fermenter) {
+        private static bool FermenterIsEmpty(Fermenter fermenter)
+        {
             return FermenterGetContentMethod == null
                 || (int)FermenterGetContentMethod.Invoke(fermenter, null) == 0;
         }
@@ -1121,25 +1295,33 @@ namespace ValheimMod
         /// Walks the candidates in priority order, then in the station's own order for anything not
         /// on the list, returning the first that <paramref name="resolve"/> can supply.
         /// </summary>
-        private static ItemDrop.ItemData SelectByPriority(List<ItemDrop> candidates, List<string> priority, Func<ItemDrop, ItemDrop.ItemData> resolve) {
-            for (int p = 0; p < priority.Count; p++) {
-                for (int i = 0; i < candidates.Count; i++) {
+        private static ItemDrop.ItemData SelectByPriority(List<ItemDrop> candidates, List<string> priority, Func<ItemDrop, ItemDrop.ItemData> resolve)
+        {
+            for (int p = 0; p < priority.Count; p++)
+            {
+                for (int i = 0; i < candidates.Count; i++)
+                {
                     ItemDrop candidate = candidates[i];
-                    if (candidate == null || candidate.gameObject.name != priority[p]) {
+                    if (candidate == null || candidate.gameObject.name != priority[p])
+                    {
                         continue;
                     }
                     ItemDrop.ItemData found = resolve(candidate);
-                    if (found != null) {
+                    if (found != null)
+                    {
                         return found;
                     }
                 }
             }
-            for (int i = 0; i < candidates.Count; i++) {
-                if (candidates[i] == null) {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] == null)
+                {
                     continue;
                 }
                 ItemDrop.ItemData found = resolve(candidates[i]);
-                if (found != null) {
+                if (found != null)
+                {
                     return found;
                 }
             }
@@ -1157,28 +1339,34 @@ namespace ValheimMod
         /// Vanilla picks the first entry in the station's conversion list the player is carrying,
         /// which is why a smelter reaches for copper and ignores everything else.
         /// </summary>
-        private static ItemDrop.ItemData ChooseStationInput(Inventory inventory, List<ItemDrop> candidates, List<string> priority, bool stationHasRoom, ItemDrop.ItemData vanillaChoice) {
+        private static ItemDrop.ItemData ChooseStationInput(Inventory inventory, List<ItemDrop> candidates, List<string> priority, bool stationHasRoom, ItemDrop.ItemData vanillaChoice)
+        {
             Player player = Player.m_localPlayer;
-            if (player == null || candidates.Count == 0 || !ReferenceEquals(inventory, player.GetInventory())) {
+            if (player == null || candidates.Count == 0 || !ReferenceEquals(inventory, player.GetInventory()))
+            {
                 return vanillaChoice;
             }
 
             // Pass 1 - anything already carried, best first
             ItemDrop.ItemData carried = SelectByPriority(candidates, priority,
                 candidate => inventory.GetItem(candidate.m_itemData.m_shared.m_name));
-            if (carried != null) {
+            if (carried != null)
+            {
                 return carried;
             }
-            if (vanillaChoice != null) {
+            if (vanillaChoice != null)
+            {
                 return vanillaChoice;
             }
 
             // Pass 2 - nothing carried, so reach into nearby containers, best first. Skipped when
             // the station is full, or the pulled item would be stranded in the inventory.
-            if (!stationHasRoom || !BeginStationFeed(player, out _)) {
+            if (!stationHasRoom || !BeginStationFeed(player, out _))
+            {
                 return null;
             }
-            return SelectByPriority(candidates, priority, candidate => {
+            return SelectByPriority(candidates, priority, candidate =>
+            {
                 string sharedName = candidate.m_itemData.m_shared.m_name;
                 return PullFromContainers(inventory, sharedName, -1, 1) > 0
                     ? inventory.GetItem(sharedName)
@@ -1206,7 +1394,8 @@ namespace ValheimMod
         private static readonly MethodInfo TurretUseItemMethod = AccessTools.Method(typeof(Turret), "UseItem");
         private static readonly MethodInfo ShieldGeneratorAddFuelMethod = AccessTools.Method(typeof(ShieldGenerator), "OnAddFuel");
 
-        private static bool ShouldFillStation(bool addSucceeded) {
+        private static bool ShouldFillStation(bool addSucceeded)
+        {
             return addSucceeded && !_fillingStation && Input.GetKey(FillStationKey.Value);
         }
 
@@ -1216,33 +1405,42 @@ namespace ValheimMod
         /// empty the station and immediately refill it. The guard stops the repeat at the moment the
         /// station would switch from one job to the other.
         /// </param>
-        private static void RunStationFill(MethodInfo addOne, object station, object[] args, Func<bool> sameModeStill = null) {
-            if (addOne == null) {
+        private static void RunStationFill(MethodInfo addOne, object station, object[] args, Func<bool> sameModeStill = null)
+        {
+            if (addOne == null)
+            {
                 return;
             }
             _fillingStation = true;
             // The repeated adds each announce themselves centre-screen; one summary is plenty
             _suppressFillMessages = true;
             int added = 0;
-            try {
-                while (added < MaxStationFillSteps) {
-                    if (sameModeStill != null && !sameModeStill()) {
+            try
+            {
+                while (added < MaxStationFillSteps)
+                {
+                    if (sameModeStill != null && !sameModeStill())
+                    {
                         break;
                     }
-                    if (!(addOne.Invoke(station, args) is bool success) || !success) {
+                    if (!(addOne.Invoke(station, args) is bool success) || !success)
+                    {
                         break;
                     }
                     added++;
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Debug.LogWarning($"Station fill stopped early: {ex.Message}");
             }
-            finally {
+            finally
+            {
                 _fillingStation = false;
                 _suppressFillMessages = false;
             }
-            if (added > 0 && _messageHud != null) {
+            if (added > 0 && _messageHud != null)
+            {
                 _messageHud.ShowMessage(MessageHud.MessageType.Center, $"Added {added + 1}");
             }
         }
@@ -1250,8 +1448,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "OnAddOre")]
         class Smelter_OnAddOre_FillPatch
         {
-            static void Postfix(Smelter __instance, Switch sw, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(Smelter __instance, Switch sw, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(SmelterAddOreMethod, __instance, new object[] { sw, user, null });
                 }
             }
@@ -1260,8 +1460,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "OnAddFuel")]
         class Smelter_OnAddFuel_FillPatch
         {
-            static void Postfix(Smelter __instance, Switch sw, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(Smelter __instance, Switch sw, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(SmelterAddFuelMethod, __instance, new object[] { sw, user, null });
                 }
             }
@@ -1269,7 +1471,8 @@ namespace ValheimMod
 
         private static readonly MethodInfo CookingHaveDoneItemMethod = AccessTools.Method(typeof(CookingStation), "HaveDoneItem");
 
-        private static bool CookingHasDoneItem(CookingStation station) {
+        private static bool CookingHasDoneItem(CookingStation station)
+        {
             return CookingHaveDoneItemMethod != null
                 && (bool)CookingHaveDoneItemMethod.Invoke(station, null);
         }
@@ -1277,8 +1480,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), "OnInteract")]
         class CookingStation_OnInteract_FillPatch
         {
-            static void Postfix(CookingStation __instance, Humanoid user, bool __result) {
-                if (!ShouldFillStation(__result)) {
+            static void Postfix(CookingStation __instance, Humanoid user, bool __result)
+            {
+                if (!ShouldFillStation(__result))
+                {
                     return;
                 }
                 // OnInteract unloads cooked food when any is ready and otherwise loads raw food.
@@ -1293,8 +1498,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), "OnAddFuelSwitch")]
         class CookingStation_OnAddFuelSwitch_FillPatch
         {
-            static void Postfix(CookingStation __instance, Switch sw, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(CookingStation __instance, Switch sw, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(CookingAddFuelMethod, __instance, new object[] { sw, user, null });
                 }
             }
@@ -1303,8 +1510,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Fireplace), nameof(Fireplace.Interact))]
         class Fireplace_Interact_FillPatch
         {
-            static void Postfix(Fireplace __instance, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(Fireplace __instance, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(FireplaceInteractMethod, __instance, new object[] { user, false, false });
                 }
             }
@@ -1313,8 +1522,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Turret), nameof(Turret.UseItem))]
         class Turret_UseItem_FillPatch
         {
-            static void Postfix(Turret __instance, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(Turret __instance, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(TurretUseItemMethod, __instance, new object[] { user, null });
                 }
             }
@@ -1323,8 +1534,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(ShieldGenerator), "OnAddFuel")]
         class ShieldGenerator_OnAddFuel_FillPatch
         {
-            static void Postfix(ShieldGenerator __instance, Switch sw, Humanoid user, bool __result) {
-                if (ShouldFillStation(__result)) {
+            static void Postfix(ShieldGenerator __instance, Switch sw, Humanoid user, bool __result)
+            {
+                if (ShouldFillStation(__result))
+                {
                     RunStationFill(ShieldGeneratorAddFuelMethod, __instance, new object[] { sw, user, null });
                 }
             }
@@ -1334,8 +1547,10 @@ namespace ValheimMod
         // These hover methods return text that has already been through Localization.Localize, so
         // the appended line has to be localised here rather than left as tokens. $KEY_Use is
         // resolved explicitly so the hint follows a rebound interact key.
-        private static string FillHintSuffix() {
-            if (!ShowFillStationHint.Value || FillStationKey.Value == KeyCode.None) {
+        private static string FillHintSuffix()
+        {
+            if (!ShowFillStationHint.Value || FillStationKey.Value == KeyCode.None)
+            {
                 return null;
             }
             string useKey = Localization.instance != null
@@ -1344,12 +1559,15 @@ namespace ValheimMod
             return $"\n[<color=yellow><b>{FillStationKey.Value} + {useKey}</b></color>] Fill";
         }
 
-        private static void AppendFillHint(ref string hoverText) {
-            if (string.IsNullOrEmpty(hoverText)) {
+        private static void AppendFillHint(ref string hoverText)
+        {
+            if (string.IsNullOrEmpty(hoverText))
+            {
                 return;
             }
             string suffix = FillHintSuffix();
-            if (suffix != null) {
+            if (suffix != null)
+            {
                 hoverText += suffix;
             }
         }
@@ -1364,6 +1582,7 @@ namespace ValheimMod
         private static readonly FieldInfo CookingStationNviewField = AccessTools.Field(typeof(CookingStation), "m_nview");
 
         private static readonly List<ItemDrop> _orderedCandidates = new List<ItemDrop>();
+        private static string _lastStationInputLog;
         private static readonly List<string> _planNames = new List<string>();
         private static readonly List<int> _planCounts = new List<int>();
         private static readonly List<bool> _planFromContainer = new List<bool>();
@@ -1376,36 +1595,47 @@ namespace ValheimMod
         private static string _hoverCacheNext;
         private static string _hoverCacheFill;
 
-        private static void OrderCandidates(List<ItemDrop> candidates, List<string> priority) {
+        private static void OrderCandidates(List<ItemDrop> candidates, List<string> priority)
+        {
             _orderedCandidates.Clear();
-            for (int p = 0; p < priority.Count; p++) {
-                for (int i = 0; i < candidates.Count; i++) {
+            for (int p = 0; p < priority.Count; p++)
+            {
+                for (int i = 0; i < candidates.Count; i++)
+                {
                     ItemDrop candidate = candidates[i];
-                    if (candidate != null && candidate.gameObject.name == priority[p] && !_orderedCandidates.Contains(candidate)) {
+                    if (candidate != null && candidate.gameObject.name == priority[p] && !_orderedCandidates.Contains(candidate))
+                    {
                         _orderedCandidates.Add(candidate);
                     }
                 }
             }
-            for (int i = 0; i < candidates.Count; i++) {
-                if (candidates[i] != null && !_orderedCandidates.Contains(candidates[i])) {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i] != null && !_orderedCandidates.Contains(candidates[i]))
+                {
                     _orderedCandidates.Add(candidates[i]);
                 }
             }
         }
 
-        private static int CountInContainers(string sharedName) {
+        private static int CountInContainers(string sharedName)
+        {
             int total = 0;
-            for (int i = 0; i < _nearbyInventories.Count; i++) {
+            for (int i = 0; i < _nearbyInventories.Count; i++)
+            {
                 total += _nearbyInventories[i].CountItems(sharedName);
             }
             return total;
         }
 
-        private static int AccumulatePlan(int remaining, bool fromContainer, Func<string, int> available) {
-            for (int i = 0; i < _orderedCandidates.Count && remaining > 0; i++) {
+        private static int AccumulatePlan(int remaining, bool fromContainer, Func<string, int> available)
+        {
+            for (int i = 0; i < _orderedCandidates.Count && remaining > 0; i++)
+            {
                 string sharedName = _orderedCandidates[i].m_itemData.m_shared.m_name;
                 int take = Mathf.Min(available(sharedName), remaining);
-                if (take <= 0) {
+                if (take <= 0)
+                {
                     continue;
                 }
                 _planNames.Add(Localization.instance != null ? Localization.instance.Localize(sharedName) : sharedName);
@@ -1420,33 +1650,84 @@ namespace ValheimMod
         /// Mirrors ChooseStationInput: everything carried is consumed before any container is
         /// touched, with the priority list ordering the candidates within each pass.
         /// </summary>
-        private static void BuildFillPlan(Player player, List<ItemDrop> candidates, List<string> priority, int capacity) {
+        private static void BuildFillPlan(Player player, List<ItemDrop> candidates, List<string> priority, int capacity)
+        {
             _planNames.Clear();
             _planCounts.Clear();
             _planFromContainer.Clear();
-            if (capacity <= 0 || candidates.Count == 0 || player == null) {
+            if (capacity <= 0 || candidates.Count == 0 || player == null)
+            {
                 return;
             }
             Inventory inventory = player.GetInventory();
-            if (inventory == null) {
+            if (inventory == null)
+            {
                 return;
             }
             OrderCandidates(candidates, priority);
 
             int remaining = AccumulatePlan(capacity, false, name => inventory.CountItems(name));
-            if (remaining > 0 && FeedStationsFromContainers.Value) {
+            if (remaining > 0 && FeedStationsFromContainers.Value)
+            {
                 CollectNearbyInventories(player);
                 AccumulatePlan(remaining, true, CountInContainers);
             }
+
+            if (LogStationInputs.Value)
+            {
+                LogStationInputSnapshot(player, inventory);
+            }
         }
 
-        private static string PlanSourceSuffix() {
+        /// <summary>
+        /// Diagnostic: reports what a station will actually accept, already sorted the way the
+        /// priority list puts it, alongside how much of each is reachable. The prefab names printed
+        /// here are the ones the priority list has to match - which is how a station turning out to
+        /// use a renamed prefab (FlametalOreNew rather than FlametalOre) becomes visible instead of
+        /// silently falling through to the station's own order.
+        /// </summary>
+        private static void LogStationInputSnapshot(Player player, Inventory inventory)
+        {
+            if (FeedStationsFromContainers.Value)
+            {
+                CollectNearbyInventories(player);
+            }
+            else
+            {
+                _nearbyInventories.Clear();
+            }
+            var sb = new StringBuilder("Station inputs (priority order): ");
+            for (int i = 0; i < _orderedCandidates.Count; i++)
+            {
+                ItemDrop drop = _orderedCandidates[i];
+                string sharedName = drop.m_itemData.m_shared.m_name;
+                if (i > 0)
+                {
+                    sb.Append("  |  ");
+                }
+                sb.Append(drop.gameObject.name)
+                  .Append(" inv=").Append(inventory.CountItems(sharedName))
+                  .Append(" chests=").Append(CountInContainers(sharedName));
+            }
+            string line = sb.ToString();
+            // The hover recomputes several times a second; only report when something changes
+            if (line != _lastStationInputLog)
+            {
+                _lastStationInputLog = line;
+                Debug.Log(line);
+            }
+        }
+
+        private static string PlanSourceSuffix()
+        {
             bool anyContainer = false;
             bool anyCarried = false;
-            for (int i = 0; i < _planFromContainer.Count; i++) {
+            for (int i = 0; i < _planFromContainer.Count; i++)
+            {
                 if (_planFromContainer[i]) { anyContainer = true; } else { anyCarried = true; }
             }
-            if (!anyContainer) {
+            if (!anyContainer)
+            {
                 return "";
             }
             return anyCarried ? " (inventory + containers)" : " (from containers)";
@@ -1457,32 +1738,40 @@ namespace ValheimMod
         /// free index, so the loop is repeated here to get a total. m_nview is non-public, hence
         /// the cached field handle.
         /// </summary>
-        private static int CountFreeCookingSlots(CookingStation station) {
-            if (station.m_slots == null || CookingStationNviewField == null) {
+        private static int CountFreeCookingSlots(CookingStation station)
+        {
+            if (station.m_slots == null || CookingStationNviewField == null)
+            {
                 return 0;
             }
             ZNetView nview = CookingStationNviewField.GetValue(station) as ZNetView;
-            if (nview == null || !nview.IsValid()) {
+            if (nview == null || !nview.IsValid())
+            {
                 return 0;
             }
             ZDO zdo = nview.GetZDO();
-            if (zdo == null) {
+            if (zdo == null)
+            {
                 return 0;
             }
             int free = 0;
-            for (int i = 0; i < station.m_slots.Length; i++) {
-                if (string.IsNullOrEmpty(zdo.GetString("slot" + i, ""))) {
+            for (int i = 0; i < station.m_slots.Length; i++)
+            {
+                if (string.IsNullOrEmpty(zdo.GetString("slot" + i, "")))
+                {
                     free++;
                 }
             }
             return free;
         }
 
-        private static void RefreshHoverPlan(object owner, bool isOre, List<ItemDrop> candidates, List<string> priority, int capacity) {
+        private static void RefreshHoverPlan(object owner, bool isOre, List<ItemDrop> candidates, List<string> priority, int capacity)
+        {
             bool cacheValid = ReferenceEquals(_hoverCacheOwner, owner)
                 && _hoverCacheIsOre == isOre
                 && Time.realtimeSinceStartup - _hoverCacheTime < HoverCacheSeconds;
-            if (cacheValid) {
+            if (cacheValid)
+            {
                 return;
             }
             _hoverCacheOwner = owner;
@@ -1492,12 +1781,14 @@ namespace ValheimMod
             _hoverCacheFill = null;
 
             Player player = Player.m_localPlayer;
-            if (player == null) {
+            if (player == null)
+            {
                 return;
             }
 
             BuildFillPlan(player, candidates, priority, capacity);
-            if (_planNames.Count == 0) {
+            if (_planNames.Count == 0)
+            {
                 return;
             }
 
@@ -1505,8 +1796,10 @@ namespace ValheimMod
             _hoverCacheNext = _planNames[0] + (_planFromContainer[0] ? " (from containers)" : "");
 
             var sb = new StringBuilder();
-            for (int i = 0; i < _planNames.Count; i++) {
-                if (i > 0) {
+            for (int i = 0; i < _planNames.Count; i++)
+            {
+                if (i > 0)
+                {
                     sb.Append(", ");
                 }
                 sb.Append(_planCounts[i]).Append(' ').Append(_planNames[i]);
@@ -1515,34 +1808,44 @@ namespace ValheimMod
             _hoverCacheFill = sb.ToString();
         }
 
-        private static void AppendPlanHover(ref string hoverText) {
+        private static void AppendPlanHover(ref string hoverText)
+        {
             // Vanilla's "[E] Add item" is the last line, so naming the item reads as part of it
-            if (_hoverCacheNext != null) {
+            if (_hoverCacheNext != null)
+            {
                 hoverText += ": " + _hoverCacheNext;
             }
             string hint = FillHintSuffix();
-            if (hint == null) {
+            if (hint == null)
+            {
                 return;
             }
             hoverText += hint;
-            if (_hoverCacheFill != null) {
+            if (_hoverCacheFill != null)
+            {
                 hoverText += ": " + _hoverCacheFill;
             }
         }
 
-        private static void CollectConversionInputs(List<Smelter.ItemConversion> conversions) {
+        private static void CollectConversionInputs(List<Smelter.ItemConversion> conversions)
+        {
             _feedCandidates.Clear();
-            foreach (var conversion in conversions) {
-                if (conversion.m_from != null) {
+            foreach (var conversion in conversions)
+            {
+                if (conversion.m_from != null)
+                {
                     _feedCandidates.Add(conversion.m_from);
                 }
             }
         }
 
-        private static void CollectConversionInputs(List<CookingStation.ItemConversion> conversions) {
+        private static void CollectConversionInputs(List<CookingStation.ItemConversion> conversions)
+        {
             _feedCandidates.Clear();
-            foreach (var conversion in conversions) {
-                if (conversion.m_from != null) {
+            foreach (var conversion in conversions)
+            {
+                if (conversion.m_from != null)
+                {
                     _feedCandidates.Add(conversion.m_from);
                 }
             }
@@ -1551,8 +1854,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), nameof(Smelter.OnHoverAddOre))]
         class Smelter_OnHoverAddOre_Patch
         {
-            static void Postfix(Smelter __instance, ref string __result) {
-                if (string.IsNullOrEmpty(__result) || __instance.m_conversion == null || SmelterGetQueueSizeMethod == null) {
+            static void Postfix(Smelter __instance, ref string __result)
+            {
+                if (string.IsNullOrEmpty(__result) || __instance.m_conversion == null || SmelterGetQueueSizeMethod == null)
+                {
                     return;
                 }
                 CollectConversionInputs(__instance.m_conversion);
@@ -1565,8 +1870,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), nameof(Smelter.OnHoverAddFuel))]
         class Smelter_OnHoverAddFuel_Patch
         {
-            static void Postfix(Smelter __instance, ref string __result) {
-                if (string.IsNullOrEmpty(__result) || __instance.m_fuelItem == null || SmelterGetFuelMethod == null) {
+            static void Postfix(Smelter __instance, ref string __result)
+            {
+                if (string.IsNullOrEmpty(__result) || __instance.m_fuelItem == null || SmelterGetFuelMethod == null)
+                {
                     return;
                 }
                 _feedCandidates.Clear();
@@ -1580,8 +1887,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), nameof(CookingStation.GetHoverText))]
         class CookingStation_GetHoverText_Patch
         {
-            static void Postfix(CookingStation __instance, ref string __result) {
-                if (string.IsNullOrEmpty(__result) || __instance.m_conversion == null) {
+            static void Postfix(CookingStation __instance, ref string __result)
+            {
+                if (string.IsNullOrEmpty(__result) || __instance.m_conversion == null)
+                {
                     return;
                 }
                 CollectConversionInputs(__instance.m_conversion);
@@ -1614,13 +1923,17 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "FindCookableItem")]
         class Smelter_FindCookableItem_Patch
         {
-            static void Postfix(Smelter __instance, Inventory inventory, ref ItemDrop.ItemData __result) {
-                if (__instance.m_conversion == null) {
+            static void Postfix(Smelter __instance, Inventory inventory, ref ItemDrop.ItemData __result)
+            {
+                if (__instance.m_conversion == null)
+                {
                     return;
                 }
                 _feedCandidates.Clear();
-                foreach (var entry in __instance.m_conversion) {
-                    if (entry.m_from != null) {
+                foreach (var entry in __instance.m_conversion)
+                {
+                    if (entry.m_from != null)
+                    {
                         _feedCandidates.Add(entry.m_from);
                     }
                 }
@@ -1631,11 +1944,14 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Smelter), "OnAddFuel")]
         class Smelter_OnAddFuel_Patch
         {
-            static void Prefix(Smelter __instance, Humanoid user) {
-                if (__instance.m_fuelItem == null) {
+            static void Prefix(Smelter __instance, Humanoid user)
+            {
+                if (__instance.m_fuelItem == null)
+                {
                     return;
                 }
-                if (SmelterHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory)) {
+                if (SmelterHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory))
+                {
                     EnsureOneInInventory(playerInventory, __instance.m_fuelItem.m_itemData.m_shared.m_name);
                 }
             }
@@ -1644,13 +1960,17 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), "FindCookableItem")]
         class CookingStation_FindCookableItem_Patch
         {
-            static void Postfix(CookingStation __instance, Inventory inventory, ref ItemDrop.ItemData __result) {
-                if (__instance.m_conversion == null) {
+            static void Postfix(CookingStation __instance, Inventory inventory, ref ItemDrop.ItemData __result)
+            {
+                if (__instance.m_conversion == null)
+                {
                     return;
                 }
                 _feedCandidates.Clear();
-                foreach (var entry in __instance.m_conversion) {
-                    if (entry.m_from != null) {
+                foreach (var entry in __instance.m_conversion)
+                {
+                    if (entry.m_from != null)
+                    {
                         _feedCandidates.Add(entry.m_from);
                     }
                 }
@@ -1661,11 +1981,14 @@ namespace ValheimMod
         [HarmonyPatch(typeof(CookingStation), "OnAddFuelSwitch")]
         class CookingStation_OnAddFuelSwitch_Patch
         {
-            static void Prefix(CookingStation __instance, Humanoid user) {
-                if (__instance.m_fuelItem == null) {
+            static void Prefix(CookingStation __instance, Humanoid user)
+            {
+                if (__instance.m_fuelItem == null)
+                {
                     return;
                 }
-                if (CookingHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory)) {
+                if (CookingHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory))
+                {
                     EnsureOneInInventory(playerInventory, __instance.m_fuelItem.m_itemData.m_shared.m_name);
                 }
             }
@@ -1674,13 +1997,17 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Fermenter), "FindCookableItem")]
         class Fermenter_FindCookableItem_Patch
         {
-            static void Postfix(Fermenter __instance, Inventory inventory, ref ItemDrop.ItemData __result) {
-                if (__instance.m_conversion == null) {
+            static void Postfix(Fermenter __instance, Inventory inventory, ref ItemDrop.ItemData __result)
+            {
+                if (__instance.m_conversion == null)
+                {
                     return;
                 }
                 _feedCandidates.Clear();
-                foreach (var entry in __instance.m_conversion) {
-                    if (entry.m_from != null) {
+                foreach (var entry in __instance.m_conversion)
+                {
+                    if (entry.m_from != null)
+                    {
                         _feedCandidates.Add(entry.m_from);
                     }
                 }
@@ -1691,13 +2018,17 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Turret), "FindAmmoItem")]
         class Turret_FindAmmoItem_Patch
         {
-            static void Postfix(Turret __instance, Inventory inventory, ref ItemDrop.ItemData __result) {
-                if (__instance.m_allowedAmmo == null) {
+            static void Postfix(Turret __instance, Inventory inventory, ref ItemDrop.ItemData __result)
+            {
+                if (__instance.m_allowedAmmo == null)
+                {
                     return;
                 }
                 _feedCandidates.Clear();
-                foreach (var entry in __instance.m_allowedAmmo) {
-                    if (entry.m_ammo != null) {
+                foreach (var entry in __instance.m_allowedAmmo)
+                {
+                    if (entry.m_ammo != null)
+                    {
                         _feedCandidates.Add(entry.m_ammo);
                     }
                 }
@@ -1708,11 +2039,14 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Fireplace), nameof(Fireplace.Interact))]
         class Fireplace_Interact_Patch
         {
-            static void Prefix(Fireplace __instance, Humanoid user) {
-                if (__instance.m_fuelItem == null) {
+            static void Prefix(Fireplace __instance, Humanoid user)
+            {
+                if (__instance.m_fuelItem == null)
+                {
                     return;
                 }
-                if (FireplaceHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory)) {
+                if (FireplaceHasFuelRoom(__instance) && BeginStationFeed(user, out Inventory playerInventory))
+                {
                     EnsureOneInInventory(playerInventory, __instance.m_fuelItem.m_itemData.m_shared.m_name);
                 }
             }
@@ -1721,17 +2055,46 @@ namespace ValheimMod
         [HarmonyPatch(typeof(ShieldGenerator), "OnAddFuel")]
         class ShieldGenerator_OnAddFuel_Patch
         {
-            static void Prefix(ShieldGenerator __instance, Humanoid user) {
-                if (__instance.m_fuelItems == null) {
+            static void Prefix(ShieldGenerator __instance, Humanoid user)
+            {
+                if (__instance.m_fuelItems == null)
+                {
                     return;
                 }
-                if (!ShieldGeneratorHasFuelRoom(__instance) || !BeginStationFeed(user, out Inventory playerInventory)) {
+                if (!ShieldGeneratorHasFuelRoom(__instance) || !BeginStationFeed(user, out Inventory playerInventory))
+                {
                     return;
                 }
-                foreach (var fuelItem in __instance.m_fuelItems) {
-                    if (fuelItem != null && EnsureOneInInventory(playerInventory, fuelItem.m_itemData.m_shared.m_name)) {
+                foreach (var fuelItem in __instance.m_fuelItems)
+                {
+                    if (fuelItem != null && EnsureOneInInventory(playerInventory, fuelItem.m_itemData.m_shared.m_name))
+                    {
                         return;
                     }
+                }
+            }
+        }
+
+        // Build range is derived, not stored: GetExtensions recomputes
+        //   m_buildRange = m_rangeBuild + extensionCount * m_extraRangePerLevel
+        // every couple of seconds and pushes the result into the coverage circle and the effect
+        // collider as well. Scaling the two public source fields once per station therefore widens
+        // the range, the visible circle and the collider together, where patching the derived
+        // m_buildRange or GetStationBuildRange would have moved the gameplay range while leaving
+        // the circle showing the old size.
+        //
+        // Both fields are scaled so an upgraded station keeps its proportions. Start runs once per
+        // placed station, so this cannot compound.
+        [HarmonyPatch(typeof(CraftingStation), nameof(CraftingStation.Start))]
+        class CraftingStation_Start_Patch
+        {
+            static void Postfix(CraftingStation __instance)
+            {
+                float multiplier = WorkstationRangeMultiplier.Value;
+                if (multiplier > 0f && multiplier != 1f)
+                {
+                    __instance.m_rangeBuild *= multiplier;
+                    __instance.m_extraRangePerLevel *= multiplier;
                 }
             }
         }
@@ -1743,9 +2106,11 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Tameable), "DecreaseRemainingTime")]
         class Tameable_DecreaseRemainingTime_Patch
         {
-            static void Prefix(ref float time) {
+            static void Prefix(ref float time)
+            {
                 float multiplier = TamingSpeedMultiplier.Value;
-                if (multiplier > 0f && multiplier != 1f) {
+                if (multiplier > 0f && multiplier != 1f)
+                {
                     time *= multiplier;
                 }
             }
@@ -1765,28 +2130,34 @@ namespace ValheimMod
         private static float _featherCapeMaxFallSpeed;
         private static float _featherCapeFallDamageModifier;
 
-        private static void ResolveFeatherCape() {
-            if (_featherCapeResolved) {
+        private static void ResolveFeatherCape()
+        {
+            if (_featherCapeResolved)
+            {
                 return;
             }
             ObjectDB odb = ObjectDB.instance;
-            if (odb == null) {
+            if (odb == null)
+            {
                 return;   // not loaded yet; try again on the next call
             }
             _featherCapeResolved = true;
             GameObject prefab = odb.GetItemPrefab("CapeFeather");
             ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
-            if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) {
+            if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null)
+            {
                 return;
             }
-            if (drop.m_itemData.m_shared.m_equipStatusEffect is SE_Stats stats) {
+            if (drop.m_itemData.m_shared.m_equipStatusEffect is SE_Stats stats)
+            {
                 _featherCapeMaxFallSpeed = stats.m_maxMaxFallSpeed;
                 _featherCapeFallDamageModifier = stats.m_fallDamageModifier;
                 Debug.Log($"Feather Cape slow fall: maxFallSpeed={_featherCapeMaxFallSpeed}, fallDamageModifier={_featherCapeFallDamageModifier}");
             }
         }
 
-        private static bool IsLocalPlayerSeman(SEMan seman) {
+        private static bool IsLocalPlayerSeman(SEMan seman)
+        {
             return SemanCharacterField != null
                 && ReferenceEquals(SemanCharacterField.GetValue(seman), Player.m_localPlayer);
         }
@@ -1794,17 +2165,21 @@ namespace ValheimMod
         [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyWalkVelocity))]
         class SEMan_ModifyWalkVelocity_Patch
         {
-            static void Postfix(SEMan __instance, ref Vector3 vel) {
-                if (!AlwaysSlowFall.Value || !IsLocalPlayerSeman(__instance)) {
+            static void Postfix(SEMan __instance, ref Vector3 vel)
+            {
+                if (!AlwaysSlowFall.Value || !IsLocalPlayerSeman(__instance))
+                {
                     return;
                 }
                 float limit = SlowFallMaxSpeed.Value;
-                if (limit <= 0f) {
+                if (limit <= 0f)
+                {
                     ResolveFeatherCape();
                     limit = _featherCapeMaxFallSpeed;
                 }
                 // Clamping is idempotent, so this is harmless while actually wearing the cape
-                if (limit > 0f && vel.y < 0f - limit) {
+                if (limit > 0f && vel.y < 0f - limit)
+                {
                     vel.y = 0f - limit;
                 }
             }
@@ -1813,13 +2188,16 @@ namespace ValheimMod
         [HarmonyPatch(typeof(SEMan), nameof(SEMan.ModifyFallDamage))]
         class SEMan_ModifyFallDamage_Patch
         {
-            static void Postfix(SEMan __instance, float baseDamage, ref float damage) {
-                if (!AlwaysSlowFall.Value || !SlowFallNegatesFallDamage.Value || !IsLocalPlayerSeman(__instance)) {
+            static void Postfix(SEMan __instance, float baseDamage, ref float damage)
+            {
+                if (!AlwaysSlowFall.Value || !SlowFallNegatesFallDamage.Value || !IsLocalPlayerSeman(__instance))
+                {
                     return;
                 }
                 ResolveFeatherCape();
                 damage += baseDamage * _featherCapeFallDamageModifier;
-                if (damage < 0f) {
+                if (damage < 0f)
+                {
                     damage = 0f;
                 }
             }
@@ -1836,12 +2214,15 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.GetTotalWeight))]
         class Inventory_GetTotalWeight_Patch
         {
-            static void Postfix(Inventory __instance, ref float __result) {
-                if (!WeightlessPlayerInventory.Value || __result == 0f) {
+            static void Postfix(Inventory __instance, ref float __result)
+            {
+                if (!WeightlessPlayerInventory.Value || __result == 0f)
+                {
                     return;
                 }
                 Player player = Player.m_localPlayer;
-                if (player != null && ReferenceEquals(__instance, player.GetInventory())) {
+                if (player != null && ReferenceEquals(__instance, player.GetInventory()))
+                {
                     __result = 0f;
                 }
             }
@@ -1850,7 +2231,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Character), nameof(Character.ShowPickupMessage))]
         class Character_ShowPickupMessage_Patch
         {
-            static bool Prefix() {
+            static bool Prefix()
+            {
                 return !SuppressPickupMessages.Value;
             }
         }
@@ -1858,7 +2240,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Character), nameof(Character.ShowRemovedMessage))]
         class Character_ShowRemovedMessage_Patch
         {
-            static bool Prefix() {
+            static bool Prefix()
+            {
                 return !SuppressRemovedMessages.Value;
             }
         }
@@ -1876,64 +2259,93 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), nameof(Player.Message))]
         class Player_Message_Patch
         {
-            static bool Prefix(MessageHud.MessageType type, string msg) {
-                if (msg == null) {
+            static bool Prefix(MessageHud.MessageType type, string msg)
+            {
+                if (msg == null)
+                {
                     return true;
                 }
-                if (SuppressSkillMessages.Value && msg.StartsWith("$msg_skillup", StringComparison.Ordinal)) {
+                if (SuppressSkillMessages.Value && msg.StartsWith("$msg_skillup", StringComparison.Ordinal))
+                {
                     return false;
                 }
                 if (SuppressStationAddedMessages.Value
                     && type == MessageHud.MessageType.Center
-                    && msg.StartsWith("$msg_added", StringComparison.Ordinal)) {
+                    && msg.StartsWith("$msg_added", StringComparison.Ordinal))
+                {
                     return false;
                 }
                 // A fill repeats the add dozens of times; each pass would otherwise shout about it
-                if (_suppressFillMessages && type == MessageHud.MessageType.Center) {
+                if (_suppressFillMessages && type == MessageHud.MessageType.Center)
+                {
                     return false;
                 }
                 return true;
             }
         }
 
-        [HarmonyPatch(typeof(CinematicsManager), "Awake")]
-        class CinematicsManager_Awake_Patch
+        [HarmonyPatch(typeof(Player), "UseEitr")]
+        class Player_UseEitr_Patch
         {
-            static void Postfix(CinematicsManager __instance) {
-                if (SkipIntroCinematic.Value) {
-                    __instance.m_introOnStartup = false;
+            static void Prefix(Player __instance, ref float v)
+            {
+                // Only apply to local player
+                if (__instance == Player.m_localPlayer)
+                {
+                    v *= CustomEitrRate.Value;
                 }
             }
         }
 
-        [HarmonyPatch(typeof(Player), "UseEitr")]
-        class Player_UseEitr_Patch
-        {
-            static void Prefix(Player __instance, ref float v) {
-                // Only apply to local player
-                if (__instance == Player.m_localPlayer) {
-                    v *= CustomEitrRate.Value;
-                }
+        /// <summary>
+        /// Puts health back to the floor if anything managed to push it under.
+        ///
+        /// The prefix that scales an incoming hit is a prediction: it decides what to allow based
+        /// on the health it can see at that moment. This runs afterwards on the result, so it holds
+        /// no matter how many hits land together, in what order, or whether some path reduced
+        /// health without consulting the gate at all.
+        /// </summary>
+        private static void EnforceHealthFloor(Character character) {
+            if (MinHealthPercent.Value <= 0f || character == null || !ReferenceEquals(character, Player.m_localPlayer)) {
+                return;
+            }
+            if (character.IsDead()) {
+                return;
+            }
+            float floor = character.GetMaxHealth() * MinHealthPercent.Value;
+            if (character.GetHealth() < floor) {
+                character.SetHealth(floor);
             }
         }
 
         [HarmonyPatch(typeof(Character), "UseHealth")]
         class Character_UseHealth_Patch
         {
-            static void Prefix(ref Character __instance, ref float hp) {
+            static void Prefix(ref Character __instance, ref float hp)
+            {
                 // Blood magic spends health instead of eitr, so the eitr rate doubles as the
                 // magic-cost multiplier. Local player only, matching UseEitr and UseStamina.
-                if (__instance == Player.m_localPlayer) {
+                if (__instance == Player.m_localPlayer)
+                {
                     hp *= CustomEitrRate.Value;
                 }
+            }
+
+            // UseHealth subtracts straight from health and clamps at zero, never consulting the
+            // damage gate, so the floor has to be reapplied here too
+            static void Postfix(Character __instance)
+            {
+                EnforceHealthFloor(__instance);
             }
         }
 
         [HarmonyPatch(typeof(Humanoid), "EquipItem")]
         class Player_UpdateMovementModifier_Patch
         {
-            static void Prefix(ref ItemDrop.ItemData item) {
-                if (NegateEquipmentMovementPenalty.Value && item.m_shared.m_movementModifier < 0) {
+            static void Prefix(ref ItemDrop.ItemData item)
+            {
+                if (NegateEquipmentMovementPenalty.Value && item.m_shared.m_movementModifier < 0)
+                {
                     item.m_shared.m_movementModifier = 0;
                 }
             }
@@ -1942,8 +2354,10 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Character), nameof(Character.ApplyPushback), new Type[] { typeof(Vector3), typeof(float) })]
         class Character_ApplyPushback_Patch
         {
-            static void Prefix(ref float pushForce) {
-                if (NegateKnockback.Value) {
+            static void Prefix(ref float pushForce)
+            {
+                if (NegateKnockback.Value)
+                {
                     pushForce = 0f;
                 }
             }
@@ -1953,12 +2367,15 @@ namespace ValheimMod
         class Skill_Raise_Patch
         {
             [HarmonyPostfix]
-            static void Postfix(ref Skills.Skill __instance) {
+            static void Postfix(ref Skills.Skill __instance)
+            {
                 // This readout calls ShowMessage directly, so the Player.Message filter never sees it
-                if (SuppressSkillMessages.Value) {
+                if (SuppressSkillMessages.Value)
+                {
                     return;
                 }
-                if (__instance.m_level < 100f) {
+                if (__instance.m_level < 100f)
+                {
                     _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, $"{__instance.m_info.m_skill} ({__instance.m_level:N0}):  {__instance.GetLevelPercentage():P3}");
                 }
             }
@@ -1967,7 +2384,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Odin), "Awake")]
         class Odin_Awake_Patch
         {
-            static void Postfix(ref float ___m_despawnCloseDistance) {
+            static void Postfix(ref float ___m_despawnCloseDistance)
+            {
                 ___m_despawnCloseDistance = 1f;
             }
         }
@@ -1975,7 +2393,8 @@ namespace ValheimMod
         [HarmonyPatch(typeof(ResourceRoot), "Drain")]
         class ResourceRoot_Drain_Patch
         {
-            static void Postfix(ref float ___m_regenPerSec) {
+            static void Postfix(ref float ___m_regenPerSec)
+            {
                 ___m_regenPerSec = 20f;
             }
         }
@@ -1986,10 +2405,14 @@ namespace ValheimMod
             // Gain and degeneration are both scaled here. Applying degeneration from a postfix that
             // called AddAdrenaline again re-entered this patch, and the correction diverged once the
             // degen rate reached 2.
-            static void Prefix(ref float v) {
-                if (v > 0f) {
+            static void Prefix(ref float v)
+            {
+                if (v > 0f)
+                {
                     v *= CustomAdrenalineGainRate.Value;
-                } else if (v < 0f) {
+                }
+                else if (v < 0f)
+                {
                     v *= CustomAdrenalineDegenRate.Value;
                 }
             }
@@ -1998,21 +2421,40 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), "UseStamina")]
         class Player_UseStamina_PlayerSpecific_Patch
         {
-            static void Prefix(Player __instance, ref float v) {
+            static void Prefix(Player __instance, ref float v)
+            {
                 // Only apply to local player
-                if (__instance == Player.m_localPlayer) {
+                if (__instance == Player.m_localPlayer)
+                {
                     v *= CustomStaminaRate.Value;
                 }
             }
         }
 
-        [HarmonyPatch(typeof(Player), "RaiseSkill")]
-        class Player_RaiseSkill_PlayerSpecific_Patch
+        // Patched on Skills rather than Player deliberately. Player.RaiseSkill only forwards to
+        // m_skills.RaiseSkill, and several things skip the Player method and call the Skills
+        // component straight: dodging (Player.cs twice), the owner skill from a tamed creature
+        // (Character.cs) and the skill credited when a shield breaks (SE_Shield.cs). Patching
+        // Player.RaiseSkill therefore missed all of those. Skills.RaiseSkill is the real sink that
+        // every path ends at - including Player.RaiseSkill - so one patch covers everything.
+        //
+        // Must not be combined with a Player.RaiseSkill patch: skills routed through both would be
+        // multiplied twice.
+        private static readonly FieldInfo SkillsPlayerField = AccessTools.Field(typeof(Skills), "m_player");
+
+        [HarmonyPatch(typeof(Skills), nameof(Skills.RaiseSkill))]
+        class Skills_RaiseSkill_Patch
         {
-            static void Prefix(Player __instance, ref float value) {
-                // Only apply to local player
-                if (__instance == Player.m_localPlayer) {
-                    value *= CustomSkillGainRate.Value;
+            static void Prefix(Skills __instance, ref float factor)
+            {
+                if (SkillsPlayerField == null)
+                {
+                    return;
+                }
+                // m_player is private in the shipped assembly, so it comes through AccessTools
+                if (ReferenceEquals(SkillsPlayerField.GetValue(__instance), Player.m_localPlayer))
+                {
+                    factor *= CustomSkillGainRate.Value;
                 }
             }
         }
@@ -2020,46 +2462,70 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Character), "ApplyDamage")]
         class Character_ApplyDamage_PlayerSpecific_Patch
         {
-            static bool Prefix(Character __instance, HitData hit, bool showDamageText, bool triggerEffects, HitData.DamageModifier mod) {
+            static bool Prefix(Character __instance, HitData hit, bool showDamageText, bool triggerEffects, HitData.DamageModifier mod)
+            {
                 // Handle damage dealt BY the local player TO enemies
-                if (hit.GetAttacker() == Player.m_localPlayer && !__instance.IsPlayer()) {
+                if (hit.GetAttacker() == Player.m_localPlayer && !__instance.IsPlayer())
+                {
                     hit.ApplyModifier(CustomPlayerDamageRate.Value);
                     return true; // Continue with original method
                 }
 
                 // Handle damage taken BY the local player
-                if (__instance == Player.m_localPlayer) {
+                if (__instance == Player.m_localPlayer)
+                {
                     Player player = __instance as Player;
                     float currentHealth = player.GetHealth();
                     float maxHealth = player.GetMaxHealth();
-                    float healthPercentage = currentHealth / maxHealth;
-
-                    // Calculate total incoming damage before any modifiers
                     float totalDamage = hit.GetTotalDamage();
-
-                    if (healthPercentage <= 0.25f) {
-                        // Below 25% health: nullify all damage
-                        return false; // Skip the original method entirely
-                    } else if (healthPercentage <= 0.5f) {
-                        // 25-50% health: cap damage at 10% of current health (very protective)
-                        float maxAllowedDamage = currentHealth * 0.1f;
-                        if (totalDamage > maxAllowedDamage) {
-                            float reductionFactor = maxAllowedDamage / totalDamage;
-                            hit.ApplyModifier(reductionFactor);
-                        }
-                        return true;
-                    } else {
-                        // Above 50% health: cap damage at 25% of current health  
-                        float maxAllowedDamage = currentHealth * 0.25f;
-                        if (totalDamage > maxAllowedDamage) {
-                            float reductionFactor = maxAllowedDamage / totalDamage;
-                            hit.ApplyModifier(reductionFactor);
-                        }
+                    if (totalDamage <= 0f)
+                    {
                         return true;
                     }
+
+                    // An absolute floor rather than only a per-hit percentage. The old rule capped
+                    // each hit at a share of current health, which quietly assumed damage always
+                    // arrives one manageable hit at a time. A floor holds however large a single
+                    // burst is and however many land together.
+                    float floor = maxHealth * MinHealthPercent.Value;
+                    float allowed = currentHealth - floor;
+                    if (allowed <= 0f)
+                    {
+                        return false; // already at or under the floor
+                    }
+
+                    // ApplyDamage multiplies the hit by this after we return, so budget for it or
+                    // the floor is breached on any world with a raised damage-taken rate
+                    float takenRate = Game.m_localDamgeTakenRate;
+                    if (takenRate > 0f)
+                    {
+                        allowed /= takenRate;
+                    }
+
+                    // Keep the original pacing caps layered on top of the floor
+                    float healthPercentage = currentHealth / maxHealth;
+                    allowed = Mathf.Min(allowed, currentHealth * (healthPercentage <= 0.5f ? 0.1f : 0.25f));
+
+                    if (totalDamage > allowed)
+                    {
+                        hit.ApplyModifier(allowed / totalDamage);
+                    }
+                    if (LogPlayerDamage.Value)
+                    {
+                        Debug.Log($"Damage gate: type={hit.m_hitType} incoming={totalDamage:0.#} allowed={allowed:0.#} health={currentHealth:0.#}/{maxHealth:0.#}");
+                    }
+                    return true;
                 }
-                return true; // Continue with the original method for all other cases
+                return true;
+            }
+
+            // The prefix predicts from the health it can see; this checks the outcome, so batched
+            // or out-of-order hits cannot land below the floor between predictions
+            static void Postfix(Character __instance)
+            {
+                EnforceHealthFloor(__instance);
             }
         }
+
     }
 }

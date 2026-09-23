@@ -1,7 +1,7 @@
 ## Release 1.1.0
 
 - Updated for Valheim 1.0
-- Add 495 new Valheim 1.0 items to the default ignore list
+- Add 497 new Valheim 1.0 items to the default ignore list
 - Skip item drops that have been converted to build pieces
 - Ignored items no longer stop other items in range from being picked up
 
