@@ -41,10 +41,10 @@ namespace ValheimMod
         private static ConfigEntry<float> CustomPlayerDamageRate;
         private static ConfigEntry<float> CustomAdrenalineGainRate;
         private static ConfigEntry<float> CustomAdrenalineDegenRate;
-        private static ConfigEntry<bool> NoPlacementCost;
         private static ConfigEntry<bool> ShowClock;
         private static ConfigEntry<bool> Clock24Hour;
         private static ConfigEntry<bool> ClockShowDay;
+        private static ConfigEntry<bool> ShowCoordinates;
         private static ConfigEntry<int> ClockFontSize;
         private static ConfigEntry<float> ClockPositionX;
         private static ConfigEntry<float> ClockPositionY;
@@ -58,6 +58,9 @@ namespace ValheimMod
         private static ConfigEntry<float> ContainerRange;
         private static ConfigEntry<float> MinHealthPercent;
         private static ConfigEntry<bool> LogPlayerDamage;
+        private static ConfigEntry<KeyCode> MassPlantKey;
+        private static ConfigEntry<int> MassPlantGridSize;
+        private static ConfigEntry<float> MassPlantSpacing;
         private static ConfigEntry<float> WorkstationRangeMultiplier;
         private static ConfigEntry<float> TamingSpeedMultiplier;
         private static ConfigEntry<bool> AlwaysSlowFall;
@@ -139,10 +142,10 @@ namespace ValheimMod
             CustomPlayerDamageRate = Config.Bind("General", "CustomPlayerDamageRate", 1f, "Custom player damage rate");
             CustomAdrenalineGainRate = Config.Bind("General", "CustomAdrenalineGainRate", 1f, "Custom adrenaline gain rate multiplier");
             CustomAdrenalineDegenRate = Config.Bind("General", "CustomAdrenalineDegenRate", 1f, "Custom adrenaline degeneration rate multiplier");
-            NoPlacementCost = Config.Bind("General", "NoPlacementCost", false, "No material cost for building/crafting");
             ShowClock = Config.Bind("Clock", "ShowClock", false, "Show the in-game day and time on screen.");
             Clock24Hour = Config.Bind("Clock", "Clock24Hour", true, "Show the time as 24-hour (14:30) rather than 12-hour (2:30 PM).");
             ClockShowDay = Config.Bind("Clock", "ClockShowDay", true, "Include the day number in the clock.");
+            ShowCoordinates = Config.Bind("Clock", "ShowCoordinates", false, "Show your position to the right of the clock. Altitude is measured from sea level, so 0 is the waterline. Shares the clock's position and font settings.");
             ClockFontSize = Config.Bind("Clock", "ClockFontSize", 18, new ConfigDescription("Font size of the clock text.", new AcceptableValueRange<int>(8, 48)));
             ClockPositionX = Config.Bind("Clock", "ClockPositionX", 12f, "Clock position in pixels from the left edge of the screen.");
             ClockPositionY = Config.Bind("Clock", "ClockPositionY", 12f, "Clock position in pixels from the top edge of the screen.");
@@ -159,6 +162,9 @@ namespace ValheimMod
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
             MinHealthPercent = Config.Bind("General", "MinHealthPercent", 0.25f, new ConfigDescription("Damage can never take you below this fraction of your maximum health. 0.25 keeps you at a quarter health no matter how big the hit. Set to 0 to disable the floor and take damage normally.", new AcceptableValueRange<float>(0f, 0.95f)));
             LogPlayerDamage = Config.Bind("General", "LogPlayerDamage", false, "Diagnostic. Logs every hit that reaches the damage gate, with its type, the raw amount, what the gate allowed through and your health at the time. Use it to find out what actually killed you.");
+            MassPlantKey = Config.Bind("Farming", "MassPlantKey", KeyCode.LeftShift, "Hold this while planting with the cultivator to plant a whole grid at once instead of a single seed.");
+            MassPlantGridSize = Config.Bind("Farming", "MassPlantGridSize", 5, new ConfigDescription("Width of the grid planted while the mass-plant key is held. 5 plants a 5x5 block of 25. Set to 1 to disable.", new AcceptableValueRange<int>(1, 11)));
+            MassPlantSpacing = Config.Bind("Farming", "MassPlantSpacing", 2f, "Spacing between plants, as a multiple of the plant's own grow radius. 2 is the tightest that reliably clears each plant's space check, since the check tests a sphere of that radius against neighbouring colliders. Lower it to pack tighter at the risk of some seeds being rejected.");
             WorkstationRangeMultiplier = Config.Bind("General", "WorkstationRangeMultiplier", 1f, "Multiplier for how far a workbench, forge or other crafting station reaches for building. 2 doubles the radius. The on-screen coverage circle scales with it. Applies to stations as they load, so change it before entering a world.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
@@ -256,6 +262,7 @@ namespace ValheimMod
 
             ApplyInventoryRows();
             UpdatePlayerLight();
+            UpdateMassPlantPreview();
         }
 
         // ---------------- Toggleable personal light ----------------
@@ -402,12 +409,12 @@ namespace ValheimMod
         // The text is plain: no rich-text markup, so nothing can leak a colour tag as visible glyphs.
         private void OnGUI()
         {
-            if (!ShowClock.Value || Player.m_localPlayer == null || Hud.IsUserHidden())
+            if ((!ShowClock.Value && !ShowCoordinates.Value) || Player.m_localPlayer == null || Hud.IsUserHidden())
             {
                 return;
             }
-            EnvMan env = EnvMan.instance;
-            if (env == null || ZNet.instance == null)
+            string line = BuildHudLine();
+            if (string.IsNullOrEmpty(line))
             {
                 return;
             }
@@ -421,8 +428,55 @@ namespace ValheimMod
                 };
                 _clockStyle.normal.textColor = Color.white;
             }
-            var area = new Rect(ClockPositionX.Value, ClockPositionY.Value, 420f, ClockFontSize.Value * 2f);
-            GUI.Label(area, BuildClockText(env), _clockStyle);
+            // Wide enough for clock and position together; the label is left-aligned so extra
+            // width simply goes unused when only one of them is on
+            var area = new Rect(ClockPositionX.Value, ClockPositionY.Value, 900f, ClockFontSize.Value * 2f);
+            GUI.Label(area, line, _clockStyle);
+        }
+
+        /// <summary>
+        /// Builds the single HUD line, joining whichever readouts are enabled so the position sits
+        /// to the right of the clock and either can be turned off without leaving a gap.
+        /// </summary>
+        private static string BuildHudLine()
+        {
+            string clock = null;
+            if (ShowClock.Value)
+            {
+                EnvMan env = EnvMan.instance;
+                if (env != null && ZNet.instance != null)
+                {
+                    clock = BuildClockText(env);
+                }
+            }
+            string coordinates = ShowCoordinates.Value ? BuildCoordinateText() : null;
+
+            if (string.IsNullOrEmpty(clock))
+            {
+                return coordinates;
+            }
+            if (string.IsNullOrEmpty(coordinates))
+            {
+                return clock;
+            }
+            return clock + "      " + coordinates;
+        }
+
+        /// <summary>
+        /// Altitude is reported relative to ZoneSystem's water level rather than raw world Y, so
+        /// the waterline reads as 0 the way players expect. X and Z stay as world coordinates,
+        /// which are the numbers the map and shared locations use.
+        /// </summary>
+        private static string BuildCoordinateText()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return null;
+            }
+            Vector3 position = player.transform.position;
+            float seaLevel = ZoneSystem.instance != null ? ZoneSystem.instance.m_waterLevel : 0f;
+            return $"X {position.x:0}   Y {position.z:0}   Alt {position.y - seaLevel:0}";
         }
 
         private static string BuildClockText(EnvMan env)
@@ -625,12 +679,11 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), "Awake")]
         class Player_Awake_Patch
         {
-            static void Postfix(ref float ___m_maxCarryWeight, ref bool ___m_noPlacementCost)
+            static void Postfix(ref float ___m_maxCarryWeight)
             {
                 Debug.Log($"Setting base maximum carry weight.");
                 ___m_maxCarryWeight = (float)CustomMaxCarryWeight.Value;
                 Debug.Log($"Base max carry weight: {___m_maxCarryWeight}");
-                ___m_noPlacementCost = NoPlacementCost.Value;
             }
         }
 
@@ -2099,6 +2152,238 @@ namespace ValheimMod
             }
         }
 
+        // ---------------- Mass planting ----------------
+        // Vanilla plants exactly one seed per click: UpdatePlacement checks requirements, calls
+        // TryPlacePiece (which validates the ghost and calls PlacePiece at the ghost's transform),
+        // then consumes the resources. PlacePiece happily takes an arbitrary position, so the grid
+        // is built by calling it directly for the surrounding cells.
+        //
+        // The ghost's validation can't be reused for those cells - UpdatePlacementGhost recomputes
+        // the position from the camera ray, so moving the ghost and re-validating is not possible.
+        // The two checks that matter for a seed are replicated instead: cultivated ground, and the
+        // clear radius Plant.HaveGrowSpace demands. Cells that fail are skipped rather than
+        // aborting the batch, so one bad square doesn't cost you the planting.
+        private static readonly FieldInfo PlayerPlacementGhostField = AccessTools.Field(typeof(Player), "m_placementGhost");
+        private static readonly FieldInfo PlayerNoPlacementCostField = AccessTools.Field(typeof(Player), "m_noPlacementCost");
+        private static readonly Collider[] _plantColliders = new Collider[128];
+        private static int _plantSpaceMask;
+        private static readonly List<GameObject> _plantPreviews = new List<GameObject>();
+        private static string _previewPieceName;
+
+        /// <summary>
+        /// Computes a grid cell's world position and whether a seed would take there. Shared by the
+        /// preview and the planting itself so what you see is what you get - if this ever drifted,
+        /// the preview would start lying about the result.
+        /// </summary>
+        private static bool TryGetPlantCell(Vector3 centre, Quaternion rotation, float spacing, int gx, int gz,
+                                            Piece piece, Plant plant, out Vector3 position) {
+            position = centre + rotation * new Vector3(gx * spacing, 0f, gz * spacing);
+            if (!Heightmap.GetHeight(position, out float groundHeight)) {
+                return false;
+            }
+            position.y = groundHeight;
+            if (piece.m_cultivatedGroundOnly) {
+                Heightmap heightmap = Heightmap.FindHeightmap(position);
+                if (heightmap == null || !heightmap.IsCultivated(position)) {
+                    return false;
+                }
+            }
+            return HasGrowSpaceAt(position, plant.m_growRadius);
+        }
+
+        private static void ClearPlantPreviews() {
+            for (int i = 0; i < _plantPreviews.Count; i++) {
+                if (_plantPreviews[i] != null) {
+                    UnityEngine.Object.Destroy(_plantPreviews[i]);
+                }
+            }
+            _plantPreviews.Clear();
+            _previewPieceName = null;
+        }
+
+        /// <summary>
+        /// Clones the live placement ghost rather than rebuilding one from the prefab. The ghost has
+        /// already had its rigidbodies, joints, lights and colliders stripped or disabled by
+        /// SetupPlacementGhost, so a clone inherits all of that - including the disabled colliders,
+        /// which is what stops the previews from registering as obstructions in each other's space
+        /// checks. The two force-disable flags mirror the guards the game itself uses.
+        /// </summary>
+        private static GameObject ClonePlacementGhost(GameObject ghost) {
+            bool previousInit = ZNetView.m_forceDisableInit;
+            bool previousTerrain = TerrainOp.m_forceDisableTerrainOps;
+            ZNetView.m_forceDisableInit = true;
+            TerrainOp.m_forceDisableTerrainOps = true;
+            try {
+                GameObject clone = UnityEngine.Object.Instantiate(ghost);
+                clone.name = ghost.name + "_PipsMassPlantPreview";
+
+                // Plant derives from SlowUpdate, whose Awake registers every instance into a
+                // static list that SlowUpdater walks - and SUpdate is the only thing that ever
+                // grows a plant. Leaving the Plant component on a preview would put two dozen
+                // throwaway objects into that registry and churn its index-based swap-removal
+                // every time the previews are rebuilt. A preview only has to look like a plant,
+                // so the component goes immediately, deregistering it in the same breath.
+                Plant previewPlant = clone.GetComponent<Plant>();
+                if (previewPlant != null) {
+                    UnityEngine.Object.DestroyImmediate(previewPlant);
+                }
+                return clone;
+            }
+            finally {
+                ZNetView.m_forceDisableInit = previousInit;
+                TerrainOp.m_forceDisableTerrainOps = previousTerrain;
+            }
+        }
+
+        private static void UpdateMassPlantPreview() {
+            Player player = Player.m_localPlayer;
+            if (player == null || MassPlantGridSize.Value <= 1 || !Input.GetKey(MassPlantKey.Value)) {
+                ClearPlantPreviews();
+                return;
+            }
+            GameObject ghost = PlayerPlacementGhostField?.GetValue(player) as GameObject;
+            if (ghost == null || !ghost.activeSelf) {
+                ClearPlantPreviews();
+                return;
+            }
+            Piece piece = ghost.GetComponent<Piece>();
+            Plant plant = ghost.GetComponent<Plant>();
+            if (piece == null || plant == null) {
+                ClearPlantPreviews();
+                return;
+            }
+
+            int needed = MassPlantGridSize.Value * MassPlantGridSize.Value - 1;
+            if (_previewPieceName != ghost.name || _plantPreviews.Count != needed) {
+                ClearPlantPreviews();
+                _previewPieceName = ghost.name;
+                for (int i = 0; i < needed; i++) {
+                    _plantPreviews.Add(ClonePlacementGhost(ghost));
+                }
+            }
+
+            Vector3 centre = ghost.transform.position;
+            Quaternion rotation = ghost.transform.rotation;
+            float spacing = Mathf.Max(0.1f, plant.m_growRadius * MassPlantSpacing.Value);
+            int half = MassPlantGridSize.Value / 2;
+            int index = 0;
+            for (int gx = -half; gx <= half; gx++) {
+                for (int gz = -half; gz <= half; gz++) {
+                    if (gx == 0 && gz == 0) {
+                        continue;   // the real ghost already stands here
+                    }
+                    if (index >= _plantPreviews.Count) {
+                        return;
+                    }
+                    GameObject preview = _plantPreviews[index++];
+                    if (preview == null) {
+                        continue;
+                    }
+                    bool valid = TryGetPlantCell(centre, rotation, spacing, gx, gz, piece, plant, out Vector3 position);
+                    preview.transform.SetPositionAndRotation(position, rotation);
+                    preview.GetComponent<Piece>()?.SetInvalidPlacementHeightlight(!valid);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.TryPlacePiece))]
+        class Player_TryPlacePiece_MassPlant_Patch
+        {
+            static void Postfix(Player __instance, Piece piece, bool __result) {
+                if (!__result || piece == null || MassPlantGridSize.Value <= 1) {
+                    return;
+                }
+                if (!ReferenceEquals(__instance, Player.m_localPlayer) || !Input.GetKey(MassPlantKey.Value)) {
+                    return;
+                }
+                Plant plant = piece.GetComponent<Plant>();
+                if (plant != null) {
+                    MassPlant(__instance, piece, plant);
+                }
+            }
+        }
+
+        private static bool PlayerHasFreeBuild(Player player) {
+            return PlayerNoPlacementCostField != null
+                && (bool)PlayerNoPlacementCostField.GetValue(player);
+        }
+
+        /// <summary>
+        /// Replicates Plant.HaveGrowSpace for a point that has no Plant on it yet. Any non-plant
+        /// collider inside the radius blocks, as does any healthy neighbouring plant - matching the
+        /// game's own rule, so anything this accepts would also satisfy the plant once placed.
+        /// </summary>
+        private static bool HasGrowSpaceAt(Vector3 position, float growRadius) {
+            if (_plantSpaceMask == 0) {
+                _plantSpaceMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "piece_nonsolid");
+            }
+            int hits = Physics.OverlapSphereNonAlloc(position, growRadius, _plantColliders, _plantSpaceMask);
+            for (int i = 0; i < hits; i++) {
+                Plant other = _plantColliders[i].GetComponent<Plant>();
+                if (other == null || other.GetStatus() == Plant.Status.Healthy) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static void MassPlant(Player player, Piece piece, Plant plant) {
+            GameObject ghost = PlayerPlacementGhostField?.GetValue(player) as GameObject;
+            if (ghost == null) {
+                return;
+            }
+            // These statics are what the preview sets while cloning ghosts. If either were still
+            // set here the plants would be instantiated without a ZDO, which is silently ruinous:
+            // Plant.m_status defaults to Healthy and GetHoverText reads it without checking
+            // validity, while SUpdate - the only thing that grows a plant - bails out on an invalid
+            // ZNetView. The result looks like a healthy crop that never grows and never saves.
+            ZNetView.m_forceDisableInit = false;
+            TerrainOp.m_forceDisableTerrainOps = false;
+
+            Vector3 centre = ghost.transform.position;
+            Quaternion rotation = ghost.transform.rotation;
+            float spacing = Mathf.Max(0.1f, plant.m_growRadius * MassPlantSpacing.Value);
+            bool freeBuild = PlayerHasFreeBuild(player)
+                || (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(piece.FreeBuildKey()));
+
+            int half = MassPlantGridSize.Value / 2;
+            int planted = 0;
+            for (int gx = -half; gx <= half; gx++) {
+                for (int gz = -half; gz <= half; gz++) {
+                    if (gx == 0 && gz == 0) {
+                        continue;   // vanilla already placed the centre
+                    }
+                    // Same cell logic the preview uses, so the red squares are exactly the ones skipped
+                    if (!TryGetPlantCell(centre, rotation, spacing, gx, gz, piece, plant, out Vector3 position)) {
+                        continue;
+                    }
+                    // Checked per seed so the batch stops cleanly when the last one is used
+                    if (!freeBuild && !player.HaveRequirements(piece, Player.RequirementMode.CanBuild)) {
+                        break;
+                    }
+
+                    player.PlacePiece(piece, position, rotation, doAttack: false);
+                    if (!freeBuild) {
+                        player.ConsumeResources(piece.m_resources, 0);
+                    }
+                    planted++;
+                }
+            }
+
+            if (planted > 0 && _messageHud != null) {
+                _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, $"Planted {planted + 1}");
+            }
+
+            // Grow time is serialised per prefab and picked per plant by lerping between these two
+            // with a seed, so the real window is only visible at runtime. Reported in days as well
+            // as seconds because a Valheim day is m_dayLengthSec, not 24 hours of anything.
+            if (planted > 0) {
+                float dayLength = EnvMan.instance != null ? EnvMan.instance.m_dayLengthSec : 1200f;
+                Debug.Log($"{piece.gameObject.name} grow time: {plant.m_growTime:0}-{plant.m_growTimeMax:0}s "
+                        + $"({plant.m_growTime / dayLength:0.0}-{plant.m_growTimeMax / dayLength:0.0} in-game days)");
+            }
+        }
+
         // Taming progress is a countdown in the creature's ZDO, and TamingUpdate credits it three
         // seconds at a time via DecreaseRemainingTime. Scaling that argument is how the game itself
         // speeds taming up - the vanilla TamingBoost status attribute multiplies the very same
@@ -2305,15 +2590,19 @@ namespace ValheimMod
         /// no matter how many hits land together, in what order, or whether some path reduced
         /// health without consulting the gate at all.
         /// </summary>
-        private static void EnforceHealthFloor(Character character) {
-            if (MinHealthPercent.Value <= 0f || character == null || !ReferenceEquals(character, Player.m_localPlayer)) {
+        private static void EnforceHealthFloor(Character character)
+        {
+            if (MinHealthPercent.Value <= 0f || character == null || !ReferenceEquals(character, Player.m_localPlayer))
+            {
                 return;
             }
-            if (character.IsDead()) {
+            if (character.IsDead())
+            {
                 return;
             }
             float floor = character.GetMaxHealth() * MinHealthPercent.Value;
-            if (character.GetHealth() < floor) {
+            if (character.GetHealth() < floor)
+            {
                 character.SetHealth(floor);
             }
         }
