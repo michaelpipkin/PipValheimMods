@@ -28,6 +28,9 @@ namespace ValheimMod
         private static ConfigEntry<bool> DumpRealItemsOnly;
         private static ConfigEntry<bool> PassiveForsakenPowers;
         private static ConfigEntry<bool> HidePassivePowerIcons;
+        private static ConfigEntry<bool> LogConsoleOutput;
+        private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
+        private static ConfigEntry<bool> StatBucketRepairApply;
 
         // Config values
         private static ConfigEntry<float> CustomResourceRate;
@@ -170,6 +173,8 @@ namespace ValheimMod
             MassPlantGridSize = Config.Bind("Farming", "MassPlantGridSize", 5, new ConfigDescription("Width of the grid planted while the mass-plant key is held. 5 plants a 5x5 block of 25. Set to 1 to disable.", new AcceptableValueRange<int>(1, 11)));
             PassiveForsakenPowers = Config.Bind("Powers", "PassiveForsakenPowers", true,
                 "Keep every forsaken power this character has unlocked permanently active - no selecting, no activating, no cooldown. A power counts as unlocked once you have selected it at its stone, which the game records on the character rather than in the world, so unlocked powers follow you into any world. Powers carrying a networked status attribute (Moder's sailing power) stay off in a shared session, since that flag reaches any ship you are aboard.");
+            LogConsoleOutput = Config.Bind("General", "LogConsoleOutput", true,
+                "Mirror in-game console output to the BepInEx log. The console keeps only a few lines and cannot be scrolled, so commands with long output - 'achievements' in particular - are unreadable in game without this.");
             HidePassivePowerIcons = Config.Bind("Powers", "HidePassivePowerIcons", true,
                 "Keep passively held forsaken powers out of the status effect row. They are always on, so the icons carry no information and just crowd out effects that change. Only affects powers this mod is holding - a power you activate yourself, or one a nearby player grants you, still shows normally.");
             MassPlantSpacing = Config.Bind("Farming", "MassPlantSpacing", 2f, "Spacing between plants, as a multiple of the plant's own grow radius. 2 is the tightest that reliably clears each plant's space check, since the check tests a sphere of that radius against neighbouring colliders. Lower it to pack tighter at the risk of some seeds being rejected.");
@@ -194,6 +199,10 @@ namespace ValheimMod
 
             RepairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, heal player, replenish ammo, and spawn or replenish favorite foods");
             DumpRealItemsOnly = Config.Bind("General", "DumpRealItemsOnly", true, "Limit the item dump to real items. Creature attack prefabs carry plain text in place of a localisation token, and character customisation uses $customization, so both are dropped. Turn off to dump every entry in ObjectDB.");
+            StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
+                "Reports achievement stats that the vanilla bucket-latch bug has frozen, and repairs them when StatBucketRepairApply is on. Must be pressed in a loaded world.");
+            StatBucketRepairApply = Config.Bind("General", "StatBucketRepairApply", false,
+                "Let the stat bucket repair hotkey actually write to the character profile. Off means it only reports what it would change. Back up the character .fch file before turning this on.");
             DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,FishAndBread,SeekerAspic", "Comma-separated list of foods to spawn");
@@ -268,6 +277,11 @@ namespace ValheimMod
             if (DumpItemListHotkey.Value.IsDown())
             {
                 DumpItemList();
+            }
+
+            if (StatBucketRepairHotkey.Value.IsDown())
+            {
+                RepairStatBuckets();
             }
 
             ApplyInventoryRows();
@@ -2561,6 +2575,155 @@ namespace ValheimMod
         private static void ApplyResourceRate() {
             float multiplier = SoloOnlyRate(CustomResourceRate);
             Game.m_resourceRate = multiplier != 1f ? multiplier : _vanillaResourceRate;
+        }
+
+        // ---------------- Achievement stat bucket repair ----------------
+        // Vanilla keeps achievement stats in one bucket per DifficultyRequirement. Writes go to
+        // bucket 0 (RawStats) unconditionally and to bucket 1 (Any) plus the bucket for the world's
+        // current combat difficulty when CanGetAchievements() passes - see PlayerProfile.SetStat.
+        //
+        // Stats that record a maximum rather than a running total are updated with a read-modify-
+        // write that reads *one* bucket and writes *three*:
+        //
+        //     float stat  = GetStat(ConsecutiveDaysSurvived);       // reads the CURRENT bucket
+        //     float stat2 = GetStat(ConsecutiveDaysSurvivedMax);    // reads the CURRENT bucket
+        //     if (stat > stat2) SetStat(ConsecutiveDaysSurvivedMax, stat);   // writes 0, 1 and current
+        //
+        // Once the current difficulty bucket runs ahead of buckets 0 and 1, the guard keeps
+        // comparing against that larger value, the write never fires again, and the other buckets
+        // stay frozen for good. Achievements declaring DifficultyRequirement.Any read bucket 1, so
+        // they report as locked no matter how much more the player does. This is what un-learns
+        // The Survivor, Comfort is King, Mighty Halls and The Architect after a 1.0 relog, and
+        // playing more cannot undo it.
+        //
+        // Only buckets 0 and 1 are touched here. They are the difficulty agnostic ones that vanilla
+        // already intends to hold the unconditional totals, so raising them to the best value the
+        // game itself recorded is a repair. The per-difficulty buckets are deliberately left alone:
+        // those encode that something was achieved *on that difficulty*, and writing them would be
+        // granting an achievement rather than restoring one.
+        private const int RawStatsBucket = 0;
+        private const int AnyBucket = 1;
+
+        /// <summary>
+        /// The stats maintained by the read-one-bucket, write-three-buckets idiom, and therefore the
+        /// only ones that can latch. Running totals go through IncrementStat, which writes every
+        /// bucket it should unconditionally, so they stay consistent and are left out.
+        /// </summary>
+        private static IEnumerable<PlayerStatType> LatchedStats()
+        {
+            yield return PlayerStatType.ConsecutiveDaysSurvivedMax;
+            yield return PlayerStatType.MaxComfort;
+            yield return PlayerStatType.MaxBuildingHeight;
+            yield return PlayerStatType.MaxBuildingHeightWorld;
+            // Piece.CheckClusteredBuildPieceStats guards every build tag the same way. Walking the
+            // enum by name rather than the literal 171 the game uses keeps this correct if Iron
+            // Gate inserts entries ahead of the block.
+            for (int i = (int)PlayerStatType.BuildClusterMisc; i <= (int)PlayerStatType.BuildClusterSeasonal; i++)
+            {
+                yield return (PlayerStatType)i;
+            }
+        }
+
+        private static void RepairStatBuckets()
+        {
+            Game game = Game.instance;
+            PlayerProfile profile = game != null ? game.GetPlayerProfile() : null;
+            if (profile == null || profile.m_playerStats == null)
+            {
+                Debug.LogWarning("Stat bucket repair needs a loaded world - no player profile available");
+                return;
+            }
+            bool apply = StatBucketRepairApply.Value;
+            Debug.Log(apply
+                ? "Stat bucket repair: APPLYING changes to the character profile"
+                : "Stat bucket repair: dry run, nothing will be written (set StatBucketRepairApply to true to apply)");
+            int changes = 0;
+            foreach (PlayerStatType stat in LatchedStats())
+            {
+                // The best value the game itself banked anywhere, including the per-difficulty
+                // buckets - that is the number the player actually reached
+                float best = 0f;
+                bool found = false;
+                for (int b = 0; b < profile.m_playerStats.Length; b++)
+                {
+                    var bucket = profile.m_playerStats[b];
+                    if (bucket?.m_stats != null && bucket.m_stats.TryGetValue(stat, out float value) && (!found || value > best))
+                    {
+                        best = value;
+                        found = true;
+                    }
+                }
+                if (!found)
+                {
+                    continue;
+                }
+                foreach (int target in new[] { RawStatsBucket, AnyBucket })
+                {
+                    if (target >= profile.m_playerStats.Length)
+                    {
+                        continue;
+                    }
+                    var bucket = profile.m_playerStats[target];
+                    if (bucket?.m_stats == null)
+                    {
+                        continue;
+                    }
+                    bucket.m_stats.TryGetValue(stat, out float current);
+                    if (current >= best)
+                    {
+                        continue;
+                    }
+                    Debug.Log($"  {(apply ? "repair" : "would repair")} {stat} in {(DifficultyRequirement)target}: {current:0.##} -> {best:0.##}");
+                    if (apply)
+                    {
+                        bucket.m_stats[stat] = best;
+                    }
+                    changes++;
+                }
+            }
+            if (changes == 0)
+            {
+                Debug.Log("Stat bucket repair: nothing to do, buckets 0 and 1 already hold the best recorded values");
+            }
+            else if (apply)
+            {
+                Debug.Log($"Stat bucket repair: {changes} value(s) raised. Log out normally so the profile is saved, then the achievement panel recomputes on next load.");
+            }
+            else
+            {
+                Debug.Log($"Stat bucket repair: {changes} value(s) would be raised.");
+            }
+        }
+
+        // The in-game console keeps only a handful of lines and cannot be scrolled, so any command
+        // that prints more than that - 'achievements' lists every unlocked and locked entry - is
+        // unreadable. Mirroring it into the BepInEx log makes the whole output recoverable.
+        //
+        // The guard is load bearing. Terminal routes Unity log messages into the console itself
+        // (Console.instance.AddString("Log", ...)), and that four argument overload finishes by
+        // calling this one argument overload. Logging from here unguarded would therefore be
+        // Debug.Log -> Terminal's log hook -> AddString(4) -> AddString(1) -> Debug.Log, forever.
+        private static bool _mirroringConsole;
+
+        [HarmonyPatch(typeof(Terminal), nameof(Terminal.AddString), new[] { typeof(string) })]
+        class Terminal_AddString_Patch
+        {
+            static void Postfix(string text)
+            {
+                if (_mirroringConsole || !LogConsoleOutput.Value || string.IsNullOrEmpty(text))
+                {
+                    return;
+                }
+                _mirroringConsole = true;
+                try
+                {
+                    Debug.Log("[console] " + text);
+                }
+                finally
+                {
+                    _mirroringConsole = false;
+                }
+            }
         }
 
         // ---------------- Passive forsaken powers ----------------
