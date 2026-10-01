@@ -25,6 +25,9 @@ namespace ValheimMod
         // Keyboard shortcuts
         private static ConfigEntry<KeyboardShortcut> RepairHotkey;
         private static ConfigEntry<KeyboardShortcut> DumpItemListHotkey;
+        private static ConfigEntry<bool> DumpRealItemsOnly;
+        private static ConfigEntry<bool> PassiveForsakenPowers;
+        private static ConfigEntry<bool> HidePassivePowerIcons;
 
         // Config values
         private static ConfigEntry<float> CustomResourceRate;
@@ -62,6 +65,7 @@ namespace ValheimMod
         private static ConfigEntry<int> MassPlantGridSize;
         private static ConfigEntry<float> MassPlantSpacing;
         private static ConfigEntry<float> WorkstationRangeMultiplier;
+        private static ConfigEntry<bool> WorldEffectsSoloOnly;
         private static ConfigEntry<float> TamingSpeedMultiplier;
         private static ConfigEntry<bool> AlwaysSlowFall;
         private static ConfigEntry<float> SlowFallMaxSpeed;
@@ -164,8 +168,13 @@ namespace ValheimMod
             LogPlayerDamage = Config.Bind("General", "LogPlayerDamage", false, "Diagnostic. Logs every hit that reaches the damage gate, with its type, the raw amount, what the gate allowed through and your health at the time. Use it to find out what actually killed you.");
             MassPlantKey = Config.Bind("Farming", "MassPlantKey", KeyCode.LeftShift, "Hold this while planting with the cultivator to plant a whole grid at once instead of a single seed.");
             MassPlantGridSize = Config.Bind("Farming", "MassPlantGridSize", 5, new ConfigDescription("Width of the grid planted while the mass-plant key is held. 5 plants a 5x5 block of 25. Set to 1 to disable.", new AcceptableValueRange<int>(1, 11)));
+            PassiveForsakenPowers = Config.Bind("Powers", "PassiveForsakenPowers", true,
+                "Keep every forsaken power this character has unlocked permanently active - no selecting, no activating, no cooldown. A power counts as unlocked once you have selected it at its stone, which the game records on the character rather than in the world, so unlocked powers follow you into any world. Powers carrying a networked status attribute (Moder's sailing power) stay off in a shared session, since that flag reaches any ship you are aboard.");
+            HidePassivePowerIcons = Config.Bind("Powers", "HidePassivePowerIcons", true,
+                "Keep passively held forsaken powers out of the status effect row. They are always on, so the icons carry no information and just crowd out effects that change. Only affects powers this mod is holding - a power you activate yourself, or one a nearby player grants you, still shows normally.");
             MassPlantSpacing = Config.Bind("Farming", "MassPlantSpacing", 2f, "Spacing between plants, as a multiple of the plant's own grow radius. 2 is the tightest that reliably clears each plant's space check, since the check tests a sphere of that radius against neighbouring colliders. Lower it to pack tighter at the risk of some seeds being rejected.");
             WorkstationRangeMultiplier = Config.Bind("General", "WorkstationRangeMultiplier", 1f, "Multiplier for how far a workbench, forge or other crafting station reaches for building. 2 doubles the radius. The on-screen coverage circle scales with it. Applies to stations as they load, so change it before entering a world.");
+            WorldEffectsSoloOnly = Config.Bind("General", "WorldEffectsSoloOnly", true, "Suspend the settings that change shared world state - CustomResourceRate, CustomStackSizeMultiplier, CustomSmelterOutputRate, CustomProcessingTimeRate and TamingSpeedMultiplier - whenever anyone else is in the world with you. They resume automatically once you are alone again. Settings that only affect you are never suspended.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
             SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
@@ -184,6 +193,7 @@ namespace ValheimMod
             NegateEquipmentMovementPenalty = Config.Bind("General", "NegateEquipPenalty", true, "Turn off equipment movement penalty");
 
             RepairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, heal player, replenish ammo, and spawn or replenish favorite foods");
+            DumpRealItemsOnly = Config.Bind("General", "DumpRealItemsOnly", true, "Limit the item dump to real items. Creature attack prefabs carry plain text in place of a localisation token, and character customisation uses $customization, so both are dropped. Turn off to dump every entry in ObjectDB.");
             DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,FishAndBread,SeekerAspic", "Comma-separated list of foods to spawn");
@@ -263,6 +273,9 @@ namespace ValheimMod
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
+            ApplyResourceRate();
+            RefreshStackSizeMultiplier();
+            UpdatePassiveForsakenPowers();
         }
 
         // ---------------- Toggleable personal light ----------------
@@ -626,6 +639,10 @@ namespace ValheimMod
                     InZNetScene = ZNetScene.instance != null && ZNetScene.instance.GetPrefab(prefab.name) != null,
                     MaxStackSize = shared.m_maxStackSize,
                     Weight = shared.m_weight,
+                    // VariantDialog.Setup loops to m_variants but indexes m_icons, so an item
+                    // where these disagree throws when its variant picker is opened
+                    Variants = shared.m_variants,
+                    IconCount = shared.m_icons != null ? shared.m_icons.Length : 0,
                 });
             }
             rows.Sort((a, b) => string.Compare(a.PrefabName, b.PrefabName, StringComparison.OrdinalIgnoreCase));
@@ -634,13 +651,33 @@ namespace ValheimMod
 
             // Reference table: prefab name is the id the "spawn" console command takes
             var table = new StringBuilder();
-            table.AppendLine("PrefabName\tDisplayName\tNameToken\tItemType\tAutoPickup\tInZNetScene\tMaxStack\tWeight");
+            table.AppendLine("PrefabName\tDisplayName\tNameToken\tItemType\tAutoPickup\tInZNetScene\tMaxStack\tWeight\tVariants\tIcons");
+            int skipped = 0;
             foreach (var r in rows)
             {
-                table.AppendLine($"{r.PrefabName}\t{r.DisplayName}\t{r.NameToken}\t{r.ItemType}\t{r.AutoPickup}\t{r.InZNetScene}\t{r.MaxStackSize}\t{r.Weight:0.##}");
+                if (DumpRealItemsOnly.Value && !IsRealItemRow(r))
+                {
+                    skipped++;
+                    continue;
+                }
+                table.AppendLine($"{r.PrefabName}\t{r.DisplayName}\t{r.NameToken}\t{r.ItemType}\t{r.AutoPickup}\t{r.InZNetScene}\t{r.MaxStackSize}\t{r.Weight:0.##}\t{r.Variants}\t{r.IconCount}");
             }
             string tablePath = Path.Combine(dir, "PipsMod_ItemList.tsv");
             File.WriteAllText(tablePath, table.ToString());
+
+            // Deliberately scans every row, not just the written ones: a mismatched item that the
+            // filter excluded would still crash if its picker were opened, so hiding it would be
+            // the one case where the filter could cost us the answer.
+            // Called out rather than left for the reader to spot: any item whose variant count
+            // exceeds its icon count throws IndexOutOfRangeException inside VariantDialog.Setup
+            // the moment its variant picker is opened.
+            foreach (var r in rows)
+            {
+                if (r.Variants > r.IconCount)
+                {
+                    Debug.LogWarning($"Variant/icon mismatch: {r.PrefabName} ({r.DisplayName}) declares {r.Variants} variants but has {r.IconCount} icons - opening its variant picker will throw");
+                }
+            }
 
             // An item can only be ignored if it auto-picks-up AND can exist as a world drop.
             // Creature attack prefabs and cosmetics live in ObjectDB but never in ZNetScene.
@@ -649,9 +686,23 @@ namespace ValheimMod
             string listPath = Path.Combine(dir, "PipsMod_AutoPickupIgnoreList.txt");
             File.WriteAllText(listPath, string.Join(", ", eligible));
 
-            Debug.Log($"Dumped {rows.Count} items ({eligible.Count} auto-pickup) to {dir}");
+            Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup) to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
                 $"Dumped {rows.Count} items ({eligible.Count} auto-pickup) to BepInEx/config");
+        }
+
+        /// <summary>
+        /// A real item always carries a localisation token. Creature attack prefabs hold plain
+        /// English in m_name instead ("Swing attack", "slap"), and character customisation uses
+        /// $customization - neither is obtainable. Fish ($animal_), the Hooded Lantern ($piece_)
+        /// and the Kvastur trophy ($enemy_) are real items that don't use $item_, which is why the
+        /// test is "has a token at all" rather than the narrower "$item_".
+        /// </summary>
+        private static bool IsRealItemRow(ItemRow row)
+        {
+            return !string.IsNullOrEmpty(row.NameToken)
+                && row.NameToken.StartsWith("$", StringComparison.Ordinal)
+                && !row.NameToken.StartsWith("$customization", StringComparison.Ordinal);
         }
 
         private class ItemRow
@@ -664,6 +715,8 @@ namespace ValheimMod
             public bool InZNetScene;
             public int MaxStackSize;
             public float Weight;
+            public int Variants;
+            public int IconCount;
         }
 
         [HarmonyPatch(typeof(MessageHud), "Awake")]
@@ -699,11 +752,12 @@ namespace ValheimMod
         {
             static void Postfix()
             {
-                // A rate of 1 means "don't interfere", leaving the world's Resources modifier intact
-                if (CustomResourceRate.Value > 0f && CustomResourceRate.Value != 1f)
+                GuardLoadPath("resource rate", () =>
                 {
-                    Game.m_resourceRate = CustomResourceRate.Value;
-                }
+                    // Whatever the world itself decided, kept so the boost can be withdrawn later
+                    _vanillaResourceRate = Game.m_resourceRate;
+                    ApplyResourceRate();
+                });
             }
         }
 
@@ -719,7 +773,65 @@ namespace ValheimMod
         {
             static void Postfix(ObjectDB __instance)
             {
-                ApplyStackSizeMultiplier(__instance);
+                GuardLoadPath("stack size multiplier", () => ApplyStackSizeMultiplier(__instance));
+                GuardLoadPath("variant clamp", () => ClampVariantCounts(__instance));
+            }
+        }
+
+        /// <summary>
+        /// Runs a load-path patch body so that a bug in it degrades to a logged error instead of
+        /// an unbootable game. Harmony lets an exception thrown in a postfix propagate into the
+        /// method it patched, so anything that throws here tears down the vanilla call that led
+        /// here. ObjectDB.UpdateRegisters is reached from FejdStartup.Start via SetupObjectDB, so
+        /// a throw aborts startup itself: the character list silently falls back to the "Ragnar"
+        /// placeholder and the Start button stops responding, with nothing in the log pointing at
+        /// the mod. Degrading instead costs one broken feature rather than the whole game.
+        /// </summary>
+        private static void GuardLoadPath(string what, Action body)
+        {
+            try
+            {
+                body();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"PipsMod: {what} failed, continuing without it - {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Works around a vanilla data bug: VariantDialog.Setup loops to m_shared.m_variants while
+        /// indexing m_shared.m_icons, with no bounds check, so an item declaring more variants than
+        /// it has icons throws IndexOutOfRangeException the moment its variant picker opens. As of
+        /// 1.0 exactly one item is affected - ShieldRoots (Shield of Roots) claims 4 variants with
+        /// 3 icons. Clamping the count hides the variant that has no icon, which was unreachable
+        /// anyway, and lets the picker open. Appearance only, so this is not gated on a solo
+        /// session; it is also idempotent, since the clamped value already matches the icon count.
+        /// </summary>
+        private static void ClampVariantCounts(ObjectDB odb)
+        {
+            if (odb == null || odb.m_items == null)
+            {
+                return;
+            }
+            foreach (var prefab in odb.m_items)
+            {
+                if (prefab == null)
+                {
+                    continue;
+                }
+                var drop = prefab.GetComponent<ItemDrop>();
+                if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null)
+                {
+                    continue;
+                }
+                var shared = drop.m_itemData.m_shared;
+                int icons = shared.m_icons != null ? shared.m_icons.Length : 0;
+                if (shared.m_variants > icons)
+                {
+                    Debug.Log($"Clamped {prefab.name} variants {shared.m_variants} -> {icons} to match its icon count");
+                    shared.m_variants = icons;
+                }
             }
         }
 
@@ -735,7 +847,8 @@ namespace ValheimMod
             {
                 return;
             }
-            float multiplier = CustomStackSizeMultiplier.Value;
+            float multiplier = SoloOnlyRate(CustomStackSizeMultiplier);
+            _appliedStackMultiplier = multiplier;
             int changed = 0;
             foreach (var prefab in odb.m_items)
             {
@@ -781,7 +894,7 @@ namespace ValheimMod
         {
             static void Prefix(Smelter __instance, string ore, ref int stack)
             {
-                float multiplier = CustomSmelterOutputRate.Value;
+                float multiplier = SoloOnlyRate(CustomSmelterOutputRate);
                 if (multiplier <= 1f || stack <= 0)
                 {
                     return;
@@ -892,7 +1005,7 @@ namespace ValheimMod
             static void Prefix(Smelter __instance, out float __state)
             {
                 __state = __instance.m_secPerProduct;
-                float multiplier = CustomProcessingTimeRate.Value;
+                float multiplier = SoloOnlyRate(CustomProcessingTimeRate);
                 if (multiplier > 0f && multiplier != 1f)
                 {
                     // UpdateSmelter treats a non-positive value as "disabled", so keep it above zero
@@ -912,7 +1025,7 @@ namespace ValheimMod
             static void Prefix(Fermenter __instance, out float __state)
             {
                 __state = __instance.m_fermentationDuration;
-                float multiplier = CustomProcessingTimeRate.Value;
+                float multiplier = SoloOnlyRate(CustomProcessingTimeRate);
                 if (multiplier > 0f && multiplier != 1f)
                 {
                     __instance.m_fermentationDuration = Mathf.Max(1f, __state * multiplier);
@@ -931,7 +1044,7 @@ namespace ValheimMod
             static void Prefix(CookingStation __instance, out float[] __state)
             {
                 __state = null;
-                float multiplier = CustomProcessingTimeRate.Value;
+                float multiplier = SoloOnlyRate(CustomProcessingTimeRate);
                 if (multiplier <= 0f || multiplier == 1f || __instance.m_conversion == null)
                 {
                     return;
@@ -2384,6 +2497,202 @@ namespace ValheimMod
             }
         }
 
+        // ---------------- Solo-only gate for world-changing settings ----------------
+        // Some multipliers alter state stored in the world rather than only what this client sees:
+        // drops are rolled by whoever owns the object, station output and taming progress live in
+        // ZDOs. Whoever owns the object computes the result, so on a shared world those effects
+        // reach everyone. These are suspended unless the session is genuinely solo.
+        //
+        // Solo means hosting with nobody connected. ZNet.IsServer() is false when you have joined
+        // someone else's world, and GetPeerConnections counts anyone connected to yours - so a
+        // player joining or leaving mid-session flips this without needing a reload.
+        private const float SharedSessionCacheSeconds = 1f;
+        private static float _sharedSessionCheckedAt = float.NegativeInfinity;
+        private static bool _sharedSessionCached;
+        private static float _vanillaResourceRate = 1f;
+        private static float _appliedStackMultiplier = float.NaN;
+
+        /// <summary>
+        /// Stack size isn't read at point of use - it's written into each item's SharedData - so
+        /// like the resource rate it has to be re-asserted when the session changes. Rewriting
+        /// ~1000 items every frame would be wasteful, so the full pass runs only when the effective
+        /// multiplier actually differs from what is currently applied. ApplyStackSizeMultiplier
+        /// always recomputes from the captured vanilla baseline, so withdrawing the boost restores
+        /// the real sizes rather than dividing back down.
+        /// </summary>
+        private static void RefreshStackSizeMultiplier() {
+            if (SoloOnlyRate(CustomStackSizeMultiplier) == _appliedStackMultiplier) {
+                return;
+            }
+            ObjectDB odb = ObjectDB.instance;
+            if (odb != null) {
+                ApplyStackSizeMultiplier(odb);
+            }
+        }
+
+        private static bool IsSharedSession() {
+            if (!WorldEffectsSoloOnly.Value) {
+                return false;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now - _sharedSessionCheckedAt < SharedSessionCacheSeconds) {
+                return _sharedSessionCached;
+            }
+            _sharedSessionCheckedAt = now;
+            ZNet znet = ZNet.instance;
+            // No ZNet at the menu; treat that as solo so nothing is suspended spuriously
+            _sharedSessionCached = znet != null && (!znet.IsServer() || znet.GetPeerConnections() > 0);
+            return _sharedSessionCached;
+        }
+
+        /// <summary>
+        /// Returns a world-changing multiplier, or 1 when the session is shared.
+        /// </summary>
+        private static float SoloOnlyRate(ConfigEntry<float> setting) {
+            float value = setting.Value;
+            return (value > 0f && value != 1f && !IsSharedSession()) ? value : 1f;
+        }
+
+        /// <summary>
+        /// The resource rate is a stored global rather than a value read at point of use, so it has
+        /// to be re-asserted as the session changes - otherwise a boosted rate would linger after
+        /// someone joined. _vanillaResourceRate holds whatever the world itself last set.
+        /// </summary>
+        private static void ApplyResourceRate() {
+            float multiplier = SoloOnlyRate(CustomResourceRate);
+            Game.m_resourceRate = multiplier != 1f ? multiplier : _vanillaResourceRate;
+        }
+
+        // ---------------- Passive forsaken powers ----------------
+        // Powers are character state, not world state. Selecting one at a stone calls
+        // Player.SetGuardianPower, which stores it in m_guardianPower *and* records the power's
+        // name through AddUniqueKey; Player.Save writes both. That is why an established character
+        // carries its last power into a brand new world, and it means HaveUniqueKey("GP_Eikthyr")
+        // answers "has this character ever unlocked Eikthyr's power" from anywhere, in any world,
+        // with no lookup cost.
+        //
+        // Whether a trophy is *currently* mounted is world state instead - it lives in the stand's
+        // own ZDO under ZDOVars.s_item - so it is deliberately not what this reads. Using the
+        // character record keeps powers with the character the way the game itself does. The
+        // trade-offs: a trophy mounted without ever clicking the stone does not count (one click
+        // per stone, ever, is enough), and taking a trophy back down does not revoke the power.
+        //
+        // BossStone.m_setsWorldKey looked like a better signal but is empty on every shipped stone,
+        // and the GlobalKeys enum has no boss-stone entry - the field is unused here.
+        //
+        // The stone-to-power mapping is still read out of the prefabs rather than hardcoded, so a
+        // boss added by a later patch is picked up with no code change. Only plain values are kept,
+        // not the StatusEffect reference: ZNetScene's prefabs are torn down when the world unloads,
+        // and the hash is all AddStatusEffect needs to find the live asset in the current ObjectDB.
+        private const float PowerCheckSeconds = 2f;
+        private static float _powerCheckedAt = float.NegativeInfinity;
+        private static List<BossPower> _bossPowers;
+
+        private class BossPower {
+            public string StoneName;
+            public string PowerName;
+            public int PowerHash;
+            public StatusEffect.StatusAttribute Attributes;
+        }
+
+        /// <summary>
+        /// Collects every guardian power the game's boss stones can grant, from the prefabs
+        /// ZNetScene already has loaded. Cached after the first successful pass, since the prefab
+        /// set is fixed for the lifetime of the process.
+        /// </summary>
+        private static void ScanBossPowers() {
+            if (_bossPowers != null) {
+                return;
+            }
+            ZNetScene scene = ZNetScene.instance;
+            if (scene == null || scene.m_prefabs == null) {
+                return;
+            }
+            var found = new List<BossPower>();
+            foreach (GameObject prefab in scene.m_prefabs) {
+                if (prefab == null) {
+                    continue;
+                }
+                // Shipped prefabs carry BossStone on the root, but search children as well so a
+                // nested or modded layout still resolves
+                BossStone stone = prefab.GetComponentInChildren<BossStone>(true);
+                if (stone == null || stone.m_itemStand == null) {
+                    continue;
+                }
+                StatusEffect power = stone.m_itemStand.m_guardianPower;
+                if (power == null) {
+                    continue;
+                }
+                found.Add(new BossPower {
+                    StoneName = prefab.name,
+                    PowerName = power.name,
+                    PowerHash = power.NameHash(),
+                    Attributes = power.m_attributes,
+                });
+            }
+            _bossPowers = found;
+            Debug.Log($"Discovered {found.Count} boss stone power(s): " +
+                string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
+        }
+
+        /// <summary>
+        /// Holds a guardian power on the player for every boss power this character has unlocked.
+        /// The effect is added once and then given an unlimited lifetime rather than being
+        /// re-applied each tick; the periodic sweep exists to catch the cases that clear it,
+        /// chiefly death, which calls SEMan.RemoveAllStatusEffects.
+        /// </summary>
+        private static void UpdatePassiveForsakenPowers() {
+            Player player = Player.m_localPlayer;
+            if (player == null) {
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now - _powerCheckedAt < PowerCheckSeconds) {
+                return;
+            }
+            _powerCheckedAt = now;
+            ScanBossPowers();
+            SEMan seman = player.GetSEMan();
+            if (_bossPowers == null || _bossPowers.Count == 0 || seman == null) {
+                return;
+            }
+            bool enabled = PassiveForsakenPowers.Value;
+            bool shared = IsSharedSession();
+            foreach (BossPower boss in _bossPowers) {
+                // The only part of a status effect that reaches other players is the four-flag
+                // StatusAttribute mask written to the player's ZDO. SailingPower is one of those
+                // flags and it applies to whatever ship the player is aboard, so powers carrying an
+                // attribute stay off in a shared session while the purely local ones still work.
+                bool wanted = enabled
+                    && player.HaveUniqueKey(boss.PowerName)
+                    && !(shared && boss.Attributes != StatusEffect.StatusAttribute.None);
+                StatusEffect active = seman.GetStatusEffect(boss.PowerHash);
+                if (wanted) {
+                    if (active == null) {
+                        active = seman.AddStatusEffect(boss.PowerHash, false, 0, 0f, -1);
+                        if (active != null) {
+                            Debug.Log($"Forsaken power {boss.PowerName} held passively ({boss.StoneName})");
+                        }
+                    }
+                    if (active != null) {
+                        // StatusEffect.IsDone only expires an effect when m_ttl > 0, so zero means
+                        // it never lapses. This is SEMan's own clone, so the shared asset keeps its
+                        // normal duration for the vanilla activate-by-keypress path.
+                        active.m_ttl = 0f;
+                        // SEMan.GetHUDStatusEffects skips hidden effects when it collects the row,
+                        // so this drops the icon at source rather than filtering the HUD - which
+                        // leaves other status effect mods to do their own thing undisturbed. Read
+                        // from config every sweep so toggling it takes effect without a reload.
+                        active.m_hidden = HidePassivePowerIcons.Value;
+                    }
+                } else if (active != null && active.m_ttl == 0f) {
+                    // Withdraw only what we granted - an effect with a real ttl was activated
+                    // normally and should run its own course
+                    seman.RemoveStatusEffect(boss.PowerHash, true);
+                }
+            }
+        }
+
         // Taming progress is a countdown in the creature's ZDO, and TamingUpdate credits it three
         // seconds at a time via DecreaseRemainingTime. Scaling that argument is how the game itself
         // speeds taming up - the vanilla TamingBoost status attribute multiplies the very same
@@ -2393,7 +2702,7 @@ namespace ValheimMod
         {
             static void Prefix(ref float time)
             {
-                float multiplier = TamingSpeedMultiplier.Value;
+                float multiplier = SoloOnlyRate(TamingSpeedMultiplier);
                 if (multiplier > 0f && multiplier != 1f)
                 {
                     time *= multiplier;
