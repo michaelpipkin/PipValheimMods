@@ -31,6 +31,11 @@ namespace ValheimMod
         private static ConfigEntry<bool> LogConsoleOutput;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
         private static ConfigEntry<bool> StatBucketRepairApply;
+        private static ConfigEntry<bool> GuaranteeFirstTrophy;
+        private static ConfigEntry<bool> PreventStatRegression;
+        private static ConfigEntry<bool> ShowAchievementProgress;
+        private static ConfigEntry<bool> RevealSecretAchievements;
+        private static ConfigEntry<bool> NegateDeathPenalty;
 
         // Config values
         private static ConfigEntry<float> CustomResourceRate;
@@ -199,6 +204,16 @@ namespace ValheimMod
 
             RepairHotkey = Config.Bind("Hotkeys", "RepairHotkey", new KeyboardShortcut(KeyCode.LeftBracket), "Hotkey to repair all gear in inventory, heal player, replenish ammo, and spawn or replenish favorite foods");
             DumpRealItemsOnly = Config.Bind("General", "DumpRealItemsOnly", true, "Limit the item dump to real items. Creature attack prefabs carry plain text in place of a localisation token, and character customisation uses $customization, so both are dropped. Turn off to dump every entry in ObjectDB.");
+            NegateDeathPenalty = Config.Bind("General", "NegateDeathPenalty", false,
+                "Die with no consequences: keep every item including unequipped ones, leave no tombstone, and lose no skill levels. Intended for deliberately dying, such as working through the death achievements. Off by default because it removes the main cost of dying. Suspended in a shared session.");
+            RevealSecretAchievements = Config.Bind("General", "RevealSecretAchievements", true,
+                "Show the real name, description and requirements of achievements the game marks secret, instead of 'Concealed'. Also makes their tiles clickable, which vanilla disables. Display only - the same information Steam shows on its global achievements page.");
+            ShowAchievementProgress = Config.Bind("General", "ShowAchievementProgress", true,
+                "Show real numbers on achievement requirements you have not finished yet, instead of the vanilla '??? / ???'. Display only - it reads the same stats the panel already reads. Achievements flagged secret stay hidden.");
+            PreventStatRegression = Config.Bind("General", "PreventStatRegression", true,
+                "Stop the vanilla bucket bug from overwriting a high-water-mark achievement stat with a smaller number. Only the stats that record a maximum are protected, so resets that are supposed to happen - the consecutive-day streak zeroing on death - still work. Without this, repairs made by the StatBucketRepair hotkey are undone the next time the game writes one of these stats.");
+            GuaranteeFirstTrophy = Config.Bind("Drops", "GuaranteeFirstTrophy", true,
+                "Guarantee a trophy drop the first time you kill a creature whose trophy you have never collected. Once collected, that creature rolls its normal chance again. Rare spawns like wraiths, fenrings and serpents are otherwise close to unfarmable. Suspended in a shared session, since drops are rolled by whoever owns the creature.");
             StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
                 "Reports achievement stats that the vanilla bucket-latch bug has frozen, and repairs them when StatBucketRepairApply is on. Must be pressed in a loaded world.");
             StatBucketRepairApply = Config.Bind("General", "StatBucketRepairApply", false,
@@ -2577,6 +2592,386 @@ namespace ValheimMod
             Game.m_resourceRate = multiplier != 1f ? multiplier : _vanillaResourceRate;
         }
 
+        // ---------------- Death penalty negation ----------------
+        // Vanilla splits the death cost across two places, so both have to be intercepted.
+        //
+        // Items: Player.CreateTombStone spawns the grave and calls MoveInventoryToGrave. The world
+        // modifier keys only steer *which* items go in - DeathKeepEquip merely skips the
+        // UnequipAllItems call, and MoveInventoryToGrave then passes over anything still flagged
+        // m_equipped. Nothing short of DeathKeepInventory keeps unequipped items, which is why the
+        // Casual preset still empties a backpack. Skipping CreateTombStone outright keeps
+        // everything and leaves no grave to walk back to.
+        //
+        // Skills: Player.OnDeath calls m_skills.Clear() when the world sets DeathSkillsReset
+        // (hardcore) and m_skills.OnDeath() otherwise, and only when HardDeath() is true - dying
+        // twice inside m_hardDeathCooldown is already free in vanilla. Skills.OnDeath is blocked
+        // directly. Skills.Clear is blocked only while a death is in progress, because it is also
+        // the legitimate path for wiping a character, and a blanket prefix there would be a real
+        // bug waiting to happen.
+        private static bool _inPlayerDeath;
+
+        private static bool DeathPenaltyNegated(Character character)
+        {
+            return NegateDeathPenalty.Value
+                && ReferenceEquals(character, Player.m_localPlayer)
+                && !IsSharedSession();
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.OnDeath))]
+        class Player_OnDeath_Patch
+        {
+            static void Prefix(Player __instance)
+            {
+                _inPlayerDeath = ReferenceEquals(__instance, Player.m_localPlayer);
+            }
+
+            // Finalizer rather than Postfix so the flag cannot be left set by an exception midway
+            // through the death sequence, which would silently disable Skills.Clear from then on
+            static void Finalizer()
+            {
+                _inPlayerDeath = false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.CreateTombStone))]
+        class Player_CreateTombStone_Patch
+        {
+            static bool Prefix(Player __instance)
+            {
+                if (!DeathPenaltyNegated(__instance))
+                {
+                    return true;
+                }
+                Debug.Log("Death penalty negated: inventory kept, no tombstone created");
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Skills), nameof(Skills.OnDeath))]
+        class Skills_OnDeath_Patch
+        {
+            static bool Prefix(Skills __instance)
+            {
+                if (SkillsPlayerField == null)
+                {
+                    return true;
+                }
+                if (!DeathPenaltyNegated(SkillsPlayerField.GetValue(__instance) as Character))
+                {
+                    return true;
+                }
+                Debug.Log("Death penalty negated: skill levels kept");
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Skills), nameof(Skills.Clear))]
+        class Skills_Clear_Patch
+        {
+            static bool Prefix(Skills __instance)
+            {
+                // Only the death-time reset is suppressed; wiping a character by any other route
+                // still works
+                if (!_inPlayerDeath || SkillsPlayerField == null)
+                {
+                    return true;
+                }
+                if (!DeathPenaltyNegated(SkillsPlayerField.GetValue(__instance) as Character))
+                {
+                    return true;
+                }
+                Debug.Log("Death penalty negated: skill reset suppressed");
+                return false;
+            }
+        }
+
+        // ---------------- Secret achievement reveal ----------------
+        // m_isSecret gates three things, all display, and all of them read the flag live:
+        //
+        //   InventoryGui.UpdateAchievementsList  - substitutes "$inventory_achievement_secret" for
+        //                                          the name and description, and destroys the tile
+        //                                          Button so it cannot even be opened
+        //   AchievementsGui.OnOpenAchievementDetails - early-returns after one "???" row
+        //
+        // Rather than patch each display site, the flag is cleared for the duration of the call and
+        // put back afterwards. The restore matters: m_isSecret lives on a shared ScriptableObject
+        // asset, so leaving it cleared would be a persistent edit to game data for the rest of the
+        // session, and the config toggle would stop taking effect until a restart. Finalizer rather
+        // than Postfix so the flag is restored even if the vanilla method throws.
+        //
+        // Two patches are needed because the tile's click handler captures `clickable` when the
+        // list is built but calls OnOpenAchievementDetails later, long after the flag went back.
+        private static readonly List<Achievement> _unhiddenAchievements = new List<Achievement>();
+
+        private static void UnhideSecretAchievements()
+        {
+            _unhiddenAchievements.Clear();
+            Achievements achievements = Achievements.m_instance;
+            if (achievements == null || achievements.m_achievementLists == null)
+            {
+                return;
+            }
+            foreach (AchievementList list in achievements.m_achievementLists)
+            {
+                if (list?.m_achievements == null)
+                {
+                    continue;
+                }
+                foreach (Achievement achievement in list.m_achievements)
+                {
+                    if (achievement != null && achievement.m_isSecret)
+                    {
+                        achievement.m_isSecret = false;
+                        _unhiddenAchievements.Add(achievement);
+                    }
+                }
+            }
+        }
+
+        private static void RestoreSecretAchievements()
+        {
+            for (int i = 0; i < _unhiddenAchievements.Count; i++)
+            {
+                if (_unhiddenAchievements[i] != null)
+                {
+                    _unhiddenAchievements[i].m_isSecret = true;
+                }
+            }
+            _unhiddenAchievements.Clear();
+        }
+
+        // Non-public in the shipped assembly, so it is patched by name - Harmony can patch a
+        // non-public method even though this mod could not call one
+        [HarmonyPatch(typeof(InventoryGui), "UpdateAchievementsList")]
+        class InventoryGui_UpdateAchievementsList_Patch
+        {
+            static void Prefix()
+            {
+                if (RevealSecretAchievements.Value)
+                {
+                    UnhideSecretAchievements();
+                }
+            }
+
+            static void Finalizer()
+            {
+                RestoreSecretAchievements();
+            }
+        }
+
+        [HarmonyPatch(typeof(AchievementsGui), nameof(AchievementsGui.OnOpenAchievementDetails))]
+        class AchievementsGui_OnOpenAchievementDetails_Patch
+        {
+            static void Prefix(Achievement achievement, ref bool __state)
+            {
+                __state = false;
+                if (!RevealSecretAchievements.Value || achievement == null || !achievement.m_isSecret)
+                {
+                    return;
+                }
+                achievement.m_isSecret = false;
+                __state = true;
+            }
+
+            static void Finalizer(Achievement achievement, bool __state)
+            {
+                if (__state && achievement != null)
+                {
+                    achievement.m_isSecret = true;
+                }
+            }
+        }
+
+        // ---------------- Achievement progress display ----------------
+        // AchievementsGui.CreateStatRow hides every requirement that is not already met:
+        //
+        //     if (currentAmount >= totalAmount) { ...real numbers, green... }
+        //     else { StatName.text = "???"; Progress.text = "??? / ???"; }
+        //
+        // So the detail panel only becomes informative once there is nothing left to track. Every
+        // requirement type funnels through this one method - PopulateEnemyStats and
+        // PopulateDetailPanel both call it - so filling the row back in here covers all of them.
+        //
+        // The colour is deliberately left gray. Vanilla uses green for met and gray for unmet, and
+        // that is still worth reading at a glance; only the text is restored.
+        //
+        // Two reflection details, both forced rather than chosen. m_achievementDetailsListRoot is
+        // private in the shipped assembly even though the publicized reference shows it public, so
+        // it needs an AccessTools handle. StatName and Progress are TextMeshProUGUI, which lives in
+        // an assembly this project does not reference, so they are read as object and their text
+        // set through a cached PropertyInfo instead of adding a dependency for two strings.
+        private static readonly FieldInfo _detailsListRootField =
+            AccessTools.Field(typeof(AchievementsGui), "m_achievementDetailsListRoot");
+        private static PropertyInfo _statNameProperty;
+        private static PropertyInfo _progressProperty;
+        private static PropertyInfo _tmpTextProperty;
+
+        private static void SetRowText(object label, string value)
+        {
+            if (label == null)
+            {
+                return;
+            }
+            if (_tmpTextProperty == null || !_tmpTextProperty.DeclaringType.IsInstanceOfType(label))
+            {
+                _tmpTextProperty = AccessTools.Property(label.GetType(), "text");
+            }
+            _tmpTextProperty?.SetValue(label, value, null);
+        }
+
+        [HarmonyPatch(typeof(AchievementsGui), nameof(AchievementsGui.CreateStatRow))]
+        class AchievementsGui_CreateStatRow_Patch
+        {
+            static void Postfix(AchievementsGui __instance, string statKey, float currentAmount, float totalAmount)
+            {
+                // A met requirement already shows its numbers
+                if (!ShowAchievementProgress.Value || currentAmount >= totalAmount)
+                {
+                    return;
+                }
+                Transform root = _detailsListRootField?.GetValue(__instance) as Transform;
+                if (root == null || root.childCount == 0)
+                {
+                    return;
+                }
+                // CreateStatRow instantiates the row as the last child immediately before this runs
+                var row = root.GetChild(root.childCount - 1).GetComponent<AchievementDetailUnlockCondition>();
+                if (row == null)
+                {
+                    return;
+                }
+                if (_statNameProperty == null)
+                {
+                    _statNameProperty = AccessTools.Property(typeof(AchievementDetailUnlockCondition), "StatName");
+                    _progressProperty = AccessTools.Property(typeof(AchievementDetailUnlockCondition), "Progress");
+                }
+                if (_statNameProperty == null || _progressProperty == null)
+                {
+                    return;
+                }
+                // Vanilla reassigns its own statKey parameter before branching, so it may already
+                // carry the prefix by the time a postfix sees it
+                string key = statKey;
+                if (!string.IsNullOrEmpty(key) && key[0] != '$' && Enum.TryParse(key, out PlayerStatType _))
+                {
+                    key = "$stat_" + key;
+                }
+                string label = Localization.instance.Localize(key);
+                SetRowText(_statNameProperty.GetValue(row, null), string.IsNullOrEmpty(label) ? statKey : label);
+                SetRowText(_progressProperty.GetValue(row, null), $"{currentAmount:0.##} / {totalAmount:0.##}");
+            }
+        }
+
+        // ---------------- Guaranteed first trophy ----------------
+        // The game already records every item the character has ever picked up, and
+        // IncrementStatItemPickup writes bucket 0 unconditionally - outside the CanGetAchievements
+        // gate that governs the other buckets. That makes m_playerStats[0].m_itemPickupStats a
+        // complete record regardless of mods or cheat state, and it is an increment rather than a
+        // max guard, so it is not exposed to the bucket latch bug that LatchedStats repairs.
+        // Achievements.FindTrophiesForAchievements identifies trophies the same way this does, by
+        // ItemType.Trophy, so "collected" here means what the game means by it.
+        //
+        // This postfixes GenerateDropList rather than altering Drop.m_chance. The chance field
+        // feeds a pseudo-random counter in s_pseudoCounter that deliberately smooths rare drops
+        // over successive kills; writing to it would corrupt that state for every later kill, and
+        // it is shared static data. Appending to the finished list leaves all of it alone.
+        private static readonly Dictionary<string, bool> _trophyCollectedCache = new Dictionary<string, bool>();
+        private static float _trophyCacheClearedAt = float.NegativeInfinity;
+        private const float TrophyCacheSeconds = 30f;
+
+        /// <summary>
+        /// True when this character has picked up the named trophy at least once. Cached briefly
+        /// because a death can generate several drops at once and the lookup walks a dictionary per
+        /// drop; the cache is dropped periodically so a trophy picked up mid-session is noticed.
+        /// </summary>
+        private static bool HasCollectedTrophy(PlayerProfile profile, string itemName)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - _trophyCacheClearedAt > TrophyCacheSeconds)
+            {
+                _trophyCacheClearedAt = now;
+                _trophyCollectedCache.Clear();
+            }
+            if (_trophyCollectedCache.TryGetValue(itemName, out bool cached))
+            {
+                return cached;
+            }
+            bool collected = false;
+            var stats = profile.m_playerStats;
+            for (int i = 0; i < stats.Length && !collected; i++)
+            {
+                var bucket = stats[i];
+                if (bucket?.m_itemPickupStats != null
+                    && bucket.m_itemPickupStats.TryGetValue(itemName, out float count)
+                    && count > 0f)
+                {
+                    collected = true;
+                }
+            }
+            _trophyCollectedCache[itemName] = collected;
+            return collected;
+        }
+
+        [HarmonyPatch(typeof(CharacterDrop), nameof(CharacterDrop.GenerateDropList))]
+        class CharacterDrop_GenerateDropList_Patch
+        {
+            static void Postfix(CharacterDrop __instance, List<KeyValuePair<GameObject, int>> __result)
+            {
+                if (!GuaranteeFirstTrophy.Value || __result == null || __instance == null || __instance.m_drops == null)
+                {
+                    return;
+                }
+                // Loot is rolled by whoever owns the creature, so on a shared world this would
+                // change what everyone sees based on one player's collection
+                if (IsSharedSession())
+                {
+                    return;
+                }
+                Game game = Game.instance;
+                PlayerProfile profile = game != null ? game.GetPlayerProfile() : null;
+                if (profile == null || profile.m_playerStats == null)
+                {
+                    return;
+                }
+                foreach (CharacterDrop.Drop drop in __instance.m_drops)
+                {
+                    GameObject prefab = drop?.m_prefab;
+                    if (prefab == null)
+                    {
+                        continue;
+                    }
+                    ItemDrop item = prefab.GetComponent<ItemDrop>();
+                    if (item == null || item.m_itemData == null || item.m_itemData.m_shared == null)
+                    {
+                        continue;
+                    }
+                    if (item.m_itemData.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Trophy)
+                    {
+                        continue;
+                    }
+                    if (HasCollectedTrophy(profile, item.m_itemData.m_shared.m_name))
+                    {
+                        continue;
+                    }
+                    bool alreadyRolled = false;
+                    for (int i = 0; i < __result.Count; i++)
+                    {
+                        if (__result[i].Key == prefab)
+                        {
+                            alreadyRolled = true;
+                            break;
+                        }
+                    }
+                    if (alreadyRolled)
+                    {
+                        continue;
+                    }
+                    __result.Add(new KeyValuePair<GameObject, int>(prefab, 1));
+                    Debug.Log($"First trophy guaranteed: {prefab.name}");
+                }
+            }
+        }
+
         // ---------------- Achievement stat bucket repair ----------------
         // Vanilla keeps achievement stats in one bucket per DifficultyRequirement. Writes go to
         // bucket 0 (RawStats) unconditionally and to bucket 1 (Any) plus the bucket for the world's
@@ -2692,6 +3087,69 @@ namespace ValheimMod
             else
             {
                 Debug.Log($"Stat bucket repair: {changes} value(s) would be raised.");
+            }
+        }
+
+        private static HashSet<PlayerStatType> _latchedStatSet;
+
+        private static bool IsLatchedStat(PlayerStatType stat)
+        {
+            if (_latchedStatSet == null)
+            {
+                _latchedStatSet = new HashSet<PlayerStatType>(LatchedStats());
+            }
+            return _latchedStatSet.Contains(stat);
+        }
+
+        /// <summary>
+        /// Keeps the vanilla bucket bug from destroying a high-water mark.
+        ///
+        /// PlayerProfile.SetStat assigns rather than raises, and writes buckets 0, 1 and the one for
+        /// the world's current combat difficulty. The callers that maintain a maximum decide whether
+        /// to write by reading GetStat, which only looks at the *current* bucket:
+        ///
+        ///     if (GetStat(ConsecutiveDaysSurvived) > GetStat(ConsecutiveDaysSurvivedMax))
+        ///         SetStat(ConsecutiveDaysSurvivedMax, ...);
+        ///
+        /// Change the world's combat difficulty and the current bucket becomes one with little or
+        /// nothing in it, so that comparison starts passing against a value of zero and the small
+        /// new number is written over the real one in buckets 0 and 1 - the buckets achievements
+        /// actually read. A 124 day record is replaced by 1 the first day after a death.
+        ///
+        /// Only the stats in LatchedStats are guarded, and only against going *down*. The streak
+        /// counter itself is not in that set, so Player.OnDeath zeroing ConsecutiveDaysSurvived
+        /// still works exactly as the game intends.
+        ///
+        /// The write is skipped rather than rewritten to the larger value: skipping leaves buckets
+        /// 0 and 1 intact without putting anything into a per-difficulty bucket the player has not
+        /// earned it on.
+        /// </summary>
+        [HarmonyPatch(typeof(PlayerProfile), nameof(PlayerProfile.SetStat), new[] { typeof(PlayerStatType), typeof(float), typeof(bool) })]
+        class PlayerProfile_SetStat_Patch
+        {
+            static bool Prefix(PlayerProfile __instance, PlayerStatType stat, float amount)
+            {
+                if (!PreventStatRegression.Value || __instance?.m_playerStats == null || !IsLatchedStat(stat))
+                {
+                    return true;
+                }
+                float best = 0f;
+                bool found = false;
+                for (int i = 0; i < __instance.m_playerStats.Length; i++)
+                {
+                    var bucket = __instance.m_playerStats[i];
+                    if (bucket?.m_stats != null && bucket.m_stats.TryGetValue(stat, out float value) && (!found || value > best))
+                    {
+                        best = value;
+                        found = true;
+                    }
+                }
+                if (!found || amount >= best)
+                {
+                    return true;
+                }
+                Debug.Log($"Blocked stat regression: {stat} would have been set to {amount:0.##}, keeping {best:0.##}");
+                return false;
             }
         }
 
@@ -3241,6 +3699,21 @@ namespace ValheimMod
                     float totalDamage = hit.GetTotalDamage();
                     if (totalDamage <= 0f)
                     {
+                        return true;
+                    }
+
+                    // The pacing caps below belong to the health floor feature, so switching the
+                    // floor off has to switch them off too. They cap each hit at a fraction of
+                    // *current* health, which means health only ever approaches zero and never
+                    // reaches it - left running with MinHealthPercent at 0 they make the player
+                    // quietly unkillable, which looks like the game refusing to deal damage rather
+                    // than like a mod setting.
+                    if (MinHealthPercent.Value <= 0f)
+                    {
+                        if (LogPlayerDamage.Value)
+                        {
+                            Debug.Log($"Damage gate: disabled, type={hit.m_hitType} incoming={totalDamage:0.#} health={currentHealth:0.#}/{maxHealth:0.#}");
+                        }
                         return true;
                     }
 
