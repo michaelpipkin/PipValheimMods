@@ -33,6 +33,14 @@ namespace ValheimMod
         private static ConfigEntry<bool> StatBucketRepairApply;
         private static ConfigEntry<bool> GuaranteeFirstTrophy;
         private static ConfigEntry<bool> PreventStatRegression;
+        private static ConfigEntry<bool> AutoPinDungeons;
+        private static ConfigEntry<int> DungeonPinIcon;
+        private static ConfigEntry<float> DungeonPinMergeRadius;
+        private static ConfigEntry<string> DungeonPinLabel;
+        private static ConfigEntry<bool> DungeonPinUseLocationName;
+        private static ConfigEntry<string> DungeonPinNameOverrides;
+        private static ConfigEntry<bool> DungeonPinIncludeCamps;
+        private static ConfigEntry<string> DungeonPinIconOverrides;
         private static ConfigEntry<bool> ShowAchievementProgress;
         private static ConfigEntry<bool> RevealSecretAchievements;
         private static ConfigEntry<bool> NegateDeathPenalty;
@@ -210,6 +218,27 @@ namespace ValheimMod
                 "Show the real name, description and requirements of achievements the game marks secret, instead of 'Concealed'. Also makes their tiles clickable, which vanilla disables. Display only - the same information Steam shows on its global achievements page.");
             ShowAchievementProgress = Config.Bind("General", "ShowAchievementProgress", true,
                 "Show real numbers on achievement requirements you have not finished yet, instead of the vanilla '??? / ???'. Display only - it reads the same stats the panel already reads. Achievements flagged secret stay hidden.");
+            AutoPinDungeons = Config.Bind("Map", "AutoPinDungeons", true,
+                "Drop a map pin on a dungeon the moment its interior loads, which happens when you get close enough for its zone to load. Skipped if a saved pin is already nearby, so walking past one repeatedly does not pile up duplicates.");
+            DungeonPinIcon = Config.Bind("Map", "DungeonPinIcon", 2,
+                "Which Minimap.PinType to use. 0=Icon0 1=Icon1 2=Icon2 3=Icon3 4=Death 5=Bed 6=Icon4 7=Shout 8=None 9=Boss 10=Player 11=RandomEvent 12=Ping 13=EventArea 14=Hildir1 15=Hildir2 16=Hildir3 17=Memorial. The log prints the full table with each sprite name the first time a dungeon is pinned, so you can pick the one you want by name.");
+            DungeonPinMergeRadius = Config.Bind("Map", "DungeonPinMergeRadius", 40f,
+                "How close an existing saved pin has to be, in metres, for a dungeon to be considered already marked.");
+            DungeonPinLabel = Config.Bind("Map", "DungeonPinLabel", "Dungeon",
+                "Label for automatic dungeon pins. Ignored when DungeonPinUseLocationName is on.");
+            DungeonPinIncludeCamps = Config.Bind("Map", "DungeonPinIncludeCamps", true,
+                "Also pin surface camps - Fuling villages, Meadows villages and farms. DungeonGenerator builds these as well as real dungeons, "
+                + "told apart by its m_algorithm field. Turn off to keep the map to actual dungeons only.");
+            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Meadows Village=0,Meadows Farm=0,GoblinCamp2=0",
+                "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
+                + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
+                + "or the surface location name for a single variant. Indexes are the same Minimap.PinType numbers as DungeonPinIcon, which is used for anything unlisted.");
+            DungeonPinNameOverrides = Config.Bind("Map", "DungeonPinNameOverrides", "",
+                "Optional renames, as comma separated location=label pairs, for example 'MountainCave01=Frost Cave,TrollCave=Troll Cave'. "
+                + "Key on the surface location name the log prints, not the DG_ generator name - one generator is shared by several dungeon types, so DG_Cave would rename Troll Caves and Frost Caves alike. "
+                + "Only needed when a dungeon has no discover label of its own, or when its in-game name is not what you want on the map.");
+            DungeonPinUseLocationName = Config.Bind("Map", "DungeonPinUseLocationName", true,
+                "Label each pin with the dungeon prefab name - MountainCave01, Crypt3, SunkenCrypt4 and so on - so the map tells you which caves are worth the climb. Turn off to label every dungeon with the fixed DungeonPinLabel instead.");
             PreventStatRegression = Config.Bind("General", "PreventStatRegression", true,
                 "Stop the vanilla bucket bug from overwriting a high-water-mark achievement stat with a smaller number. Only the stats that record a maximum are protected, so resets that are supposed to happen - the consecutive-day streak zeroing on death - still work. Without this, repairs made by the StatBucketRepair hotkey are undone the next time the game writes one of these stats.");
             GuaranteeFirstTrophy = Config.Bind("Drops", "GuaranteeFirstTrophy", true,
@@ -545,30 +574,27 @@ namespace ValheimMod
 
             // GetCurrentDay is non-public in the shipped assembly; GetDay is public and equivalent
             return ClockShowDay.Value
-                ? $"Day {env.GetDay()}   {time}   {DayPhaseName(fraction)}"
-                : $"{time}   {DayPhaseName(fraction)}";
+                ? $"Day {env.GetDay()}   {time}   {DayPhaseName(hour)}"
+                : $"{time}   {DayPhaseName(hour)}";
         }
 
-        /// <summary>
-        /// Uses EnvMan's own thresholds so the label never disagrees with the game: it treats
-        /// 0.25-0.75 of the day as daytime and 0.5-0.75 as afternoon, leaving 0.25-0.5 as morning.
-        /// On that scale a day fraction maps directly onto a 24-hour clock, dawn landing at 06:00.
-        /// </summary>
-        private static string DayPhaseName(float fraction)
+        // Six four-hour bands keyed off the displayed clock hour. This deliberately does not
+        // follow EnvMan's day/night thresholds - those only know daytime from night, which is too
+        // coarse to be worth reading - so the label describes the time on the clock rather than the
+        // lighting state, and "Night" here will not line up exactly with when it gets dark.
+        private static readonly string[] DayPhases =
         {
-            if (fraction < 0.25f)
-            {
-                return "Night";
-            }
-            if (fraction < 0.5f)
-            {
-                return "Morning";
-            }
-            if (fraction < 0.75f)
-            {
-                return "Afternoon";
-            }
-            return "Night";
+            "Late Night",     // 00:00 - 03:59
+            "Early Morning",  // 04:00 - 07:59
+            "Morning",        // 08:00 - 11:59
+            "Afternoon",      // 12:00 - 15:59
+            "Evening",        // 16:00 - 19:59
+            "Night",          // 20:00 - 23:59
+        };
+
+        private static string DayPhaseName(int hour)
+        {
+            return DayPhases[Mathf.Clamp(hour, 0, 23) / 4];
         }
 
         /// <summary>
@@ -1218,11 +1244,85 @@ namespace ValheimMod
             static void Finalizer(bool __state) { EndContainerScope(__state); }
         }
 
+        // GetFirstRequiredItem is the one requirement check whose count and fetch disagree. It
+        // asks m_inventory.CountItems - which this mod widens to include nearby containers - and
+        // then returns inventory.GetItem for the match, which only ever looks in the player's own
+        // bag:
+        //
+        //     if (m_inventory.CountItems(name, j) >= num) {
+        //         amount = num;
+        //         return inventory.GetItem(name, j);     // null when the item is in a chest
+        //     }
+        //
+        // Recipe.GetAmount then reads singleReqItem.m_quality with no null check, so the craft
+        // button throws instead of crafting. It only bites recipes with m_requireOnlyOneIngredient,
+        // where several interchangeable items each get their own requirement - the Food Prep Table
+        // fish recipe is one. A fish sitting in a chest satisfies its requirement first, the fetch
+        // returns null, and the click dies even though another fish is in the player's bag.
+        //
+        // The postfix finishes the job the widening started: when the bag cannot supply the match,
+        // the same item is taken from a nearby container instead. Consumption already comes out of
+        // containers via Player_ConsumeResources_Patch, so the returned item is honest about what
+        // the craft will actually spend. The requirement walk mirrors vanilla's exactly, including
+        // the upgrader filter and the quality loop, so the amount and extraAmount it reports match
+        // what vanilla would have reported had the item been in the bag.
         [HarmonyPatch(typeof(Player), nameof(Player.GetFirstRequiredItem))]
         class Player_GetFirstRequiredItem_Patch
         {
             static void Prefix(out bool __state) { __state = BeginContainerScope(); }
             static void Finalizer(bool __state) { EndContainerScope(__state); }
+
+            static void Postfix(Player __instance, Recipe recipe, int qualityLevel, ref int amount,
+                ref int extraAmount, int craftMultiplier, ref ItemDrop.ItemData __result)
+            {
+                if (__result != null || !CraftFromContainers.Value || _nearbyInventories.Count == 0
+                    || recipe == null || recipe.m_resources == null || __instance == null)
+                {
+                    return;
+                }
+                Inventory bag = __instance.GetInventory();
+                if (bag == null)
+                {
+                    return;
+                }
+                CraftingStation station = __instance.GetCurrentCraftingStation();
+                foreach (Piece.Requirement requirement in recipe.m_resources)
+                {
+                    // Same skip conditions as vanilla, so the same requirement is selected
+                    if ((station != null && station.m_upgrader != requirement.m_upgraderResource)
+                        || (station == null && requirement.m_upgraderResource)
+                        || !requirement.m_resItem)
+                    {
+                        continue;
+                    }
+                    int needed = requirement.GetAmount(qualityLevel) * craftMultiplier;
+                    string itemName = requirement.m_resItem.m_itemData.m_shared.m_name;
+                    for (int quality = 0; quality <= requirement.m_resItem.m_itemData.m_shared.m_maxQuality; quality++)
+                    {
+                        int total = bag.CountItems(itemName, quality);
+                        for (int i = 0; i < _nearbyInventories.Count; i++)
+                        {
+                            total += _nearbyInventories[i].CountItems(itemName, quality);
+                        }
+                        if (total < needed)
+                        {
+                            continue;
+                        }
+                        ItemDrop.ItemData found = bag.GetItem(itemName, quality);
+                        for (int i = 0; found == null && i < _nearbyInventories.Count; i++)
+                        {
+                            found = _nearbyInventories[i].GetItem(itemName, quality);
+                        }
+                        if (found != null)
+                        {
+                            amount = needed;
+                            extraAmount = requirement.m_extraAmountOnlyOneIngredient;
+                            __result = found;
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.SetupRequirement))]
@@ -2318,24 +2418,31 @@ namespace ValheimMod
         /// the preview would start lying about the result.
         /// </summary>
         private static bool TryGetPlantCell(Vector3 centre, Quaternion rotation, float spacing, int gx, int gz,
-                                            Piece piece, Plant plant, out Vector3 position) {
+                                            Piece piece, Plant plant, out Vector3 position)
+        {
             position = centre + rotation * new Vector3(gx * spacing, 0f, gz * spacing);
-            if (!Heightmap.GetHeight(position, out float groundHeight)) {
+            if (!Heightmap.GetHeight(position, out float groundHeight))
+            {
                 return false;
             }
             position.y = groundHeight;
-            if (piece.m_cultivatedGroundOnly) {
+            if (piece.m_cultivatedGroundOnly)
+            {
                 Heightmap heightmap = Heightmap.FindHeightmap(position);
-                if (heightmap == null || !heightmap.IsCultivated(position)) {
+                if (heightmap == null || !heightmap.IsCultivated(position))
+                {
                     return false;
                 }
             }
             return HasGrowSpaceAt(position, plant.m_growRadius);
         }
 
-        private static void ClearPlantPreviews() {
-            for (int i = 0; i < _plantPreviews.Count; i++) {
-                if (_plantPreviews[i] != null) {
+        private static void ClearPlantPreviews()
+        {
+            for (int i = 0; i < _plantPreviews.Count; i++)
+            {
+                if (_plantPreviews[i] != null)
+                {
                     UnityEngine.Object.Destroy(_plantPreviews[i]);
                 }
             }
@@ -2350,12 +2457,14 @@ namespace ValheimMod
         /// which is what stops the previews from registering as obstructions in each other's space
         /// checks. The two force-disable flags mirror the guards the game itself uses.
         /// </summary>
-        private static GameObject ClonePlacementGhost(GameObject ghost) {
+        private static GameObject ClonePlacementGhost(GameObject ghost)
+        {
             bool previousInit = ZNetView.m_forceDisableInit;
             bool previousTerrain = TerrainOp.m_forceDisableTerrainOps;
             ZNetView.m_forceDisableInit = true;
             TerrainOp.m_forceDisableTerrainOps = true;
-            try {
+            try
+            {
                 GameObject clone = UnityEngine.Object.Instantiate(ghost);
                 clone.name = ghost.name + "_PipsMassPlantPreview";
 
@@ -2366,40 +2475,48 @@ namespace ValheimMod
                 // every time the previews are rebuilt. A preview only has to look like a plant,
                 // so the component goes immediately, deregistering it in the same breath.
                 Plant previewPlant = clone.GetComponent<Plant>();
-                if (previewPlant != null) {
+                if (previewPlant != null)
+                {
                     UnityEngine.Object.DestroyImmediate(previewPlant);
                 }
                 return clone;
             }
-            finally {
+            finally
+            {
                 ZNetView.m_forceDisableInit = previousInit;
                 TerrainOp.m_forceDisableTerrainOps = previousTerrain;
             }
         }
 
-        private static void UpdateMassPlantPreview() {
+        private static void UpdateMassPlantPreview()
+        {
             Player player = Player.m_localPlayer;
-            if (player == null || MassPlantGridSize.Value <= 1 || !Input.GetKey(MassPlantKey.Value)) {
+            if (player == null || MassPlantGridSize.Value <= 1 || !Input.GetKey(MassPlantKey.Value))
+            {
                 ClearPlantPreviews();
                 return;
             }
             GameObject ghost = PlayerPlacementGhostField?.GetValue(player) as GameObject;
-            if (ghost == null || !ghost.activeSelf) {
+            if (ghost == null || !ghost.activeSelf)
+            {
                 ClearPlantPreviews();
                 return;
             }
             Piece piece = ghost.GetComponent<Piece>();
             Plant plant = ghost.GetComponent<Plant>();
-            if (piece == null || plant == null) {
+            if (piece == null || plant == null)
+            {
                 ClearPlantPreviews();
                 return;
             }
 
             int needed = MassPlantGridSize.Value * MassPlantGridSize.Value - 1;
-            if (_previewPieceName != ghost.name || _plantPreviews.Count != needed) {
+            if (_previewPieceName != ghost.name || _plantPreviews.Count != needed)
+            {
                 ClearPlantPreviews();
                 _previewPieceName = ghost.name;
-                for (int i = 0; i < needed; i++) {
+                for (int i = 0; i < needed; i++)
+                {
                     _plantPreviews.Add(ClonePlacementGhost(ghost));
                 }
             }
@@ -2409,16 +2526,21 @@ namespace ValheimMod
             float spacing = Mathf.Max(0.1f, plant.m_growRadius * MassPlantSpacing.Value);
             int half = MassPlantGridSize.Value / 2;
             int index = 0;
-            for (int gx = -half; gx <= half; gx++) {
-                for (int gz = -half; gz <= half; gz++) {
-                    if (gx == 0 && gz == 0) {
+            for (int gx = -half; gx <= half; gx++)
+            {
+                for (int gz = -half; gz <= half; gz++)
+                {
+                    if (gx == 0 && gz == 0)
+                    {
                         continue;   // the real ghost already stands here
                     }
-                    if (index >= _plantPreviews.Count) {
+                    if (index >= _plantPreviews.Count)
+                    {
                         return;
                     }
                     GameObject preview = _plantPreviews[index++];
-                    if (preview == null) {
+                    if (preview == null)
+                    {
                         continue;
                     }
                     bool valid = TryGetPlantCell(centre, rotation, spacing, gx, gz, piece, plant, out Vector3 position);
@@ -2431,21 +2553,26 @@ namespace ValheimMod
         [HarmonyPatch(typeof(Player), nameof(Player.TryPlacePiece))]
         class Player_TryPlacePiece_MassPlant_Patch
         {
-            static void Postfix(Player __instance, Piece piece, bool __result) {
-                if (!__result || piece == null || MassPlantGridSize.Value <= 1) {
+            static void Postfix(Player __instance, Piece piece, bool __result)
+            {
+                if (!__result || piece == null || MassPlantGridSize.Value <= 1)
+                {
                     return;
                 }
-                if (!ReferenceEquals(__instance, Player.m_localPlayer) || !Input.GetKey(MassPlantKey.Value)) {
+                if (!ReferenceEquals(__instance, Player.m_localPlayer) || !Input.GetKey(MassPlantKey.Value))
+                {
                     return;
                 }
                 Plant plant = piece.GetComponent<Plant>();
-                if (plant != null) {
+                if (plant != null)
+                {
                     MassPlant(__instance, piece, plant);
                 }
             }
         }
 
-        private static bool PlayerHasFreeBuild(Player player) {
+        private static bool PlayerHasFreeBuild(Player player)
+        {
             return PlayerNoPlacementCostField != null
                 && (bool)PlayerNoPlacementCostField.GetValue(player);
         }
@@ -2455,23 +2582,29 @@ namespace ValheimMod
         /// collider inside the radius blocks, as does any healthy neighbouring plant - matching the
         /// game's own rule, so anything this accepts would also satisfy the plant once placed.
         /// </summary>
-        private static bool HasGrowSpaceAt(Vector3 position, float growRadius) {
-            if (_plantSpaceMask == 0) {
+        private static bool HasGrowSpaceAt(Vector3 position, float growRadius)
+        {
+            if (_plantSpaceMask == 0)
+            {
                 _plantSpaceMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "piece_nonsolid");
             }
             int hits = Physics.OverlapSphereNonAlloc(position, growRadius, _plantColliders, _plantSpaceMask);
-            for (int i = 0; i < hits; i++) {
+            for (int i = 0; i < hits; i++)
+            {
                 Plant other = _plantColliders[i].GetComponent<Plant>();
-                if (other == null || other.GetStatus() == Plant.Status.Healthy) {
+                if (other == null || other.GetStatus() == Plant.Status.Healthy)
+                {
                     return false;
                 }
             }
             return true;
         }
 
-        private static void MassPlant(Player player, Piece piece, Plant plant) {
+        private static void MassPlant(Player player, Piece piece, Plant plant)
+        {
             GameObject ghost = PlayerPlacementGhostField?.GetValue(player) as GameObject;
-            if (ghost == null) {
+            if (ghost == null)
+            {
                 return;
             }
             // These statics are what the preview sets while cloning ghosts. If either were still
@@ -2490,36 +2623,44 @@ namespace ValheimMod
 
             int half = MassPlantGridSize.Value / 2;
             int planted = 0;
-            for (int gx = -half; gx <= half; gx++) {
-                for (int gz = -half; gz <= half; gz++) {
-                    if (gx == 0 && gz == 0) {
+            for (int gx = -half; gx <= half; gx++)
+            {
+                for (int gz = -half; gz <= half; gz++)
+                {
+                    if (gx == 0 && gz == 0)
+                    {
                         continue;   // vanilla already placed the centre
                     }
                     // Same cell logic the preview uses, so the red squares are exactly the ones skipped
-                    if (!TryGetPlantCell(centre, rotation, spacing, gx, gz, piece, plant, out Vector3 position)) {
+                    if (!TryGetPlantCell(centre, rotation, spacing, gx, gz, piece, plant, out Vector3 position))
+                    {
                         continue;
                     }
                     // Checked per seed so the batch stops cleanly when the last one is used
-                    if (!freeBuild && !player.HaveRequirements(piece, Player.RequirementMode.CanBuild)) {
+                    if (!freeBuild && !player.HaveRequirements(piece, Player.RequirementMode.CanBuild))
+                    {
                         break;
                     }
 
                     player.PlacePiece(piece, position, rotation, doAttack: false);
-                    if (!freeBuild) {
+                    if (!freeBuild)
+                    {
                         player.ConsumeResources(piece.m_resources, 0);
                     }
                     planted++;
                 }
             }
 
-            if (planted > 0 && _messageHud != null) {
+            if (planted > 0 && _messageHud != null)
+            {
                 _messageHud.ShowMessage(MessageHud.MessageType.TopLeft, $"Planted {planted + 1}");
             }
 
             // Grow time is serialised per prefab and picked per plant by lerping between these two
             // with a seed, so the real window is only visible at runtime. Reported in days as well
             // as seconds because a Valheim day is m_dayLengthSec, not 24 hours of anything.
-            if (planted > 0) {
+            if (planted > 0)
+            {
                 float dayLength = EnvMan.instance != null ? EnvMan.instance.m_dayLengthSec : 1200f;
                 Debug.Log($"{piece.gameObject.name} grow time: {plant.m_growTime:0}-{plant.m_growTimeMax:0}s "
                         + $"({plant.m_growTime / dayLength:0.0}-{plant.m_growTimeMax / dayLength:0.0} in-game days)");
@@ -2549,22 +2690,28 @@ namespace ValheimMod
         /// always recomputes from the captured vanilla baseline, so withdrawing the boost restores
         /// the real sizes rather than dividing back down.
         /// </summary>
-        private static void RefreshStackSizeMultiplier() {
-            if (SoloOnlyRate(CustomStackSizeMultiplier) == _appliedStackMultiplier) {
+        private static void RefreshStackSizeMultiplier()
+        {
+            if (SoloOnlyRate(CustomStackSizeMultiplier) == _appliedStackMultiplier)
+            {
                 return;
             }
             ObjectDB odb = ObjectDB.instance;
-            if (odb != null) {
+            if (odb != null)
+            {
                 ApplyStackSizeMultiplier(odb);
             }
         }
 
-        private static bool IsSharedSession() {
-            if (!WorldEffectsSoloOnly.Value) {
+        private static bool IsSharedSession()
+        {
+            if (!WorldEffectsSoloOnly.Value)
+            {
                 return false;
             }
             float now = Time.realtimeSinceStartup;
-            if (now - _sharedSessionCheckedAt < SharedSessionCacheSeconds) {
+            if (now - _sharedSessionCheckedAt < SharedSessionCacheSeconds)
+            {
                 return _sharedSessionCached;
             }
             _sharedSessionCheckedAt = now;
@@ -2577,7 +2724,8 @@ namespace ValheimMod
         /// <summary>
         /// Returns a world-changing multiplier, or 1 when the session is shared.
         /// </summary>
-        private static float SoloOnlyRate(ConfigEntry<float> setting) {
+        private static float SoloOnlyRate(ConfigEntry<float> setting)
+        {
             float value = setting.Value;
             return (value > 0f && value != 1f && !IsSharedSession()) ? value : 1f;
         }
@@ -2587,7 +2735,8 @@ namespace ValheimMod
         /// to be re-asserted as the session changes - otherwise a boosted rate would linger after
         /// someone joined. _vanillaResourceRate holds whatever the world itself last set.
         /// </summary>
-        private static void ApplyResourceRate() {
+        private static void ApplyResourceRate()
+        {
             float multiplier = SoloOnlyRate(CustomResourceRate);
             Game.m_resourceRate = multiplier != 1f ? multiplier : _vanillaResourceRate;
         }
@@ -2859,6 +3008,369 @@ namespace ValheimMod
                 string label = Localization.instance.Localize(key);
                 SetRowText(_statNameProperty.GetValue(row, null), string.IsNullOrEmpty(label) ? statKey : label);
                 SetRowText(_progressProperty.GetValue(row, null), $"{currentAmount:0.##} / {totalAmount:0.##}");
+            }
+        }
+
+        // ---------------- Automatic dungeon map pins ----------------
+        // DungeonGenerator.Spawn is the moment a dungeon interior is actually placed, which only
+        // happens once its zone loads - that is to say, once the player is close enough. So the
+        // hook already means "discovered by proximity" without any distance check of our own, and
+        // it fires for every dungeon type: crypts, burial chambers, frost caves, mines.
+        //
+        // The generator component sits inside the placed location, so its transform is the dungeon
+        // itself. Pins only care about X and Z, so the vertical offset between the generator and
+        // the surface entrance does not matter.
+        //
+        // Spawn, GetClosestPin and m_pins are all non-public in the shipped assembly even though
+        // the publicized reference shows them public. Spawn is only *patched*, which is always
+        // allowed; GetClosestPin has to be invoked, so it goes through an AccessTools handle. It is
+        // called with mustBeVisible false deliberately - the vanilla default only counts pins whose
+        // UI element is currently active, which would let duplicates through for pins off-screen.
+        private static readonly MethodInfo GetClosestPinMethod = AccessTools.Method(
+            typeof(Minimap), "GetClosestPin", new[] { typeof(Vector3), typeof(float), typeof(bool) });
+        private static readonly MethodInfo AddPinMethod = AccessTools.Method(typeof(Minimap), "AddPin");
+
+        /// <summary>
+        /// Calls Minimap.AddPin without referencing Splatform. Its last parameter is a
+        /// PlatformUserID with a default value, and the compiler has to materialise that default at
+        /// the call site, which drags in an assembly this project otherwise has no use for. Going
+        /// through reflection and filling the trailing optional parameters here avoids adding a
+        /// dependency for one call, and survives Iron Gate appending further optional parameters.
+        /// </summary>
+        private static bool AddMapPin(Minimap map, Vector3 pos, Minimap.PinType type, string name, bool save, bool isChecked)
+        {
+            if (AddPinMethod == null)
+            {
+                return false;
+            }
+            ParameterInfo[] parameters = AddPinMethod.GetParameters();
+            if (parameters.Length < 5)
+            {
+                return false;
+            }
+            object[] args = new object[parameters.Length];
+            args[0] = pos;
+            args[1] = type;
+            args[2] = name;
+            args[3] = save;
+            args[4] = isChecked;
+            for (int i = 5; i < parameters.Length; i++)
+            {
+                object fallback = parameters[i].ParameterType.IsValueType
+                    ? Activator.CreateInstance(parameters[i].ParameterType)
+                    : null;
+                // A struct default compiles to no usable constant, so DefaultValue comes back null
+                // and the zeroed struct is the right stand-in
+                args[i] = parameters[i].HasDefaultValue && parameters[i].DefaultValue != null
+                    ? parameters[i].DefaultValue
+                    : fallback;
+            }
+            AddPinMethod.Invoke(map, args);
+            return true;
+        }
+
+        private static Dictionary<string, string> ParsePairs(string raw)
+        {
+            var parsed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string pair in (raw ?? string.Empty).Split(','))
+            {
+                int split = pair.IndexOf('=');
+                if (split <= 0)
+                {
+                    continue;
+                }
+                string key = pair.Substring(0, split).Trim();
+                string value = pair.Substring(split + 1).Trim();
+                if (key.Length > 0 && value.Length > 0)
+                {
+                    parsed[key] = value;
+                }
+            }
+            return parsed;
+        }
+
+        private static Dictionary<string, string> _dungeonNameOverrides;
+        private static string _dungeonNameSource;
+        private static Dictionary<string, string> _dungeonIconOverrides;
+        private static string _dungeonIconSource;
+
+        // Both are parsed lazily and rebuilt whenever their config string changes, so edits to the
+        // cfg apply without a restart
+        private static Dictionary<string, string> DungeonNameOverrides()
+        {
+            string raw = DungeonPinNameOverrides.Value ?? string.Empty;
+            if (_dungeonNameOverrides == null || _dungeonNameSource != raw)
+            {
+                _dungeonNameSource = raw;
+                _dungeonNameOverrides = ParsePairs(raw);
+            }
+            return _dungeonNameOverrides;
+        }
+
+        private static Dictionary<string, string> DungeonIconOverrides()
+        {
+            string raw = DungeonPinIconOverrides.Value ?? string.Empty;
+            if (_dungeonIconOverrides == null || _dungeonIconSource != raw)
+            {
+                _dungeonIconSource = raw;
+                _dungeonIconOverrides = ParsePairs(raw);
+            }
+            return _dungeonIconOverrides;
+        }
+
+        /// <summary>
+        /// Picks the pin icon for a dungeon, preferring an override on the resolved label, then one
+        /// on the surface location name, then the configured default. An index outside PinType is
+        /// ignored rather than cast blindly, so a typo in the cfg cannot produce a pin with no
+        /// sprite.
+        /// </summary>
+        private static Minimap.PinType ResolveDungeonPinType(string label, string locationKey)
+        {
+            var overrides = DungeonIconOverrides();
+            string raw = null;
+            if (label == null || !overrides.TryGetValue(label, out raw))
+            {
+                if (locationKey != null)
+                {
+                    overrides.TryGetValue(locationKey, out raw);
+                }
+            }
+            if (raw != null && int.TryParse(raw, out int index)
+                && Enum.IsDefined(typeof(Minimap.PinType), index))
+            {
+                return (Minimap.PinType)index;
+            }
+            return Enum.IsDefined(typeof(Minimap.PinType), DungeonPinIcon.Value)
+                ? (Minimap.PinType)DungeonPinIcon.Value
+                : Minimap.PinType.Icon2;
+        }
+
+        private static string StripClone(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+            int clone = name.IndexOf("(Clone)", StringComparison.Ordinal);
+            return (clone >= 0 ? name.Substring(0, clone) : name).Trim();
+        }
+
+        /// <summary>
+        /// Finds the surface location a dungeon interior belongs to.
+        ///
+        /// Interiors are not built inside the location prefab - they are generated on a separate
+        /// layer above y 3000, which is all Character.InInterior tests. GetComponentInParent
+        /// therefore finds nothing, which is why an unaided lookup only ever yields the generator's
+        /// own DG_ name. Location.GetLocation handles it: for an interior point it defers to
+        /// GetZoneLocation, which matches on zone, and since the interior keeps the surface
+        /// location's X and Z and only lifts Y, that resolves to the right location. The same
+        /// property is why the pin lands in the right place on the map, which only reads X and Z.
+        /// </summary>
+        private static Location DungeonLocation(DungeonGenerator generator)
+        {
+            return generator.GetComponentInParent<Location>()
+                ?? Location.GetLocation(generator.transform.position, checkDungeons: true);
+        }
+
+        /// <summary>
+        /// The names a dungeon can be keyed by, most specific first. The generator prefab is shared
+        /// between dungeon types - DG_Cave backs both Troll Caves and Frost Caves - so it is no use
+        /// on its own for either naming or overriding. The surface location prefab (TrollCave,
+        /// MountainCave01) is distinct per type and is what overrides should key on.
+        /// </summary>
+        private static string DungeonLocationKey(DungeonGenerator generator, Location location)
+        {
+            return StripClone(location?.gameObject.name) ?? StripClone(generator.transform.root.name);
+        }
+
+        /// <summary>
+        /// Prefers the name the game itself puts on screen. Location.m_discoverLabel is the
+        /// localisation token Player.UpdateBiome hands to MessageHud.ShowBiomeFoundMsg when you
+        /// walk into a location, so localizing it gives exactly the wording the game shows -
+        /// "Frost Cave" rather than DG_Cave - in whatever language is set, with no table to
+        /// maintain and nothing to update when a dungeon type is added. It also settles the shared
+        /// DG_Cave problem for free, because the label belongs to the location rather than the
+        /// generator.
+        /// </summary>
+        /// <summary>
+        /// Fallback names for locations that ship with no discover label, keyed by surface location
+        /// prefab. Only consulted after m_discoverLabel, so the game's own wording always wins and
+        /// this cannot override a correct name; DungeonPinNameOverrides beats both. Best effort
+        /// rather than authoritative - the pin log prints the location key for anything not covered,
+        /// which is what an override entry takes.
+        /// </summary>
+        private static readonly Dictionary<string, string> DungeonDefaultNames =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "MountainCave01", "Frost Cave" },
+                { "MountainCave02", "Frost Cave" },
+                { "TrollCave", "Troll Cave" },
+                { "TrollCave02", "Troll Cave" },
+                { "Crypt2", "Burial Chamber" },
+                { "Crypt3", "Burial Chamber" },
+                { "Crypt4", "Burial Chamber" },
+                { "SunkenCrypt1", "Sunken Crypt" },
+                { "SunkenCrypt2", "Sunken Crypt" },
+                { "SunkenCrypt3", "Sunken Crypt" },
+                { "SunkenCrypt4", "Sunken Crypt" },
+                { "Mistlands_Dungeon1", "Infested Mine" },
+                { "GoblinCamp2", "Fuling Camp" },
+                { "MeadowsVillage", "Meadows Village" },
+                { "MeadowsFarm", "Meadows Farm" },
+            };
+
+        /// <summary>
+        /// Fallback keyed on the dungeon generator rather than the surface location, with the biome
+        /// breaking ties. There are only a handful of generators and they are reused across every
+        /// location variant of a type, so this keeps naming a dungeon correct even for a location
+        /// prefab nobody has catalogued - a hypothetical MountainCave03 still resolves through
+        /// DG_Cave plus Mountain. The cost is that one generator can back two dungeon types, which
+        /// is what the biome disambiguates: DG_Cave is a Troll Cave in the Black Forest and a Frost
+        /// Cave in the Mountains.
+        ///
+        /// Keys are "generator|biome", or the bare generator where the type is unambiguous. The
+        /// biome comes from WorldGenerator.GetBiome, which derives it from the world seed and X/Z
+        /// alone - it does not need a loaded heightmap, which matters because dungeon interiors sit
+        /// above y 3000 where there is no terrain.
+        /// </summary>
+        private static readonly Dictionary<string, string> DungeonGeneratorNames =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Our own log confirmed DG_Cave backs MountainCave02 in the Mountains, so the
+                // claim elsewhere that Frost Caves use a separate DG_MountainCave is wrong for
+                // this build. The alias is kept anyway - an unmatched key costs nothing.
+                { "DG_Cave|Mountain", "Frost Cave" },
+                { "DG_Cave|BlackForest", "Troll Cave" },
+                { "DG_MountainCave", "Frost Cave" },
+                { "DG_ForestCrypt", "Burial Chamber" },
+                { "DG_SunkenCrypt", "Sunken Crypt" },
+                { "DG_Mistlands", "Infested Mine" },
+                { "DG_Hildir_Cave", "Howling Cavern" },
+                { "DG_Hildir_ForestCrypt", "Smouldering Tomb" },
+                { "DG_GoblinCamp", "Fuling Camp" },
+            };
+
+        private static string GeneratorBiomeName(string generatorName, Vector3 position, out string how)
+        {
+            how = null;
+            if (string.IsNullOrEmpty(generatorName))
+            {
+                return null;
+            }
+            WorldGenerator world = WorldGenerator.instance;
+            if (world != null)
+            {
+                Heightmap.Biome biome = world.GetBiome(position.x, position.z);
+                if (DungeonGeneratorNames.TryGetValue(generatorName + "|" + biome, out string byBiome))
+                {
+                    how = $"generator {generatorName} in {biome}";
+                    return byBiome;
+                }
+            }
+            if (DungeonGeneratorNames.TryGetValue(generatorName, out string byGenerator))
+            {
+                how = "generator " + generatorName;
+                return byGenerator;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Resolution order: an explicit config override, the game's own on-screen wording, the
+        /// location table, the generator-and-biome table, then the raw location prefab name. The
+        /// step that supplied the answer is reported through <paramref name="reason"/> so the log
+        /// can say where each label came from.
+        /// </summary>
+        private static string DungeonDisplayName(DungeonGenerator generator, out string reason)
+        {
+            Location location = DungeonLocation(generator);
+            string key = DungeonLocationKey(generator, location);
+            string label = location != null ? location.m_discoverLabel : null;
+
+            var overrides = DungeonNameOverrides();
+            if (key != null && overrides.TryGetValue(key, out string renamed))
+            {
+                reason = "config override";
+                return renamed;
+            }
+            if (!string.IsNullOrEmpty(label))
+            {
+                string localized = Localization.instance.Localize(label);
+                // Valheim returns the token in brackets when a key is missing; fall through on that
+                // rather than printing "[$location_x]" on the map
+                if (!string.IsNullOrEmpty(localized) && localized[0] != '[')
+                {
+                    reason = "discover label " + label;
+                    return localized;
+                }
+                reason = "discover label " + label + " did not localize";
+            }
+            else
+            {
+                reason = "location has no discover label";
+            }
+            if (key != null && DungeonDefaultNames.TryGetValue(key, out string known))
+            {
+                reason += "; named from location " + key;
+                return known;
+            }
+            string generatorName = StripClone(generator.transform.root.name);
+            string byGenerator = GeneratorBiomeName(generatorName, generator.transform.position, out string how);
+            if (byGenerator != null)
+            {
+                reason += "; named from " + how;
+                return byGenerator;
+            }
+            return key;
+        }
+
+        [HarmonyPatch(typeof(DungeonGenerator), "Spawn")]
+        class DungeonGenerator_Spawn_Patch
+        {
+            static void Postfix(DungeonGenerator __instance)
+            {
+                if (!AutoPinDungeons.Value || __instance == null || Player.m_localPlayer == null)
+                {
+                    return;
+                }
+                Minimap map = Minimap.instance;
+                if (map == null)
+                {
+                    return;
+                }
+                // CampGrid and CampRadial are surface settlements rather than dungeons
+                if (!DungeonPinIncludeCamps.Value && __instance.m_algorithm != DungeonGenerator.Algorithm.Dungeon)
+                {
+                    return;
+                }
+                Vector3 position = __instance.transform.position;
+                if (GetClosestPinMethod != null)
+                {
+                    object existing = GetClosestPinMethod.Invoke(map,
+                        new object[] { position, Mathf.Max(0f, DungeonPinMergeRadius.Value), false });
+                    if (existing != null)
+                    {
+                        return;
+                    }
+                }
+                string label = DungeonPinLabel.Value;
+                string reason = "fixed label";
+                if (DungeonPinUseLocationName.Value)
+                {
+                    string specific = DungeonDisplayName(__instance, out reason);
+                    if (!string.IsNullOrEmpty(specific))
+                    {
+                        label = specific;
+                    }
+                }
+                string key = DungeonLocationKey(__instance, DungeonLocation(__instance));
+                Minimap.PinType type = ResolveDungeonPinType(label, key);
+                if (!AddMapPin(map, position, type, label, true, false))
+                {
+                    return;
+                }
+                Debug.Log($"Dungeon pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0}"
+                    + $" (location {key}, generator {StripClone(__instance.transform.root.name)}, from {reason})");
             }
         }
 
@@ -3209,7 +3721,8 @@ namespace ValheimMod
         private static float _powerCheckedAt = float.NegativeInfinity;
         private static List<BossPower> _bossPowers;
 
-        private class BossPower {
+        private class BossPower
+        {
             public string StoneName;
             public string PowerName;
             public int PowerHash;
@@ -3221,30 +3734,38 @@ namespace ValheimMod
         /// ZNetScene already has loaded. Cached after the first successful pass, since the prefab
         /// set is fixed for the lifetime of the process.
         /// </summary>
-        private static void ScanBossPowers() {
-            if (_bossPowers != null) {
+        private static void ScanBossPowers()
+        {
+            if (_bossPowers != null)
+            {
                 return;
             }
             ZNetScene scene = ZNetScene.instance;
-            if (scene == null || scene.m_prefabs == null) {
+            if (scene == null || scene.m_prefabs == null)
+            {
                 return;
             }
             var found = new List<BossPower>();
-            foreach (GameObject prefab in scene.m_prefabs) {
-                if (prefab == null) {
+            foreach (GameObject prefab in scene.m_prefabs)
+            {
+                if (prefab == null)
+                {
                     continue;
                 }
                 // Shipped prefabs carry BossStone on the root, but search children as well so a
                 // nested or modded layout still resolves
                 BossStone stone = prefab.GetComponentInChildren<BossStone>(true);
-                if (stone == null || stone.m_itemStand == null) {
+                if (stone == null || stone.m_itemStand == null)
+                {
                     continue;
                 }
                 StatusEffect power = stone.m_itemStand.m_guardianPower;
-                if (power == null) {
+                if (power == null)
+                {
                     continue;
                 }
-                found.Add(new BossPower {
+                found.Add(new BossPower
+                {
                     StoneName = prefab.name,
                     PowerName = power.name,
                     PowerHash = power.NameHash(),
@@ -3262,24 +3783,29 @@ namespace ValheimMod
         /// re-applied each tick; the periodic sweep exists to catch the cases that clear it,
         /// chiefly death, which calls SEMan.RemoveAllStatusEffects.
         /// </summary>
-        private static void UpdatePassiveForsakenPowers() {
+        private static void UpdatePassiveForsakenPowers()
+        {
             Player player = Player.m_localPlayer;
-            if (player == null) {
+            if (player == null)
+            {
                 return;
             }
             float now = Time.realtimeSinceStartup;
-            if (now - _powerCheckedAt < PowerCheckSeconds) {
+            if (now - _powerCheckedAt < PowerCheckSeconds)
+            {
                 return;
             }
             _powerCheckedAt = now;
             ScanBossPowers();
             SEMan seman = player.GetSEMan();
-            if (_bossPowers == null || _bossPowers.Count == 0 || seman == null) {
+            if (_bossPowers == null || _bossPowers.Count == 0 || seman == null)
+            {
                 return;
             }
             bool enabled = PassiveForsakenPowers.Value;
             bool shared = IsSharedSession();
-            foreach (BossPower boss in _bossPowers) {
+            foreach (BossPower boss in _bossPowers)
+            {
                 // The only part of a status effect that reaches other players is the four-flag
                 // StatusAttribute mask written to the player's ZDO. SailingPower is one of those
                 // flags and it applies to whatever ship the player is aboard, so powers carrying an
@@ -3288,14 +3814,18 @@ namespace ValheimMod
                     && player.HaveUniqueKey(boss.PowerName)
                     && !(shared && boss.Attributes != StatusEffect.StatusAttribute.None);
                 StatusEffect active = seman.GetStatusEffect(boss.PowerHash);
-                if (wanted) {
-                    if (active == null) {
+                if (wanted)
+                {
+                    if (active == null)
+                    {
                         active = seman.AddStatusEffect(boss.PowerHash, false, 0, 0f, -1);
-                        if (active != null) {
+                        if (active != null)
+                        {
                             Debug.Log($"Forsaken power {boss.PowerName} held passively ({boss.StoneName})");
                         }
                     }
-                    if (active != null) {
+                    if (active != null)
+                    {
                         // StatusEffect.IsDone only expires an effect when m_ttl > 0, so zero means
                         // it never lapses. This is SEMan's own clone, so the shared asset keeps its
                         // normal duration for the vanilla activate-by-keypress path.
@@ -3306,7 +3836,9 @@ namespace ValheimMod
                         // from config every sweep so toggling it takes effect without a reload.
                         active.m_hidden = HidePassivePowerIcons.Value;
                     }
-                } else if (active != null && active.m_ttl == 0f) {
+                }
+                else if (active != null && active.m_ttl == 0f)
+                {
                     // Withdraw only what we granted - an effect with a real ttl was activated
                     // normally and should run its own course
                     seman.RemoveStatusEffect(boss.PowerHash, true);

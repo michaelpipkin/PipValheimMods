@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ValheimMod: Build Release",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "-c", "Release"],
+      "options": {
+        "cwd": "${workspaceFolder}/ValheimMod"
+      },
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "ValheimMod: Deploy to Cretila",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/.vscode/deploy-valheimmod.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "ValheimMod: Build Release + Deploy",
+      "dependsOrder": "sequence",
+      "dependsOn": ["ValheimMod: Build Release", "ValheimMod: Deploy to Cretila"],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
