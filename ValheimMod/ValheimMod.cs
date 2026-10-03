@@ -31,6 +31,7 @@ namespace ValheimMod
         private static ConfigEntry<bool> LogConsoleOutput;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
         private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
+        private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
         private static ConfigEntry<bool> StatBucketRepairApply;
         private static ConfigEntry<bool> GuaranteeFirstTrophy;
         private static ConfigEntry<bool> PreventStatRegression;
@@ -46,11 +47,13 @@ namespace ValheimMod
         private static ConfigEntry<string> PinExcludeNames;
         private static ConfigEntry<string> PinIncludeLocations;
         private static ConfigEntry<bool> AutoPinResources;
+        private static ConfigEntry<bool> ShowMapCursorCoordinates;
+        private static ConfigEntry<string> HudFontName;
+        private static ConfigEntry<float> MapCursorPositionX;
+        private static ConfigEntry<float> MapCursorPositionY;
         private static ConfigEntry<int> ResourcePinIcon;
         private static ConfigEntry<string> ResourcePinNames;
         private static ConfigEntry<float> ResourcePinMergeRadius;
-        private static ConfigEntry<string> LogResourceCandidates;
-        private static ConfigEntry<string> LogLocalizationSearch;
         private static ConfigEntry<string> DungeonPinIconOverrides;
         private static ConfigEntry<bool> ShowAchievementProgress;
         private static ConfigEntry<bool> RevealSecretAchievements;
@@ -144,6 +147,8 @@ namespace ValheimMod
 
         // Rebuilt whenever the configured font size changes
         private static GUIStyle _clockStyle;
+        private static readonly MethodInfo ScreenToWorldPointMethod =
+            AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint", new[] { typeof(Vector3) });
 
         // Vanilla max stack size per item type, captured before we ever change it, so the
         // multiplier is applied to the original value rather than to our own previous result.
@@ -246,6 +251,14 @@ namespace ValheimMod
                 "Also pin surface locations whose name contains one of these comma separated fragments, even though they have no interior and no dungeon generator. "
                 + "Those two are what the other hooks key off, so a structure that is simply built on the surface - a charred fortress, for instance - is otherwise invisible to all of them. "
                 + "PinExcludeNames still wins, so a fragment listed in both is excluded.");
+            HudFontName = Config.Bind("Clock", "HudFontName", "AveriaSerifLibre-Bold",
+                "Font for the clock, coordinates and map cursor readout, matched against the fonts the game has loaded. AveriaSerifLibre is the body font the game uses for item and effect names; Norsebold is the all-caps display font behind headings. An exact name beats a partial one, so AveriaSerifLibre-Bold selects that variant specifically. Leave empty for Unity's default. If the named font is not found, the log lists every font that is.");
+            ShowMapCursorCoordinates = Config.Bind("Map", "ShowMapCursorCoordinates", true,
+                "While the full map is open, show the world coordinates under the mouse cursor. Useful for finding a spot someone else has given you coordinates for on a known seed.");
+            MapCursorPositionX = Config.Bind("Map", "MapCursorPositionX", 12f,
+                "Map cursor readout offset in pixels from the left edge of the map panel, not the screen.");
+            MapCursorPositionY = Config.Bind("Map", "MapCursorPositionY", 12f,
+                "Map cursor readout offset in pixels from the top edge of the map panel, not the screen.");
             AutoPinResources = Config.Bind("Map", "AutoPinResources", true,
                 "Pin resource nodes as they load - tar pits, ore deposits, scrap piles.");
             ResourcePinIcon = Config.Bind("Map", "ResourcePinIcon", 3,
@@ -258,14 +271,6 @@ namespace ValheimMod
             ResourcePinMergeRadius = Config.Bind("Map", "ResourcePinMergeRadius", 30f,
                 "How close an existing pin has to be, in metres, for a resource node to count as already marked. "
                 + "Deposits cluster, so this is what stops one copper field becoming a dozen pins.");
-            LogLocalizationSearch = Config.Bind("Map", "LogLocalizationSearch", "",
-                "Diagnostic. Lists every localisation entry whose token or text contains this phrase, as 'token = text'. "
-                + "Useful for working back from a name shown in game to the token behind it, which usually mirrors the prefab name. "
-                + "Re-runs whenever this value changes. Clear it to switch off.");
-            LogResourceCandidates = Config.Bind("Map", "LogResourceCandidates", "",
-                "Diagnostic. Lists every prefab whose name contains one of these comma separated fragments, with the components on it. "
-                + "Useful both for finding prefab names for ResourcePinNames and for working out what an unfamiliar piece is actually built from. "
-                + "Re-runs whenever this value changes, so the reload hotkey is enough. Clear it to switch off.");
             PinInteriorLocations = Config.Bind("Map", "PinInteriorLocations", true,
                 "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
                 + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
@@ -287,6 +292,8 @@ namespace ValheimMod
                 "Stop the vanilla bucket bug from overwriting a high-water-mark achievement stat with a smaller number. Only the stats that record a maximum are protected, so resets that are supposed to happen - the consecutive-day streak zeroing on death - still work. Without this, repairs made by the StatBucketRepair hotkey are undone the next time the game writes one of these stats.");
             GuaranteeFirstTrophy = Config.Bind("Drops", "GuaranteeFirstTrophy", true,
                 "Guarantee a trophy drop the first time you kill a creature whose trophy you have never collected. Once collected, that creature rolls its normal chance again. Rare spawns like wraiths, fenrings and serpents are otherwise close to unfarmable. Suspended in a shared session, since drops are rolled by whoever owns the creature.");
+            HealthFloorToggleHotkey = Config.Bind("Hotkeys", "HealthFloorToggleHotkey", new KeyboardShortcut(KeyCode.Minus),
+                "Turns the MinHealthPercent damage floor on and off without editing the config. The floor keeps you alive through things like Ashlands lava, but it also makes it impossible to die on purpose - sailing off the edge of the world leaves no other way out. Starts on each time the game launches.");
             ReloadConfigHotkey = Config.Bind("Hotkeys", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
                 "Re-read this file from disk so edits take effect without relaunching. BepInEx has no file watcher, so nothing else notices the file changing - values parsed at startup are kept for the lifetime of the process. Settings read every frame apply at once; anything applied only at startup, such as which Harmony patches exist, still needs a relaunch.");
             StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
@@ -383,14 +390,17 @@ namespace ValheimMod
                 ReloadModConfig();
             }
 
+            if (HealthFloorToggleHotkey.Value.IsDown())
+            {
+                ToggleHealthFloor();
+            }
+
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
             ApplyResourceRate();
             RefreshStackSizeMultiplier();
             RefreshUpgradeChance();
-            SearchLocalization();
-            LogResourcePrefabCandidates();
             FlushPendingPins();
             UpdatePassiveForsakenPowers();
         }
@@ -539,7 +549,94 @@ namespace ValheimMod
         // The text is plain: no rich-text markup, so nothing can leak a colour tag as visible glyphs.
         private void OnGUI()
         {
-            if ((!ShowClock.Value && !ShowCoordinates.Value) || Player.m_localPlayer == null || Hud.IsUserHidden())
+            if (Player.m_localPlayer == null || Hud.IsUserHidden())
+            {
+                return;
+            }
+            DrawHudLine();
+            DrawMapCursorCoordinates();
+        }
+
+        private static Font _hudFont;
+        private static string _hudFontSource;
+        private static bool _hudFontReported;
+
+        /// <summary>
+        /// Finds the game's own font among those already loaded.
+        ///
+        /// FindObjectsOfTypeAll reaches assets that are loaded but not attached to an active object,
+        /// which is what a UI font is. Matching is by substring so "Norse" also finds a bold or
+        /// otherwise suffixed variant. The result is cached because the search walks every loaded
+        /// font, and is redone only when the configured name changes.
+        /// </summary>
+        private static Font ResolveHudFont()
+        {
+            string wanted = (HudFontName.Value ?? string.Empty).Trim();
+            if (_hudFontSource == wanted)
+            {
+                return _hudFont;
+            }
+            _hudFontSource = wanted;
+            _hudFont = null;
+            _hudFontReported = false;
+            if (wanted.Length == 0)
+            {
+                return null;
+            }
+            Font[] fonts = Resources.FindObjectsOfTypeAll<Font>();
+            // Exact before partial, so naming a specific variant picks it rather than whichever
+            // partial match is enumerated first - "Norse" otherwise lands on Norsebold
+            foreach (Font font in fonts)
+            {
+                if (font != null && string.Equals(font.name, wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    _hudFont = font;
+                    Debug.Log($"HUD font: using '{font.name}' (exact match)");
+                    return _hudFont;
+                }
+            }
+            foreach (Font font in fonts)
+            {
+                if (font != null && font.name.IndexOf(wanted, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    _hudFont = font;
+                    Debug.Log($"HUD font: using '{font.name}' for '{wanted}' (partial match)");
+                    return _hudFont;
+                }
+            }
+            if (!_hudFontReported)
+            {
+                // Only on a miss, so the name can be corrected without a separate diagnostic
+                _hudFontReported = true;
+                var names = fonts.Where(f => f != null).Select(f => f.name).Distinct().OrderBy(n => n).ToArray();
+                Debug.LogWarning($"HUD font '{wanted}' not found, using the default. Loaded fonts: "
+                    + (names.Length > 0 ? string.Join(", ", names) : "none"));
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Built once and rebuilt only when the size or font changes, since OnGUI runs several times
+        /// a frame and a GUIStyle per call would be wasteful.
+        /// </summary>
+        private static GUIStyle HudStyle()
+        {
+            Font font = ResolveHudFont();
+            if (_clockStyle == null || _clockStyle.fontSize != ClockFontSize.Value || _clockStyle.font != font)
+            {
+                _clockStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = ClockFontSize.Value,
+                    font = font,
+                };
+                _clockStyle.normal.textColor = Color.white;
+            }
+            return _clockStyle;
+        }
+
+        private static void DrawHudLine()
+        {
+            if (!ShowClock.Value && !ShowCoordinates.Value)
             {
                 return;
             }
@@ -548,20 +645,87 @@ namespace ValheimMod
             {
                 return;
             }
-            if (_clockStyle == null || _clockStyle.fontSize != ClockFontSize.Value)
-            {
-                // Inherits the skin's default upper-left alignment; setting it explicitly would
-                // pull in UnityEngine.TextRenderingModule for no visual difference
-                _clockStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = ClockFontSize.Value,
-                };
-                _clockStyle.normal.textColor = Color.white;
-            }
             // Wide enough for clock and position together; the label is left-aligned so extra
             // width simply goes unused when only one of them is on
             var area = new Rect(ClockPositionX.Value, ClockPositionY.Value, 900f, ClockFontSize.Value * 2f);
-            GUI.Label(area, line, _clockStyle);
+            GUI.Label(area, line, HudStyle());
+        }
+
+        /// <summary>
+        /// Shows where the mouse is pointing on the open map, in world coordinates.
+        ///
+        /// Minimap.ScreenToWorldPoint is the game's own conversion, which means this stays correct
+        /// however the map is panned or zoomed - no reimplementation of the projection to drift out
+        /// of step with it. It is private in the shipped assembly, so it comes through AccessTools.
+        /// </summary>
+        /// <summary>
+        /// Screen rect of the large map image, in GUI coordinates.
+        ///
+        /// GetWorldCorners gives the corners in world space, which for a Screen Space - Overlay
+        /// canvas is already in pixels measured from the bottom-left. GUI rects are measured from
+        /// the top-left, so the Y axis is flipped here. Corner 0 is bottom-left and corner 2 is
+        /// top-right.
+        /// </summary>
+        private static bool TryGetMapScreenRect(Minimap map, out Rect rect)
+        {
+            rect = default;
+            // Reached through the GameObject rather than m_mapImageLarge, whose RawImage type
+            // would make UnityEngine.UI a project reference for one property
+            GameObject panel = map.m_mapLarge != null ? map.m_mapLarge : map.m_largeRoot;
+            RectTransform transform = panel != null ? panel.transform as RectTransform : null;
+            if (transform == null)
+            {
+                return false;
+            }
+            transform.GetWorldCorners(_mapCorners);
+            Vector3 bottomLeft = _mapCorners[0];
+            Vector3 topRight = _mapCorners[2];
+            float width = topRight.x - bottomLeft.x;
+            float height = topRight.y - bottomLeft.y;
+            if (width <= 0f || height <= 0f)
+            {
+                return false;
+            }
+            rect = new Rect(bottomLeft.x, Screen.height - topRight.y, width, height);
+            return true;
+        }
+
+        private static readonly Vector3[] _mapCorners = new Vector3[4];
+
+        private static void DrawMapCursorCoordinates()
+        {
+            if (!ShowMapCursorCoordinates.Value || !Minimap.IsOpen() || ScreenToWorldPointMethod == null)
+            {
+                return;
+            }
+            Minimap map = Minimap.instance;
+            if (map == null)
+            {
+                return;
+            }
+            // Input.mousePosition is measured from the bottom-left, which is what the game's own
+            // conversion expects; GUI rects are measured from the top-left, hence the two systems
+            // sitting side by side here
+            object world = ScreenToWorldPointMethod.Invoke(map, new object[] { Input.mousePosition });
+            if (!(world is Vector3 point))
+            {
+                return;
+            }
+            // Anchored to the map panel rather than the screen, because the panel does not fill the
+            // window - on an ultrawide it is a letterboxed strip, and a screen-relative label ends
+            // up out in the surrounding HUD next to the clock
+            if (!TryGetMapScreenRect(map, out Rect panel))
+            {
+                return;
+            }
+            var area = new Rect(
+                panel.x + MapCursorPositionX.Value,
+                panel.y + MapCursorPositionY.Value,
+                900f,
+                ClockFontSize.Value * 2f);
+            // Labelled Y rather than Z: the game calls the north-south axis Z internally, but every
+            // coordinate the player sees - including the clock line - calls it Y
+            GUI.Label(area, $"Cursor   X {point.x:0}   Y {point.z:0}", HudStyle());
         }
 
         /// <summary>
@@ -2811,6 +2975,18 @@ namespace ValheimMod
         // Solo means hosting with nobody connected. ZNet.IsServer() is false when you have joined
         // someone else's world, and GetPeerConnections counts anyone connected to yours - so a
         // player joining or leaving mid-session flips this without needing a reload.
+        // Deliberately not persisted: the floor should be on after a relaunch, since the reason
+        // to switch it off - dying on purpose - is a short, specific situation, and forgetting it
+        // was off is how a real death happens by accident.
+        private static bool _healthFloorEnabled = true;
+
+        /// <summary>
+        /// Whether the damage floor applies at all. Both the prefix that clamps a hit and the
+        /// postfix that checks the result read this, so the hotkey and the config cannot disagree
+        /// about whether the gate is live.
+        /// </summary>
+        private static bool HealthFloorActive => _healthFloorEnabled && MinHealthPercent.Value > 0f;
+
         private const float SharedSessionCacheSeconds = 1f;
         private static float _sharedSessionCheckedAt = float.NegativeInfinity;
         private static bool _sharedSessionCached;
@@ -3729,146 +3905,6 @@ namespace ValheimMod
             Debug.Log($"Flushed {queued.Count} pin(s) queued before the minimap existed, {added} added");
         }
 
-        // ---------------- Localisation search ----------------
-        // Works back from a name shown on screen to the token behind it. Tokens generally mirror the
-        // prefab name, so this finds a prefab that no amount of guessing at names will - the search
-        // starts from the words the player actually sees. m_translations is private in the shipped
-        // assembly and lives in assembly_guiutils, so it needs an AccessTools handle.
-        private static readonly FieldInfo TranslationsField =
-            AccessTools.Field(typeof(Localization), "m_translations");
-        private static bool _localizationSearched;
-        private static string _localizationSearchSource;
-
-        private static void SearchLocalization()
-        {
-            string raw = LogLocalizationSearch.Value ?? string.Empty;
-            if (_localizationSearchSource != raw)
-            {
-                _localizationSearchSource = raw;
-                _localizationSearched = false;
-            }
-            if (_localizationSearched)
-            {
-                return;
-            }
-            string needle = raw.Trim();
-            if (needle.Length == 0)
-            {
-                _localizationSearched = true;
-                return;
-            }
-            Localization localization = Localization.instance;
-            if (localization == null || TranslationsField == null)
-            {
-                return;
-            }
-            var translations = TranslationsField.GetValue(localization) as Dictionary<string, string>;
-            if (translations == null)
-            {
-                _localizationSearched = true;
-                Debug.LogWarning("Localization search: could not read the translation table");
-                return;
-            }
-            _localizationSearched = true;
-            int hits = 0;
-            foreach (KeyValuePair<string, string> entry in translations)
-            {
-                if (entry.Key.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0
-                    || (entry.Value != null && entry.Value.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0))
-                {
-                    Debug.Log($"Localization: ${entry.Key} = {entry.Value}");
-                    hits++;
-                }
-            }
-            Debug.Log($"Localization search complete: {hits} entry(s) matched [{needle}] out of {translations.Count}");
-        }
-
-        // ---------------- Resource prefab diagnostic ----------------
-        // Guessing prefab names has already cost one round trip, so read them instead. ZNetScene
-        // holds every networked prefab, and each one says in its components how it could be
-        // pinned: MineRock or MineRock5 means the mineable-rock hooks can see it, Location means
-        // the location hook can. Runs once per session and prints nothing when the setting is
-        // empty.
-        private static bool _resourceCandidatesLogged;
-        private static string _resourceCandidatesSource;
-
-        private static void LogResourcePrefabCandidates()
-        {
-            string raw = LogResourceCandidates.Value ?? string.Empty;
-            // Re-arm when the setting changes, so a new search can be run with the reload hotkey
-            // instead of restarting the game
-            if (_resourceCandidatesSource != raw)
-            {
-                _resourceCandidatesSource = raw;
-                _resourceCandidatesLogged = false;
-            }
-            if (_resourceCandidatesLogged)
-            {
-                return;
-            }
-            string[] fragments = raw.Split(',').Select(f => f.Trim()).Where(f => f.Length > 0).ToArray();
-            if (fragments.Length == 0)
-            {
-                _resourceCandidatesLogged = true;
-                return;
-            }
-            ZNetScene scene = ZNetScene.instance;
-            if (scene == null || scene.m_prefabs == null)
-            {
-                return;
-            }
-            _resourceCandidatesLogged = true;
-            int found = 0;
-            foreach (GameObject prefab in scene.m_prefabs)
-            {
-                if (prefab == null)
-                {
-                    continue;
-                }
-                string name = prefab.name;
-                bool match = false;
-                foreach (string fragment in fragments)
-                {
-                    if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        match = true;
-                        break;
-                    }
-                }
-                if (!match)
-                {
-                    continue;
-                }
-                // Every component, not a fixed shortlist: the point of this is usually to find out
-                // what an unfamiliar prefab is made of, and the interesting one is whatever was not
-                // expected. Transform and renderers are dropped as pure noise.
-                var parts = new List<string>();
-                foreach (Component component in prefab.GetComponents<Component>())
-                {
-                    if (component == null)
-                    {
-                        continue;
-                    }
-                    string typeName = component.GetType().Name;
-                    if (typeName == "Transform" || typeName == "RectTransform"
-                        || typeName.EndsWith("Renderer", StringComparison.Ordinal)
-                        || typeName.EndsWith("Filter", StringComparison.Ordinal)
-                        || typeName.EndsWith("Collider", StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-                    if (!parts.Contains(typeName))
-                    {
-                        parts.Add(typeName);
-                    }
-                }
-                Debug.Log($"Prefab: {name} [{(parts.Count > 0 ? string.Join(", ", parts.ToArray()) : "no components")}]"
-                    + $" pinnable={IsPinnableResource(name)}");
-                found++;
-            }
-            Debug.Log($"Prefab scan complete: {found} prefab(s) matched [{raw}].");
-        }
-
         // ---------------- Resource node pins ----------------
         // Matched on a fragment of the prefab name rather than an exact list, because the deposits
         // are named inconsistently and a substring survives that: "Copper" catches the copper
@@ -3932,11 +3968,6 @@ namespace ValheimMod
                 }
             }
             return false;
-        }
-
-        private static bool IsPinnableResource(string prefabName)
-        {
-            return TryMatchResource(prefabName, out _);
         }
 
         private static void PinResource(Vector3 position, string prefabName)
@@ -4243,6 +4274,28 @@ namespace ValheimMod
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
             _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
+        }
+
+        private static void ToggleHealthFloor()
+        {
+            _healthFloorEnabled = !_healthFloorEnabled;
+            string message;
+            if (!_healthFloorEnabled)
+            {
+                message = "Health floor OFF - you can die";
+            }
+            else if (MinHealthPercent.Value > 0f)
+            {
+                message = $"Health floor ON - {MinHealthPercent.Value:P0} of max health";
+            }
+            else
+            {
+                // Toggling on means nothing while the configured floor is zero, and silently doing
+                // nothing is exactly the case where a surprise death happens
+                message = "Health floor ON, but MinHealthPercent is 0 - no protection";
+            }
+            Debug.Log(message);
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
         }
 
         private void ReloadModConfig()
@@ -4786,7 +4839,7 @@ namespace ValheimMod
         /// </summary>
         private static void EnforceHealthFloor(Character character)
         {
-            if (MinHealthPercent.Value <= 0f || character == null || !ReferenceEquals(character, Player.m_localPlayer))
+            if (!HealthFloorActive || character == null || !ReferenceEquals(character, Player.m_localPlayer))
             {
                 return;
             }
@@ -4972,7 +5025,7 @@ namespace ValheimMod
                     // reaches it - left running with MinHealthPercent at 0 they make the player
                     // quietly unkillable, which looks like the game refusing to deal damage rather
                     // than like a mod setting.
-                    if (MinHealthPercent.Value <= 0f)
+                    if (!HealthFloorActive)
                     {
                         if (LogPlayerDamage.Value)
                         {
