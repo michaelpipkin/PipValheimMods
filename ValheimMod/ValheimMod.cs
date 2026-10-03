@@ -30,9 +30,11 @@ namespace ValheimMod
         private static ConfigEntry<bool> HidePassivePowerIcons;
         private static ConfigEntry<bool> LogConsoleOutput;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
+        private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
         private static ConfigEntry<bool> StatBucketRepairApply;
         private static ConfigEntry<bool> GuaranteeFirstTrophy;
         private static ConfigEntry<bool> PreventStatRegression;
+        private static ConfigEntry<float> UpgradeSuccessChance;
         private static ConfigEntry<bool> AutoPinDungeons;
         private static ConfigEntry<int> DungeonPinIcon;
         private static ConfigEntry<float> DungeonPinMergeRadius;
@@ -40,6 +42,15 @@ namespace ValheimMod
         private static ConfigEntry<bool> DungeonPinUseLocationName;
         private static ConfigEntry<string> DungeonPinNameOverrides;
         private static ConfigEntry<bool> DungeonPinIncludeCamps;
+        private static ConfigEntry<bool> PinInteriorLocations;
+        private static ConfigEntry<string> PinExcludeNames;
+        private static ConfigEntry<string> PinIncludeLocations;
+        private static ConfigEntry<bool> AutoPinResources;
+        private static ConfigEntry<int> ResourcePinIcon;
+        private static ConfigEntry<string> ResourcePinNames;
+        private static ConfigEntry<float> ResourcePinMergeRadius;
+        private static ConfigEntry<string> LogResourceCandidates;
+        private static ConfigEntry<string> LogLocalizationSearch;
         private static ConfigEntry<string> DungeonPinIconOverrides;
         private static ConfigEntry<bool> ShowAchievementProgress;
         private static ConfigEntry<bool> RevealSecretAchievements;
@@ -177,8 +188,6 @@ namespace ValheimMod
             const string priorityHelp = " Comma-separated prefab names, earlier meaning higher priority. Anything not listed keeps the station's own order, after everything that is listed. Leave empty to always use the station's own order. This only orders items within a source: whatever you are carrying is always used before anything in a container, so you can force a choice by putting it in your inventory.";
             SmelterInputPriority = Config.Bind("Containers", "SmelterInputPriority", "FlametalOreNew,FlametalOre,BlackMetalScrap,SilverOre,IronScrap,CopperOre,TinOre", "Which ore a smelter, kiln or blast furnace reaches for first when several are available." + priorityHelp);
             CookingStationInputPriority = Config.Bind("Containers", "CookingStationInputPriority", "SerpentMeat,LoxMeat,BugMeat,ChickenMeat,HareMeat,WolfMeat,DeerMeat,RawMeat,NeckTail,FishRaw", "Which raw item a cooking station or oven reaches for first when several are available. The default is ordered roughly by biome progression and is only a starting point - reorder it to taste." + priorityHelp);
-            _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
-            _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
             MinHealthPercent = Config.Bind("General", "MinHealthPercent", 0.25f, new ConfigDescription("Damage can never take you below this fraction of your maximum health. 0.25 keeps you at a quarter health no matter how big the hit. Set to 0 to disable the floor and take damage normally.", new AcceptableValueRange<float>(0f, 0.95f)));
             LogPlayerDamage = Config.Bind("General", "LogPlayerDamage", false, "Diagnostic. Logs every hit that reaches the damage gate, with its type, the raw amount, what the gate allowed through and your health at the time. Use it to find out what actually killed you.");
@@ -229,6 +238,38 @@ namespace ValheimMod
             DungeonPinIncludeCamps = Config.Bind("Map", "DungeonPinIncludeCamps", true,
                 "Also pin surface camps - Fuling villages, Meadows villages and farms. DungeonGenerator builds these as well as real dungeons, "
                 + "told apart by its m_algorithm field. Turn off to keep the map to actual dungeons only.");
+            PinExcludeNames = Config.Bind("Map", "PinExcludeNames", "FortressRuins,AshlandRuins",
+                "Never pin anything whose location, generator or prefab name contains one of these comma separated fragments, case insensitive. "
+                + "The Ashlands are full of ruins that qualify as dungeons structurally but hold nothing worth walking back to, and they bury the useful pins. "
+                + "Checked before everything else, so an excluded name cannot be brought back by a rule elsewhere.");
+            PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress",
+                "Also pin surface locations whose name contains one of these comma separated fragments, even though they have no interior and no dungeon generator. "
+                + "Those two are what the other hooks key off, so a structure that is simply built on the surface - a charred fortress, for instance - is otherwise invisible to all of them. "
+                + "PinExcludeNames still wins, so a fragment listed in both is excluded.");
+            AutoPinResources = Config.Bind("Map", "AutoPinResources", true,
+                "Pin resource nodes as they load - tar pits, ore deposits, scrap piles.");
+            ResourcePinIcon = Config.Bind("Map", "ResourcePinIcon", 3,
+                "Minimap.PinType index for resource pins, separate from the dungeon icon. 3 is the dot.");
+            ResourcePinNames = Config.Bind("Map", "ResourcePinNames",
+                "rock4_copper=Copper,MineRock_Copper=Copper,rock3_silver=Silver,silvervein=Silver,mudpile=Mud Pile,FlametalRockstand=Flametal,LeviathanLava=Flametal,TarPit=Tar Pit,DragonEgg=Dragon Egg,Leviathan=Leviathan",
+                "Comma separated prefab=label pairs. The prefab part is matched as a case insensitive fragment, so one entry covers every variant - mudpile also catches mudpile2. "
+                + "These are the real prefab names from the registry scan: the intact deposit you walk up to is rock4_copper or silvervein, while the _frac MineRock5 version only exists once mined. "
+                + "An entry with no '=' still works and gets a name derived from the prefab. Tin is deliberately absent. Every pin logs the prefab it matched.");
+            ResourcePinMergeRadius = Config.Bind("Map", "ResourcePinMergeRadius", 30f,
+                "How close an existing pin has to be, in metres, for a resource node to count as already marked. "
+                + "Deposits cluster, so this is what stops one copper field becoming a dozen pins.");
+            LogLocalizationSearch = Config.Bind("Map", "LogLocalizationSearch", "",
+                "Diagnostic. Lists every localisation entry whose token or text contains this phrase, as 'token = text'. "
+                + "Useful for working back from a name shown in game to the token behind it, which usually mirrors the prefab name. "
+                + "Re-runs whenever this value changes. Clear it to switch off.");
+            LogResourceCandidates = Config.Bind("Map", "LogResourceCandidates", "",
+                "Diagnostic. Lists every prefab whose name contains one of these comma separated fragments, with the components on it. "
+                + "Useful both for finding prefab names for ResourcePinNames and for working out what an unfamiliar piece is actually built from. "
+                + "Re-runs whenever this value changes, so the reload hotkey is enough. Clear it to switch off.");
+            PinInteriorLocations = Config.Bind("Map", "PinInteriorLocations", true,
+                "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
+                + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
+                + "Keyed off Location.m_hasInterior, the same flag the game uses to decide whether to create an interior zone at all.");
             DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Meadows Village=0,Meadows Farm=0,GoblinCamp2=0",
                 "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
                 + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
@@ -239,10 +280,15 @@ namespace ValheimMod
                 + "Only needed when a dungeon has no discover label of its own, or when its in-game name is not what you want on the map.");
             DungeonPinUseLocationName = Config.Bind("Map", "DungeonPinUseLocationName", true,
                 "Label each pin with the dungeon prefab name - MountainCave01, Crypt3, SunkenCrypt4 and so on - so the map tells you which caves are worth the climb. Turn off to label every dungeon with the fixed DungeonPinLabel instead.");
+            UpgradeSuccessChance = Config.Bind("General", "UpgradeSuccessChance", 0f, new ConfigDescription(
+                "Success chance at the Forge of Potential, as a fraction. 1 never fails and never destroys the item, 0.65 is the vanilla value for most upgraders. Leave at 0 to keep whatever each upgrader ships with. The chance belongs to the upgrader item rather than the station, so this applies to every upgrader at once.",
+                new AcceptableValueRange<float>(0f, 1f)));
             PreventStatRegression = Config.Bind("General", "PreventStatRegression", true,
                 "Stop the vanilla bucket bug from overwriting a high-water-mark achievement stat with a smaller number. Only the stats that record a maximum are protected, so resets that are supposed to happen - the consecutive-day streak zeroing on death - still work. Without this, repairs made by the StatBucketRepair hotkey are undone the next time the game writes one of these stats.");
             GuaranteeFirstTrophy = Config.Bind("Drops", "GuaranteeFirstTrophy", true,
                 "Guarantee a trophy drop the first time you kill a creature whose trophy you have never collected. Once collected, that creature rolls its normal chance again. Rare spawns like wraiths, fenrings and serpents are otherwise close to unfarmable. Suspended in a shared session, since drops are rolled by whoever owns the creature.");
+            ReloadConfigHotkey = Config.Bind("Hotkeys", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
+                "Re-read this file from disk so edits take effect without relaunching. BepInEx has no file watcher, so nothing else notices the file changing - values parsed at startup are kept for the lifetime of the process. Settings read every frame apply at once; anything applied only at startup, such as which Harmony patches exist, still needs a relaunch.");
             StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
                 "Reports achievement stats that the vanilla bucket-latch bug has frozen, and repairs them when StatBucketRepairApply is on. Must be pressed in a loaded world.");
             StatBucketRepairApply = Config.Bind("General", "StatBucketRepairApply", false,
@@ -250,9 +296,13 @@ namespace ValheimMod
             DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,FishAndBread,SeekerAspic", "Comma-separated list of foods to spawn");
-            _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
             FavoriteAmmoList = Config.Bind("Inventory", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "Comma-separated list of ammo to replenish when repairing gear");
-            _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
+
+            // After every Bind, since this reads the entries. Config.Reload swaps each ConfigEntry
+            // value in place, but a cache parsed out of one of those strings has to be rebuilt to
+            // match, so the same routine runs again on reload.
+            RebuildDerivedConfig();
+            Config.ConfigReloaded += (sender, args) => RebuildDerivedConfig();
 
             Game.isModded = true;
 
@@ -328,11 +378,20 @@ namespace ValheimMod
                 RepairStatBuckets();
             }
 
+            if (ReloadConfigHotkey.Value.IsDown())
+            {
+                ReloadModConfig();
+            }
+
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
             ApplyResourceRate();
             RefreshStackSizeMultiplier();
+            RefreshUpgradeChance();
+            SearchLocalization();
+            LogResourcePrefabCandidates();
+            FlushPendingPins();
             UpdatePassiveForsakenPowers();
         }
 
@@ -830,6 +889,7 @@ namespace ValheimMod
             {
                 GuardLoadPath("stack size multiplier", () => ApplyStackSizeMultiplier(__instance));
                 GuardLoadPath("variant clamp", () => ClampVariantCounts(__instance));
+                GuardLoadPath("upgrade chance", () => ApplyUpgradeChance(__instance));
             }
         }
 
@@ -937,6 +997,81 @@ namespace ValheimMod
             if (changed > 0)
             {
                 Debug.Log($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
+            }
+        }
+
+        private static readonly Dictionary<ItemDrop.ItemData.SharedData, float> _baseUpgradeChances =
+            new Dictionary<ItemDrop.ItemData.SharedData, float>();
+        private static float _appliedUpgradeChance = float.NaN;
+
+        /// <summary>
+        /// Sets the Forge of Potential success chance.
+        ///
+        /// InventoryGui.DoCrafting rolls it against the *upgrader resource*, not the station:
+        ///
+        ///     float roll = Random.Range(0f, 1f);
+        ///     if (itemData2.m_shared.m_upgradeChance >= roll)            // success
+        ///     else if (itemData2.m_shared.m_breakChance >= 1f - roll)    // item destroyed
+        ///     else                                                       // level reduced
+        ///
+        /// so the value to change is on each upgrader item's SharedData. Only items that already
+        /// have a chance are touched, which is what identifies an upgrader - everything else is
+        /// left alone. At 1 the first branch always wins, so the break and downgrade outcomes
+        /// become unreachable without having to touch m_breakChance as well.
+        ///
+        /// The original is remembered per SharedData so setting the config back to 0 restores it,
+        /// rather than leaving whatever was last written baked in.
+        /// </summary>
+        private static void ApplyUpgradeChance(ObjectDB odb)
+        {
+            if (odb == null || odb.m_items == null)
+            {
+                return;
+            }
+            float configured = UpgradeSuccessChance.Value;
+            _appliedUpgradeChance = configured;
+            int changed = 0;
+            foreach (var prefab in odb.m_items)
+            {
+                var drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+                var shared = drop?.m_itemData?.m_shared;
+                if (shared == null)
+                {
+                    continue;
+                }
+                if (!_baseUpgradeChances.TryGetValue(shared, out float original))
+                {
+                    original = shared.m_upgradeChance;
+                    // Only upgrader items carry a chance at all; anything at zero is not one
+                    if (original <= 0f)
+                    {
+                        continue;
+                    }
+                    _baseUpgradeChances[shared] = original;
+                }
+                float target = configured > 0f ? configured : original;
+                if (shared.m_upgradeChance != target)
+                {
+                    shared.m_upgradeChance = target;
+                    changed++;
+                }
+            }
+            if (changed > 0)
+            {
+                Debug.Log($"Upgrade success chance set to {(configured > 0f ? configured.ToString("0.##") : "vanilla")} on {changed} upgrader item(s)");
+            }
+        }
+
+        private static void RefreshUpgradeChance()
+        {
+            if (UpgradeSuccessChance.Value == _appliedUpgradeChance)
+            {
+                return;
+            }
+            ObjectDB odb = ObjectDB.instance;
+            if (odb != null)
+            {
+                ApplyUpgradeChance(odb);
             }
         }
 
@@ -3145,6 +3280,53 @@ namespace ValheimMod
                 : Minimap.PinType.Icon2;
         }
 
+        /// <summary>
+        /// Turns a prefab name into something readable for a dungeon nobody has catalogued:
+        /// BearCave becomes "Bear Cave", PutridHole becomes "Putrid Hole". Only ever reached after
+        /// the overrides, the discover label and both tables, so it can never override a known
+        /// name - it just replaces the raw prefab name that would otherwise end up on the map.
+        ///
+        /// A trailing variant number is dropped so TrollCave02 does not read "Troll Cave 02", the
+        /// DG_ prefix is dropped when a generator name is all that is available, and a run of
+        /// capitals is kept together so ids like a hypothetical DvergrNPC stay intact.
+        /// </summary>
+        private static string Prettify(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+            {
+                return raw;
+            }
+            string name = raw;
+            if (name.StartsWith("DG_", StringComparison.OrdinalIgnoreCase))
+            {
+                name = name.Substring(3);
+            }
+            name = name.Replace('_', ' ');
+            int end = name.Length;
+            while (end > 0 && char.IsDigit(name[end - 1]))
+            {
+                end--;
+            }
+            if (end > 0 && end < name.Length)
+            {
+                name = name.Substring(0, end);
+            }
+            var builder = new StringBuilder(name.Length + 8);
+            for (int i = 0; i < name.Length; i++)
+            {
+                char c = name[i];
+                bool startsWord = i > 0 && char.IsUpper(c)
+                    && (char.IsLower(name[i - 1]) || (i + 1 < name.Length && char.IsLower(name[i + 1])));
+                if (startsWord && builder.Length > 0 && builder[builder.Length - 1] != ' ')
+                {
+                    builder.Append(' ');
+                }
+                builder.Append(c);
+            }
+            string pretty = builder.ToString().Trim();
+            return pretty.Length > 0 ? pretty : raw;
+        }
+
         private static string StripClone(string name)
         {
             if (string.IsNullOrEmpty(name))
@@ -3178,9 +3360,9 @@ namespace ValheimMod
         /// on its own for either naming or overriding. The surface location prefab (TrollCave,
         /// MountainCave01) is distinct per type and is what overrides should key on.
         /// </summary>
-        private static string DungeonLocationKey(DungeonGenerator generator, Location location)
+        private static string DungeonLocationKey(Location location, string generatorName)
         {
-            return StripClone(location?.gameObject.name) ?? StripClone(generator.transform.root.name);
+            return StripClone(location?.gameObject.name) ?? generatorName;
         }
 
         /// <summary>
@@ -3205,6 +3387,8 @@ namespace ValheimMod
                 { "MountainCave01", "Frost Cave" },
                 { "MountainCave02", "Frost Cave" },
                 { "TrollCave", "Troll Cave" },
+                { "BearCave", "Bear Cave" },
+                { "MorgenHole", "Putrid Hole" },
                 { "TrollCave02", "Troll Cave" },
                 { "Crypt2", "Burial Chamber" },
                 { "Crypt3", "Burial Chamber" },
@@ -3213,7 +3397,7 @@ namespace ValheimMod
                 { "SunkenCrypt2", "Sunken Crypt" },
                 { "SunkenCrypt3", "Sunken Crypt" },
                 { "SunkenCrypt4", "Sunken Crypt" },
-                { "Mistlands_Dungeon1", "Infested Mine" },
+                { "Mistlands_DvergrTownEntrance1", "Infested Mine" },
                 { "GoblinCamp2", "Fuling Camp" },
                 { "MeadowsVillage", "Meadows Village" },
                 { "MeadowsFarm", "Meadows Farm" },
@@ -3244,7 +3428,7 @@ namespace ValheimMod
                 { "DG_MountainCave", "Frost Cave" },
                 { "DG_ForestCrypt", "Burial Chamber" },
                 { "DG_SunkenCrypt", "Sunken Crypt" },
-                { "DG_Mistlands", "Infested Mine" },
+                { "DG_DvergrTown", "Infested Mine" },
                 { "DG_Hildir_Cave", "Howling Cavern" },
                 { "DG_Hildir_ForestCrypt", "Smouldering Tomb" },
                 { "DG_GoblinCamp", "Fuling Camp" },
@@ -3281,10 +3465,9 @@ namespace ValheimMod
         /// step that supplied the answer is reported through <paramref name="reason"/> so the log
         /// can say where each label came from.
         /// </summary>
-        private static string DungeonDisplayName(DungeonGenerator generator, out string reason)
+        private static string DungeonDisplayName(Location location, string generatorName, Vector3 position, out string reason)
         {
-            Location location = DungeonLocation(generator);
-            string key = DungeonLocationKey(generator, location);
+            string key = DungeonLocationKey(location, generatorName);
             string label = location != null ? location.m_discoverLabel : null;
 
             var overrides = DungeonNameOverrides();
@@ -3309,69 +3492,586 @@ namespace ValheimMod
             {
                 reason = "location has no discover label";
             }
-            if (key != null && DungeonDefaultNames.TryGetValue(key, out string known))
+            if (key != null)
             {
-                reason += "; named from location " + key;
-                return known;
+                if (DungeonDefaultNames.TryGetValue(key, out string known))
+                {
+                    reason += "; named from location " + key;
+                    return known;
+                }
+                // Fall back to a fragment match so one entry covers numbered variants - MorgenHole
+                // catches MorgenHole1 through however many there turn out to be
+                foreach (KeyValuePair<string, string> entry in DungeonDefaultNames)
+                {
+                    if (key.IndexOf(entry.Key, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        reason += $"; named from location fragment {entry.Key}";
+                        return entry.Value;
+                    }
+                }
             }
-            string generatorName = StripClone(generator.transform.root.name);
-            string byGenerator = GeneratorBiomeName(generatorName, generator.transform.position, out string how);
+            string byGenerator = GeneratorBiomeName(generatorName, position, out string how);
             if (byGenerator != null)
             {
                 reason += "; named from " + how;
                 return byGenerator;
             }
+            string pretty = Prettify(key);
+            if (!string.IsNullOrEmpty(pretty))
+            {
+                reason += $"; name derived from prefab {key}";
+                return pretty;
+            }
             return key;
+        }
+
+        /// <summary>
+        /// Adds the pin for one dungeon, if it is not already marked.
+        /// </summary>
+        private static void PinDungeon(DungeonGenerator generator)
+        {
+            if (generator == null)
+            {
+                return;
+            }
+            // CampGrid and CampRadial are surface settlements rather than dungeons
+            if (!DungeonPinIncludeCamps.Value && generator.m_algorithm != DungeonGenerator.Algorithm.Dungeon)
+            {
+                return;
+            }
+            PinAt(generator.transform.position, DungeonLocation(generator), StripClone(generator.transform.root.name));
+        }
+
+        /// <summary>
+        /// Adds one pin, if nothing is already marked nearby. Minimap.instance standing in for a
+        /// "world is running" check rather than Player.m_localPlayer, because locations can Awake
+        /// while the player is still being spawned.
+        /// </summary>
+        private static void PinAt(Vector3 position, Location location, string generatorName)
+        {
+            if (!AutoPinDungeons.Value
+                || IsPinExcluded(StripClone(location?.gameObject.name), generatorName))
+            {
+                return;
+            }
+            string label = DungeonPinLabel.Value;
+            string reason = "fixed label";
+            if (DungeonPinUseLocationName.Value)
+            {
+                string specific = DungeonDisplayName(location, generatorName, position, out reason);
+                if (!string.IsNullOrEmpty(specific))
+                {
+                    label = specific;
+                }
+            }
+            string key = DungeonLocationKey(location, generatorName);
+            Minimap.PinType type = ResolveDungeonPinType(label, key);
+            // Report the location as "none" when the lookup failed, rather than echoing the
+            // generator name back as though it were a location
+            string locationName = StripClone(location?.gameObject.name) ?? "none";
+            AddOrQueuePin(position, type, label,
+                $"location {locationName}, generator {generatorName ?? "none"}, from {reason}",
+                DungeonPinMergeRadius.Value);
+        }
+
+        // Two entry points, because they cover different dungeons.
+        //
+        // Spawn only runs once asynchronous room loading finishes, so it never fires for a dungeon
+        // whose ZDO carries no room data - the hand-built interiors such as troll caves, which the
+        // log reports as "Dungeon loaded with 0 rooms from old format". Those were silently never
+        // pinned. Load runs for both kinds and is what gives full coverage; Spawn is kept for
+        // anything that reaches room placement by some other route.
+        //
+        // Pinning twice is harmless - the second call finds the pin the first one made and stops at
+        // the existing-pin check - so no coordination between the two is needed.
+        // ---------------- Pin exclusions ----------------
+        private static string[] _pinExclusions;
+        private static string _pinExclusionsSource;
+        private static readonly HashSet<string> _reportedExclusions = new HashSet<string>();
+
+        /// <summary>
+        /// An exclusion used to return before anything was logged, which made a wrongly excluded
+        /// pin indistinguishable from one that was never reached. Each distinct name now reports
+        /// itself once, so the log says what was skipped and why without repeating per instance.
+        /// </summary>
+        private static bool IsPinExcluded(params string[] names)
+        {
+            string raw = PinExcludeNames.Value ?? string.Empty;
+            if (_pinExclusions == null || _pinExclusionsSource != raw)
+            {
+                _pinExclusionsSource = raw;
+                _pinExclusions = raw.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToArray();
+            }
+            if (_pinExclusions.Length == 0)
+            {
+                return false;
+            }
+            foreach (string name in names)
+            {
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+                foreach (string fragment in _pinExclusions)
+                {
+                    if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        if (_reportedExclusions.Add(name))
+                        {
+                            Debug.Log($"Pin skipped: '{name}' matches exclusion '{fragment}' (PinExcludeNames)");
+                        }
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static string[] _pinIncludes;
+        private static string _pinIncludesSource;
+
+        private static bool IsIncludedLocation(string name)
+        {
+            string raw = PinIncludeLocations.Value ?? string.Empty;
+            if (_pinIncludes == null || _pinIncludesSource != raw)
+            {
+                _pinIncludesSource = raw;
+                _pinIncludes = raw.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToArray();
+            }
+            if (_pinIncludes.Length == 0 || string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+            foreach (string fragment in _pinIncludes)
+            {
+                if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ---------------- Pin queue ----------------
+        // Everything that pins goes through here, because Minimap.instance does not exist yet while
+        // the first zone loads. Anything standing where the player logs in runs Awake during that
+        // load and was being dropped silently - the dragon egg underfoot went unpinned while one
+        // further away, whose zone loaded later, worked fine. Requests made too early are held and
+        // added once the minimap is up.
+        //
+        // The label and icon are resolved at queue time, so nothing holds a reference to a game
+        // object that may be destroyed before the flush. The duplicate check happens at add time
+        // instead, since it has to run against the real pin list.
+        private struct PendingPin
+        {
+            public Vector3 Position;
+            public Minimap.PinType Type;
+            public string Label;
+            public string Detail;
+            public float MergeRadius;
+        }
+
+        private static readonly List<PendingPin> _pendingPins = new List<PendingPin>();
+        private const int MaxPendingPins = 128;
+
+        private static bool AddOrQueuePin(Vector3 position, Minimap.PinType type, string label, string detail, float mergeRadius)
+        {
+            Minimap map = Minimap.instance;
+            if (map == null)
+            {
+                // Bounded so a world that never produces a minimap cannot grow this without limit
+                if (_pendingPins.Count < MaxPendingPins)
+                {
+                    _pendingPins.Add(new PendingPin
+                    {
+                        Position = position,
+                        Type = type,
+                        Label = label,
+                        Detail = detail,
+                        MergeRadius = mergeRadius,
+                    });
+                }
+                return false;
+            }
+            if (GetClosestPinMethod != null)
+            {
+                object existing = GetClosestPinMethod.Invoke(map,
+                    new object[] { position, Mathf.Max(0f, mergeRadius), false });
+                if (existing != null)
+                {
+                    return false;
+                }
+            }
+            if (!AddMapPin(map, position, type, label, true, false))
+            {
+                return false;
+            }
+            Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} ({detail})");
+            return true;
+        }
+
+        private static void FlushPendingPins()
+        {
+            if (_pendingPins.Count == 0 || Minimap.instance == null)
+            {
+                return;
+            }
+            var queued = new List<PendingPin>(_pendingPins);
+            _pendingPins.Clear();
+            int added = 0;
+            foreach (PendingPin pin in queued)
+            {
+                if (AddOrQueuePin(pin.Position, pin.Type, pin.Label, pin.Detail + ", queued during load", pin.MergeRadius))
+                {
+                    added++;
+                }
+            }
+            Debug.Log($"Flushed {queued.Count} pin(s) queued before the minimap existed, {added} added");
+        }
+
+        // ---------------- Localisation search ----------------
+        // Works back from a name shown on screen to the token behind it. Tokens generally mirror the
+        // prefab name, so this finds a prefab that no amount of guessing at names will - the search
+        // starts from the words the player actually sees. m_translations is private in the shipped
+        // assembly and lives in assembly_guiutils, so it needs an AccessTools handle.
+        private static readonly FieldInfo TranslationsField =
+            AccessTools.Field(typeof(Localization), "m_translations");
+        private static bool _localizationSearched;
+        private static string _localizationSearchSource;
+
+        private static void SearchLocalization()
+        {
+            string raw = LogLocalizationSearch.Value ?? string.Empty;
+            if (_localizationSearchSource != raw)
+            {
+                _localizationSearchSource = raw;
+                _localizationSearched = false;
+            }
+            if (_localizationSearched)
+            {
+                return;
+            }
+            string needle = raw.Trim();
+            if (needle.Length == 0)
+            {
+                _localizationSearched = true;
+                return;
+            }
+            Localization localization = Localization.instance;
+            if (localization == null || TranslationsField == null)
+            {
+                return;
+            }
+            var translations = TranslationsField.GetValue(localization) as Dictionary<string, string>;
+            if (translations == null)
+            {
+                _localizationSearched = true;
+                Debug.LogWarning("Localization search: could not read the translation table");
+                return;
+            }
+            _localizationSearched = true;
+            int hits = 0;
+            foreach (KeyValuePair<string, string> entry in translations)
+            {
+                if (entry.Key.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0
+                    || (entry.Value != null && entry.Value.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    Debug.Log($"Localization: ${entry.Key} = {entry.Value}");
+                    hits++;
+                }
+            }
+            Debug.Log($"Localization search complete: {hits} entry(s) matched [{needle}] out of {translations.Count}");
+        }
+
+        // ---------------- Resource prefab diagnostic ----------------
+        // Guessing prefab names has already cost one round trip, so read them instead. ZNetScene
+        // holds every networked prefab, and each one says in its components how it could be
+        // pinned: MineRock or MineRock5 means the mineable-rock hooks can see it, Location means
+        // the location hook can. Runs once per session and prints nothing when the setting is
+        // empty.
+        private static bool _resourceCandidatesLogged;
+        private static string _resourceCandidatesSource;
+
+        private static void LogResourcePrefabCandidates()
+        {
+            string raw = LogResourceCandidates.Value ?? string.Empty;
+            // Re-arm when the setting changes, so a new search can be run with the reload hotkey
+            // instead of restarting the game
+            if (_resourceCandidatesSource != raw)
+            {
+                _resourceCandidatesSource = raw;
+                _resourceCandidatesLogged = false;
+            }
+            if (_resourceCandidatesLogged)
+            {
+                return;
+            }
+            string[] fragments = raw.Split(',').Select(f => f.Trim()).Where(f => f.Length > 0).ToArray();
+            if (fragments.Length == 0)
+            {
+                _resourceCandidatesLogged = true;
+                return;
+            }
+            ZNetScene scene = ZNetScene.instance;
+            if (scene == null || scene.m_prefabs == null)
+            {
+                return;
+            }
+            _resourceCandidatesLogged = true;
+            int found = 0;
+            foreach (GameObject prefab in scene.m_prefabs)
+            {
+                if (prefab == null)
+                {
+                    continue;
+                }
+                string name = prefab.name;
+                bool match = false;
+                foreach (string fragment in fragments)
+                {
+                    if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match)
+                {
+                    continue;
+                }
+                // Every component, not a fixed shortlist: the point of this is usually to find out
+                // what an unfamiliar prefab is made of, and the interesting one is whatever was not
+                // expected. Transform and renderers are dropped as pure noise.
+                var parts = new List<string>();
+                foreach (Component component in prefab.GetComponents<Component>())
+                {
+                    if (component == null)
+                    {
+                        continue;
+                    }
+                    string typeName = component.GetType().Name;
+                    if (typeName == "Transform" || typeName == "RectTransform"
+                        || typeName.EndsWith("Renderer", StringComparison.Ordinal)
+                        || typeName.EndsWith("Filter", StringComparison.Ordinal)
+                        || typeName.EndsWith("Collider", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    if (!parts.Contains(typeName))
+                    {
+                        parts.Add(typeName);
+                    }
+                }
+                Debug.Log($"Prefab: {name} [{(parts.Count > 0 ? string.Join(", ", parts.ToArray()) : "no components")}]"
+                    + $" pinnable={IsPinnableResource(name)}");
+                found++;
+            }
+            Debug.Log($"Prefab scan complete: {found} prefab(s) matched [{raw}].");
+        }
+
+        // ---------------- Resource node pins ----------------
+        // Matched on a fragment of the prefab name rather than an exact list, because the deposits
+        // are named inconsistently and a substring survives that: "Copper" catches the copper
+        // deposit whatever its full prefab name turns out to be. Every pin logs the prefab it
+        // matched, so the list can be tightened once the real names are known.
+        //
+        // Two sources, for the same reason the dungeon pins need two: tar pits are placed as
+        // Locations, while ore deposits are MineRock objects that simply load with their zone.
+        // Each rule is a prefab fragment plus the label to show. A rule written without a label
+        // keeps working and falls back to a name derived from the prefab.
+        private static List<KeyValuePair<string, string>> _resourceRules;
+        private static string _resourceRulesSource;
+
+        private static List<KeyValuePair<string, string>> ResourceRules()
+        {
+            string raw = ResourcePinNames.Value ?? string.Empty;
+            if (_resourceRules != null && _resourceRulesSource == raw)
+            {
+                return _resourceRules;
+            }
+            _resourceRulesSource = raw;
+            _resourceRules = new List<KeyValuePair<string, string>>();
+            foreach (string entry in raw.Split(','))
+            {
+                string trimmed = entry.Trim();
+                if (trimmed.Length == 0)
+                {
+                    continue;
+                }
+                int split = trimmed.IndexOf('=');
+                if (split > 0)
+                {
+                    _resourceRules.Add(new KeyValuePair<string, string>(
+                        trimmed.Substring(0, split).Trim(), trimmed.Substring(split + 1).Trim()));
+                }
+                else
+                {
+                    _resourceRules.Add(new KeyValuePair<string, string>(trimmed, null));
+                }
+            }
+            return _resourceRules;
+        }
+
+        /// <summary>
+        /// True when the prefab matches a rule. <paramref name="label"/> is the configured label, or
+        /// null when the rule carries none and the name should be derived instead.
+        /// </summary>
+        private static bool TryMatchResource(string prefabName, out string label)
+        {
+            label = null;
+            if (string.IsNullOrEmpty(prefabName))
+            {
+                return false;
+            }
+            foreach (KeyValuePair<string, string> rule in ResourceRules())
+            {
+                if (prefabName.IndexOf(rule.Key, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    label = rule.Value;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsPinnableResource(string prefabName)
+        {
+            return TryMatchResource(prefabName, out _);
+        }
+
+        private static void PinResource(Vector3 position, string prefabName)
+        {
+            // Reached for every destructible that loads, so the cheap rejections come first and the
+            // string work only happens for something that is actually going to be pinned
+            if (!AutoPinResources.Value || string.IsNullOrEmpty(prefabName)
+                || !TryMatchResource(prefabName, out string configuredLabel)
+                || IsPinExcluded(prefabName))
+            {
+                return;
+            }
+            string name = StripClone(prefabName);
+            string label = !string.IsNullOrEmpty(configuredLabel) ? configuredLabel : Prettify(name);
+            Minimap.PinType type = Enum.IsDefined(typeof(Minimap.PinType), ResourcePinIcon.Value)
+                ? (Minimap.PinType)ResourcePinIcon.Value
+                : Minimap.PinType.Icon3;
+            AddOrQueuePin(position, type, label, "prefab " + name, ResourcePinMergeRadius.Value);
+        }
+
+        // The intact deposit in the world is a Destructible - rock4_copper, silvervein, mudpile,
+        // FlametalRockstand - and only becomes a MineRock5 once mined, when the _frac version
+        // replaces it. Hooking the mineable types alone therefore saw nothing until a node had
+        // already been broken into.
+        //
+        // Destructible covers trees, rocks and every other breakable, so this runs often. The name
+        // test is kept first and cheap for that reason, and nothing else is touched until it
+        // passes. Awake is non-public in the shipped assembly, which only affects calling it.
+        [HarmonyPatch(typeof(Destructible), "Awake")]
+        class Destructible_Awake_Patch
+        {
+            static void Postfix(Destructible __instance)
+            {
+                if (__instance != null)
+                {
+                    PinResource(__instance.transform.position, __instance.gameObject.name);
+                }
+            }
+        }
+
+        // Leviathans. Hooked on their own component rather than by prefab name, because the thing
+        // the player sees is the Leviathan while the mineable part is a child MineRock whose name
+        // says nothing useful. The rule still has to be present in ResourcePinNames for it to pin,
+        // so it stays configurable like the rest.
+        //
+        // The component is reused for the Ashlands flametal spire, prefab LeviathanLava, which
+        // floats in lava the same way. Rules are matched in order, so LeviathanLava has to sit
+        // ahead of Leviathan in ResourcePinNames or the spire is labelled as a leviathan.
+        [HarmonyPatch(typeof(Leviathan), "Awake")]
+        class Leviathan_Awake_Patch
+        {
+            static void Postfix(Leviathan __instance)
+            {
+                if (__instance != null)
+                {
+                    PinResource(__instance.transform.position, __instance.gameObject.name);
+                }
+            }
+        }
+
+        // Dragon eggs and anything else picked up rather than mined. Pickable also covers berries
+        // and mushrooms, so like the Destructible hook this leans on the name test rejecting early.
+        [HarmonyPatch(typeof(Pickable), "Awake")]
+        class Pickable_Awake_Patch
+        {
+            static void Postfix(Pickable __instance)
+            {
+                if (__instance != null)
+                {
+                    PinResource(__instance.transform.position, __instance.gameObject.name);
+                }
+            }
+        }
+
+        // Kept so a node already mined into its fractured form still pins
+        [HarmonyPatch(typeof(MineRock5), "Awake")]
+        class MineRock5_Awake_Patch
+        {
+            static void Postfix(MineRock5 __instance)
+            {
+                if (__instance != null)
+                {
+                    PinResource(__instance.transform.position, __instance.gameObject.name);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(MineRock), "Start")]
+        class MineRock_Start_Patch
+        {
+            static void Postfix(MineRock __instance)
+            {
+                if (__instance != null)
+                {
+                    PinResource(__instance.transform.position, __instance.gameObject.name);
+                }
+            }
+        }
+
+        // Covers interiors that are one fixed space rather than a set of rooms. They still have a
+        // Location with m_hasInterior, and Awake runs when the zone loads, so the proximity
+        // behaviour matches the generator hooks. A dungeon that has both paths is pinned once - the
+        // second attempt stops at the existing-pin check.
+        [HarmonyPatch(typeof(Location), "Awake")]
+        class Location_Awake_Patch
+        {
+            static void Postfix(Location __instance)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+                // Tar pits and similar arrive as locations rather than mineable rocks
+                PinResource(__instance.transform.position, __instance.gameObject.name);
+                // A surface structure has neither an interior nor a generator, so it only pins when
+                // it has been named explicitly
+                bool interior = PinInteriorLocations.Value && __instance.m_hasInterior;
+                if (!interior && !IsIncludedLocation(StripClone(__instance.gameObject.name)))
+                {
+                    return;
+                }
+                PinAt(__instance.transform.position, __instance, null);
+            }
+        }
+
+        [HarmonyPatch(typeof(DungeonGenerator), "Load")]
+        class DungeonGenerator_Load_Patch
+        {
+            static void Postfix(DungeonGenerator __instance) { PinDungeon(__instance); }
         }
 
         [HarmonyPatch(typeof(DungeonGenerator), "Spawn")]
         class DungeonGenerator_Spawn_Patch
         {
-            static void Postfix(DungeonGenerator __instance)
-            {
-                if (!AutoPinDungeons.Value || __instance == null || Player.m_localPlayer == null)
-                {
-                    return;
-                }
-                Minimap map = Minimap.instance;
-                if (map == null)
-                {
-                    return;
-                }
-                // CampGrid and CampRadial are surface settlements rather than dungeons
-                if (!DungeonPinIncludeCamps.Value && __instance.m_algorithm != DungeonGenerator.Algorithm.Dungeon)
-                {
-                    return;
-                }
-                Vector3 position = __instance.transform.position;
-                if (GetClosestPinMethod != null)
-                {
-                    object existing = GetClosestPinMethod.Invoke(map,
-                        new object[] { position, Mathf.Max(0f, DungeonPinMergeRadius.Value), false });
-                    if (existing != null)
-                    {
-                        return;
-                    }
-                }
-                string label = DungeonPinLabel.Value;
-                string reason = "fixed label";
-                if (DungeonPinUseLocationName.Value)
-                {
-                    string specific = DungeonDisplayName(__instance, out reason);
-                    if (!string.IsNullOrEmpty(specific))
-                    {
-                        label = specific;
-                    }
-                }
-                string key = DungeonLocationKey(__instance, DungeonLocation(__instance));
-                Minimap.PinType type = ResolveDungeonPinType(label, key);
-                if (!AddMapPin(map, position, type, label, true, false))
-                {
-                    return;
-                }
-                Debug.Log($"Dungeon pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0}"
-                    + $" (location {key}, generator {StripClone(__instance.transform.root.name)}, from {reason})");
-            }
+            static void Postfix(DungeonGenerator __instance) { PinDungeon(__instance); }
         }
 
         // ---------------- Guaranteed first trophy ----------------
@@ -3528,6 +4228,38 @@ namespace ValheimMod
             for (int i = (int)PlayerStatType.BuildClusterMisc; i <= (int)PlayerStatType.BuildClusterSeasonal; i++)
             {
                 yield return (PlayerStatType)i;
+            }
+        }
+
+        /// <summary>
+        /// Re-derives everything parsed out of a config string into a cache. Called from Awake and
+        /// again whenever the config is reloaded, so a hotkey reload leaves no stale cache behind.
+        /// The per-call parsers used by the dungeon pin overrides are not here: they already
+        /// re-parse whenever their source string changes.
+        /// </summary>
+        private static void RebuildDerivedConfig()
+        {
+            _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
+            _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
+        }
+
+        private void ReloadModConfig()
+        {
+            // Suppression only prefixes Character.ShowPickupMessage and friends, so a direct
+            // ShowMessage is not affected by those settings
+            try
+            {
+                Config.Reload();
+                Debug.Log($"PipsMod config reloaded from {Config.ConfigFilePath}");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "PipsMod config reloaded");
+            }
+            catch (Exception ex)
+            {
+                // A malformed edit should report itself rather than take the frame down
+                Debug.LogError($"PipsMod config reload failed, keeping the values already loaded - {ex.Message}");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "PipsMod config reload FAILED - see log");
             }
         }
 
