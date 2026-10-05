@@ -32,6 +32,11 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
         private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
         private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
+        private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
+        private static ConfigEntry<string> UnlearnRecipes;
+        private static ConfigEntry<bool> UnlearnRecipesApply;
+        private static ConfigEntry<float> JumpBufferSeconds;
+        private static ConfigEntry<bool> LogJumpBlocks;
         private static ConfigEntry<bool> StatBucketRepairApply;
         private static ConfigEntry<bool> GuaranteeFirstTrophy;
         private static ConfigEntry<bool> PreventStatRegression;
@@ -275,7 +280,7 @@ namespace ValheimMod
                 "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
                 + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
                 + "Keyed off Location.m_hasInterior, the same flag the game uses to decide whether to create an interior zone at all.");
-            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Meadows Village=0,Meadows Farm=0,GoblinCamp2=0",
+            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Draugr Village=0,Meadows Farm=0,GoblinCamp2=0",
                 "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
                 + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
                 + "or the surface location name for a single variant. Indexes are the same Minimap.PinType numbers as DungeonPinIcon, which is used for anything unlisted.");
@@ -292,6 +297,16 @@ namespace ValheimMod
                 "Stop the vanilla bucket bug from overwriting a high-water-mark achievement stat with a smaller number. Only the stats that record a maximum are protected, so resets that are supposed to happen - the consecutive-day streak zeroing on death - still work. Without this, repairs made by the StatBucketRepair hotkey are undone the next time the game writes one of these stats.");
             GuaranteeFirstTrophy = Config.Bind("Drops", "GuaranteeFirstTrophy", true,
                 "Guarantee a trophy drop the first time you kill a creature whose trophy you have never collected. Once collected, that creature rolls its normal chance again. Rare spawns like wraiths, fenrings and serpents are otherwise close to unfarmable. Suspended in a shared session, since drops are rolled by whoever owns the creature.");
+            UnlearnRecipes = Config.Bind("General", "UnlearnRecipes", "",
+                "Comma separated recipe tokens to forget, as they appear in the log line 'Queue unlock msg:$msg_newpiece:$piece_x'. Runs once per session and reports what it would remove; set UnlearnRecipesApply to actually remove them. Clear this when done.");
+            UnlearnRecipesApply = Config.Bind("General", "UnlearnRecipesApply", false,
+                "Let UnlearnRecipes actually write to the character. Off means it only reports. Back up the character .fch before turning this on.");
+            FreeBuildHotkey = Config.Bind("Hotkeys", "FreeBuildHotkey", new KeyboardShortcut(KeyCode.Slash),
+                "Toggles building without resources, for when you are far from base and need one piece you cannot carry the materials for. Affects placing pieces only - crafting, upgrading and repairing still cost what they cost. Starts off each time the game launches, and is suspended in a shared session since the pieces it leaves behind are part of the world everyone sees.");
+            JumpBufferSeconds = Config.Bind("General", "JumpBufferSeconds", 0.3f, new ConfigDescription(
+                "How long a jump press is remembered and retried when the game refuses it, in seconds. A press that lands a fraction too early - while still in the air from a stride or a step off a ledge - is otherwise dropped silently. Set to 0 to turn the buffer off.", new AcceptableValueRange<float>(0f, 1f)));
+            LogJumpBlocks = Config.Bind("General", "LogJumpBlocks", false,
+                "Diagnostic. On every jump press, log the state the game decides from: whether you are grounded, blocking, crouched, attacking and so on. Use it to find out what is actually swallowing a jump.");
             HealthFloorToggleHotkey = Config.Bind("Hotkeys", "HealthFloorToggleHotkey", new KeyboardShortcut(KeyCode.Minus),
                 "Turns the MinHealthPercent damage floor on and off without editing the config. The floor keeps you alive through things like Ashlands lava, but it also makes it impossible to die on purpose - sailing off the edge of the world leaves no other way out. Starts on each time the game launches.");
             ReloadConfigHotkey = Config.Bind("Hotkeys", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
@@ -302,7 +317,7 @@ namespace ValheimMod
                 "Let the stat bucket repair hotkey actually write to the character profile. Off means it only reports what it would change. Back up the character .fch file before turning this on.");
             DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
 
-            FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MisthareSupreme,FishAndBread,SeekerAspic", "Comma-separated list of foods to spawn");
+            FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MooseKebab,SealSoup,SmokedMooseMeat,Pancakes,OatmealLingonberryJam,OatMilk,OvenPancake,MeatballsMashedPoteitr,FishSoup", "Comma-separated list of foods to spawn");
             FavoriteAmmoList = Config.Bind("Inventory", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "Comma-separated list of ammo to replenish when repairing gear");
 
             // After every Bind, since this reads the entries. Config.Reload swaps each ConfigEntry
@@ -395,12 +410,19 @@ namespace ValheimMod
                 ToggleHealthFloor();
             }
 
+            if (FreeBuildHotkey.Value.IsDown())
+            {
+                ToggleFreeBuild();
+            }
+
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
             ApplyResourceRate();
             RefreshStackSizeMultiplier();
             RefreshUpgradeChance();
+            UpdateJumpBuffer();
+            ProcessUnlearnRecipes();
             FlushPendingPins();
             UpdatePassiveForsakenPowers();
         }
@@ -3575,7 +3597,7 @@ namespace ValheimMod
                 { "SunkenCrypt4", "Sunken Crypt" },
                 { "Mistlands_DvergrTownEntrance1", "Infested Mine" },
                 { "GoblinCamp2", "Fuling Camp" },
-                { "MeadowsVillage", "Meadows Village" },
+                { "MeadowsVillage", "Draugr Village" },
                 { "MeadowsFarm", "Meadows Farm" },
             };
 
@@ -3760,6 +3782,304 @@ namespace ValheimMod
         //
         // Pinning twice is harmless - the second call finds the pin the first one made and stops at
         // the existing-pin check - so no coordination between the two is needed.
+        // ---------------- Forgetting recipes ----------------
+        // Repairs a character that learned pieces it should not have. The game logs every recipe as
+        // it is learned - "Queue unlock msg:$msg_newpiece:$piece_x" - and the token in that line is
+        // exactly the key held in m_knownRecipes, so a log from the session that went wrong is an
+        // precise list of what to undo.
+        //
+        // Deliberately config-driven rather than clever: nothing here tries to work out which
+        // recipes were legitimate, because the character records only that a recipe is known, never
+        // how it was learned. The list has to come from outside.
+        private static readonly FieldInfo KnownRecipesField = AccessTools.Field(typeof(Player), "m_knownRecipes");
+        private static readonly MethodInfo UpdateAvailablePiecesListMethod =
+            AccessTools.Method(typeof(Player), "UpdateAvailablePiecesList");
+        private static bool _unlearnDone;
+        private static string _unlearnSource;
+
+        private static void ProcessUnlearnRecipes()
+        {
+            string raw = UnlearnRecipes.Value ?? string.Empty;
+            if (_unlearnSource != raw)
+            {
+                _unlearnSource = raw;
+                _unlearnDone = false;
+            }
+            if (_unlearnDone)
+            {
+                return;
+            }
+            string[] tokens = raw.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).ToArray();
+            if (tokens.Length == 0)
+            {
+                _unlearnDone = true;
+                return;
+            }
+            Player player = Player.m_localPlayer;
+            if (player == null || KnownRecipesField == null)
+            {
+                return;
+            }
+            if (!(KnownRecipesField.GetValue(player) is HashSet<string> known))
+            {
+                _unlearnDone = true;
+                Debug.LogWarning("Unlearn: could not read the known recipe list");
+                return;
+            }
+            _unlearnDone = true;
+            bool apply = UnlearnRecipesApply.Value;
+            int found = 0;
+            int missing = 0;
+            foreach (string token in tokens)
+            {
+                if (!known.Contains(token))
+                {
+                    missing++;
+                    continue;
+                }
+                found++;
+                Debug.Log($"  {(apply ? "forgetting" : "would forget")} {token}");
+                if (apply)
+                {
+                    known.Remove(token);
+                }
+            }
+            if (apply && found > 0)
+            {
+                // The build menu is built from a cached list rather than read from m_knownRecipes
+                // each time it opens, so removing a recipe leaves the panel showing it until
+                // something rebuilds that list. Vanilla calls this after learning a piece for the
+                // same reason.
+                UpdateAvailablePiecesListMethod?.Invoke(player, null);
+            }
+            Debug.Log($"Unlearn: {found} known, {missing} not known, of {tokens.Length} listed. "
+                + (apply
+                    ? "Removed and build menu refreshed. Log out normally so the character is saved."
+                    : "Dry run - set UnlearnRecipesApply to true to remove them."));
+        }
+
+        // ---------------- Free building ----------------
+        // Narrower than the game's own nocost cheat, which is a single Player.NoCostCheat flag that
+        // InventoryGui consults for crafting, upgrading, repairing and station requirements alike.
+        // Only the two steps involved in placing a piece are touched: the check that decides whether
+        // the piece can be placed, and the one that takes the materials afterwards. Crafting and
+        // repair carry on costing exactly what they did.
+        //
+        // Deliberately not persisted. It is meant for the odd moment away from base, and leaving it
+        // on by accident would quietly remove the cost of everything built afterwards.
+        private static bool _freeBuildEnabled;
+
+        private static bool FreeBuildActive => _freeBuildEnabled && !IsSharedSession();
+
+        private static void ToggleFreeBuild()
+        {
+            _freeBuildEnabled = !_freeBuildEnabled;
+            string message;
+            if (!_freeBuildEnabled)
+            {
+                message = "Free building OFF";
+            }
+            else if (IsSharedSession())
+            {
+                // Saying nothing here would look like the toggle had simply failed
+                message = "Free building ON, but suspended - someone else is in this session";
+            }
+            else
+            {
+                message = "Free building ON - pieces cost nothing and drop nothing";
+            }
+            Debug.Log(message);
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
+        }
+
+        // Removal is gated separately from placement, on the crafting station rather than the
+        // materials:
+        //
+        //     if (!m_noPlacementCost && piece.m_craftingStation != null
+        //         && !CraftingStation.HaveBuildStationInRange(...) && !NoWorkbench)
+        //         -> "$msg_missingstation"
+        //
+        // Vanilla's own nocost cheat satisfies that through m_noPlacementCost, which this toggle
+        // deliberately does not set - setting it would make crafting and repair free as well. So
+        // without this the toggle could place a stone wall miles from a stonecutter and then refuse
+        // to take it down again, which is worse than not being able to build it at all.
+        //
+        // Non-public in the shipped assembly, so patched by name.
+        //
+        // Limited to pieces this character placed. The station requirement on removal is a design
+        // constraint rather than incidental friction: a dungeon cannot hold a workbench, so its
+        // interior is meant to be hammer-proof and breakable only by force, and a piece someone
+        // else built is meant to need the matching station rebuilt before it comes apart. Waiving
+        // the check for everything would quietly remove both rules. World-generated pieces have no
+        // creator, so they keep the vanilla behaviour untouched.
+        //
+        // A prefix rather than a postfix, because the original shows "$msg_missingstation" on screen
+        // before returning false. Overriding the result afterwards still allowed the removal, but
+        // the player had already been told it failed. Returning early keeps the message from ever
+        // being queued - and for a piece that is not yours, vanilla runs in full and the message is
+        // the correct outcome.
+        [HarmonyPatch(typeof(Player), "CheckCanRemovePiece")]
+        class Player_CheckCanRemovePiece_FreeBuild_Patch
+        {
+            static bool Prefix(Player __instance, Piece piece, ref bool __result)
+            {
+                if (!FreeBuildActive || piece == null || !piece.IsCreator()
+                    || !ReferenceEquals(__instance, Player.m_localPlayer))
+                {
+                    return true;
+                }
+                __result = true;
+                return false;
+            }
+        }
+
+        // Closes the loop that free building would otherwise open: build for nothing, take it
+        // straight back down, keep the materials. Piece.DropResources returns early for the same
+        // reason when the NoBuildCost global key is set.
+        //
+        // Narrowed to pieces this character built, which the world modifier does not do. The point
+        // of suppressing drops is that the materials were never paid for, and that is only ever
+        // true of your own pieces - a crypt door or a Fuling hut was not built by you, so taking it
+        // apart should pay out exactly as it always does. Piece.IsCreator compares the piece's
+        // stored creator against the profile's player id, and world-generated pieces have no
+        // creator at all, so they fall outside this by default.
+        //
+        // A piece you built legitimately before switching the toggle on is caught too. The game
+        // keeps no record of what a piece cost, only who placed it, so there is no way to tell the
+        // two apart - switch the toggle off before dismantling something you want back.
+        [HarmonyPatch(typeof(Piece), nameof(Piece.DropResources))]
+        class Piece_DropResources_FreeBuild_Patch
+        {
+            static bool Prefix(Piece __instance)
+            {
+                return !(FreeBuildActive && __instance != null && __instance.IsCreator());
+            }
+        }
+
+        // The requirement check for placing a piece. The overload taking a Piece is the build path;
+        // the recipe overloads used by crafting are left alone.
+        //
+        // Restricted to RequirementMode.CanBuild, which is the only mode that asks "can this be
+        // placed right now". The same method also serves recipe discovery:
+        //
+        //     if (!m_knownRecipes.Contains(name) && HaveRequirements(piece, RequirementMode.IsKnown))
+        //         -> learn it
+        //
+        // so answering yes regardless of mode told that sweep the player qualified for everything
+        // and taught the character every build piece in the game, Deep North included, the first
+        // time anything was built with the toggle on. CanAlmostBuild is left alone too - it decides
+        // what the build menu bothers to show, not what can be placed.
+        [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), new Type[] { typeof(Piece), typeof(Player.RequirementMode) })]
+        class Player_HaveRequirements_FreeBuild_Patch
+        {
+            static void Postfix(Player __instance, Player.RequirementMode mode, ref bool __result)
+            {
+                if (!__result && mode == Player.RequirementMode.CanBuild && FreeBuildActive
+                    && ReferenceEquals(__instance, Player.m_localPlayer))
+                {
+                    __result = true;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.ConsumeResources))]
+        class Player_ConsumeResources_FreeBuild_Patch
+        {
+            // Runs before the container-pulling prefix, so nothing is taken out of a chest either
+            [HarmonyPriority(Priority.First)]
+            static bool Prefix(Player __instance)
+            {
+                return !(FreeBuildActive && ReferenceEquals(__instance, Player.m_localPlayer));
+            }
+        }
+
+        // ---------------- Jump leniency ----------------
+        // Player.SetControls routes the jump key three ways, and only the last one jumps:
+        //
+        //     if (m_blocking)                                     Dodge(...)
+        //     else if (IsCrouching() || m_crouchToggled || dodge)  Dodge(...)
+        //     else                                                Jump()
+        //
+        // and Character.Jump then drops the call entirely unless IsOnGround(), which is
+        // m_lastGroundTouch < 0.2f. So a press can be swallowed either by being routed to a dodge
+        // or by landing during the fraction of a second a running stride leaves the ground.
+        //
+        // The buffer addresses the second case without changing any of vanilla's rules: the press
+        // is remembered and retried for a short window, so one that arrived a little early takes
+        // effect the moment the character can actually jump. Nothing is forced - Jump still decides
+        // - so stamina, dodges, attacks and staggers all still block it exactly as before.
+        private static readonly FieldInfo LastGroundTouchField = AccessTools.Field(typeof(Character), "m_lastGroundTouch");
+        private static readonly FieldInfo JumpTimerField = AccessTools.Field(typeof(Character), "m_jumpTimer");
+        private static readonly FieldInfo CrouchToggledField = AccessTools.Field(typeof(Player), "m_crouchToggled");
+        private static float _jumpPressedAt = float.NegativeInfinity;
+
+        private static float ReadFloat(FieldInfo field, object target, float fallback)
+        {
+            if (field == null || target == null)
+            {
+                return fallback;
+            }
+            object value = field.GetValue(target);
+            return value is float f ? f : fallback;
+        }
+
+        private static void UpdateJumpBuffer()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return;
+            }
+            bool pressed = ZInput.GetButtonDown("Jump");
+            if (pressed)
+            {
+                _jumpPressedAt = Time.time;
+                if (LogJumpBlocks.Value)
+                {
+                    LogJumpState(player);
+                }
+            }
+            float buffer = JumpBufferSeconds.Value;
+            if (buffer <= 0f || _jumpPressedAt == float.NegativeInfinity)
+            {
+                return;
+            }
+            if (Time.time - _jumpPressedAt > buffer)
+            {
+                _jumpPressedAt = float.NegativeInfinity;
+                return;
+            }
+            // ForceJump zeroes m_jumpTimer, so a small value means a jump has just happened and the
+            // buffered press has been satisfied - this is what stops it firing twice
+            if (ReadFloat(JumpTimerField, player, 1f) < 0.1f)
+            {
+                _jumpPressedAt = float.NegativeInfinity;
+                return;
+            }
+            // Retrying on the frame it was pressed would double up with vanilla's own handling
+            if (pressed)
+            {
+                return;
+            }
+            if (!player.IsOnGround() || player.InDodge() || player.InAttack() || player.IsStaggering())
+            {
+                return;
+            }
+            player.Jump();
+        }
+
+        private static void LogJumpState(Player player)
+        {
+            float groundTouch = ReadFloat(LastGroundTouchField, player, -1f);
+            object crouchToggled = CrouchToggledField?.GetValue(player);
+            Debug.Log("Jump pressed: "
+                + $"onGround={player.IsOnGround()} lastGroundTouch={groundTouch:0.###} "
+                + $"blocking={player.IsBlocking()} crouching={player.IsCrouching()} crouchToggled={crouchToggled} "
+                + $"inAttack={player.InAttack()} inDodge={player.InDodge()} staggering={player.IsStaggering()} "
+                + $"knockedBack={player.IsKnockedBack()} encumbered={player.IsEncumbered()} "
+                + $"stamina={player.HaveStamina(player.m_jumpStaminaUsage)}");
+        }
+
         // ---------------- Pin exclusions ----------------
         private static string[] _pinExclusions;
         private static string _pinExclusionsSource;
