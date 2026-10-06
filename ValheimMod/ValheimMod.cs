@@ -110,6 +110,9 @@ namespace ValheimMod
         private static ConfigEntry<float> PlayerLightRange;
         private static ConfigEntry<float> PlayerLightIntensity;
         private static ConfigEntry<float> PlayerLightHeight;
+        private static ConfigEntry<int> PlayerLightLevels;
+        private static ConfigEntry<float> PlayerLightLevelStep;
+        private static ConfigEntry<float> WisplightRangeMultiplier;
         private static ConfigEntry<bool> WeightlessPlayerInventory;
         private static ConfigEntry<bool> SuppressPickupMessages;
         private static ConfigEntry<bool> SuppressRemovedMessages;
@@ -196,7 +199,7 @@ namespace ValheimMod
             LogStationInputs = Config.Bind("Containers", "LogStationInputs", false, "Diagnostic. Logs every input a hovered station accepts, in the order the priority list puts them, with how many of each you are carrying and how many are in nearby containers. Use it to check that the names in the priority lists match the prefab names the station actually uses.");
             ShowFillStationHint = Config.Bind("Containers", "ShowFillStationHint", true, "Add a line to a station's hover tooltip showing the fill shortcut.");
             const string priorityHelp = " Comma-separated prefab names, earlier meaning higher priority. Anything not listed keeps the station's own order, after everything that is listed. Leave empty to always use the station's own order. This only orders items within a source: whatever you are carrying is always used before anything in a container, so you can force a choice by putting it in your inventory.";
-            SmelterInputPriority = Config.Bind("Containers", "SmelterInputPriority", "FlametalOreNew,FlametalOre,BlackMetalScrap,SilverOre,IronScrap,CopperOre,TinOre", "Which ore a smelter, kiln or blast furnace reaches for first when several are available." + priorityHelp);
+            SmelterInputPriority = Config.Bind("Containers", "SmelterInputPriority", "GoldOre,FlametalOreNew,FlametalOre,BlackMetalScrap,SilverOre,IronScrap,CopperOre,TinOre", "Which ore a smelter, kiln or blast furnace reaches for first when several are available." + priorityHelp);
             CookingStationInputPriority = Config.Bind("Containers", "CookingStationInputPriority", "SerpentMeat,LoxMeat,BugMeat,ChickenMeat,HareMeat,WolfMeat,DeerMeat,RawMeat,NeckTail,FishRaw", "Which raw item a cooking station or oven reaches for first when several are available. The default is ordered roughly by biome progression and is only a starting point - reorder it to taste." + priorityHelp);
             ContainerRange = Config.Bind("Containers", "ContainerRange", 20f, "How far away, in metres, a container can be and still count toward crafting requirements.");
             MinHealthPercent = Config.Bind("General", "MinHealthPercent", 0.25f, new ConfigDescription("Damage can never take you below this fraction of your maximum health. 0.25 keeps you at a quarter health no matter how big the hit. Set to 0 to disable the floor and take damage normally.", new AcceptableValueRange<float>(0f, 0.95f)));
@@ -216,11 +219,21 @@ namespace ValheimMod
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
             SlowFallMaxSpeed = Config.Bind("General", "SlowFallMaxSpeed", 0f, "Maximum downward speed in metres per second while AlwaysSlowFall is on. 0 copies the Feather Cape's own value, so it behaves exactly like the cape.");
             SlowFallNegatesFallDamage = Config.Bind("General", "SlowFallNegatesFallDamage", true, "Also apply the Feather Cape's fall-damage reduction. Fall damage in Valheim is based on distance fallen, not speed, so capping the speed alone does not prevent it.");
-            PlayerLightHotkey = Config.Bind("Hotkeys", "PlayerLightHotkey", new KeyboardShortcut(KeyCode.Semicolon), "Toggles a personal light on and off. Starts off each time the game launches.");
+            PlayerLightHotkey = Config.Bind("Hotkeys", "PlayerLightHotkey", new KeyboardShortcut(KeyCode.Semicolon),
+                "Cycles the personal light through its brightness levels and then off again. Starts off each time the game launches.");
             PlayerLightSourceItem = Config.Bind("General", "PlayerLightSourceItem", "Torch", "Prefab name of the item whose light is copied for the personal light. Torch gives a warm point light that lights all around you; HelmetDverger gives the circlet's narrower forward beam.");
             PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
             PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
             PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            WisplightRangeMultiplier = Config.Bind("General", "WisplightRangeMultiplier", 1f, new ConfigDescription(
+                "Multiplies how far the Wisplight pushes the Mistlands mist back. 1 leaves it alone. This is the demisting radius, not the glow - the light the wisp gives off is unchanged.",
+                new AcceptableValueRange<float>(1f, 20f)));
+            PlayerLightLevels = Config.Bind("General", "PlayerLightLevels", 3, new ConfigDescription(
+                "How many brightness levels the light hotkey cycles through before switching off. Level 1 is the source item unchanged.",
+                new AcceptableValueRange<int>(1, 6)));
+            PlayerLightLevelStep = Config.Bind("General", "PlayerLightLevelStep", 2f, new ConfigDescription(
+                "What each level multiplies the light radius by. 2 doubles the reach per step, so level 3 covers four times the distance of the source item. Brightness is not scaled - set that once with PlayerLightIntensity.",
+                new AcceptableValueRange<float>(1f, 4f)));
             WeightlessPlayerInventory = Config.Bind("General", "WeightlessPlayerInventory", false, "Treat everything in your own inventory as weighing nothing, so slots are the only limit. Containers, carts and other players are unaffected. Makes CustomMaxCarryWeight irrelevant while enabled.");
             SuppressPickupMessages = Config.Bind("General", "SuppressPickupMessages", false, "Stop 'picked up <item>' notifications from being queued in the top-left message HUD, so they can't delay more important messages.");
             SuppressRemovedMessages = Config.Bind("General", "SuppressRemovedMessages", false, "Stop 'removed <item>' notifications from being queued in the top-left message HUD.");
@@ -280,7 +293,7 @@ namespace ValheimMod
                 "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
                 + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
                 + "Keyed off Location.m_hasInterior, the same flag the game uses to decide whether to create an interior zone at all.");
-            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Draugr Village=0,Meadows Farm=0,GoblinCamp2=0",
+            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Draugr Village=0,Meadows Farm=0,North Village=0,GoblinCamp2=0,DG_NorthVillage=0",
                 "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
                 + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
                 + "or the surface location name for a single variant. Indexes are the same Minimap.PinType numbers as DungeonPinIcon, which is used for anything unlisted.");
@@ -440,7 +453,8 @@ namespace ValheimMod
         private static readonly FieldInfo LightFlickerLightField = AccessTools.Field(typeof(LightFlicker), "m_light");
         private static readonly FieldInfo LightFlickerBaseIntensityField = AccessTools.Field(typeof(LightFlicker), "m_baseIntensity");
 
-        private static bool _playerLightOn;
+        // 0 is off; 1 is the source item unchanged, each level above scales by PlayerLightLevelStep
+        private static int _playerLightLevel;
         private static string _playerLightResolvedFor;
         private static float _playerLightSourceRange;
         private static float _playerLightSourceIntensity;
@@ -525,14 +539,26 @@ namespace ValheimMod
                 return;
             }
 
-            if (PlayerLightHotkey.Value.IsDown())
+            int levels = Mathf.Clamp(PlayerLightLevels.Value, 1, 6);
+            // Lowering the level count while a brighter level is active would otherwise strand the
+            // light above the top of the cycle
+            if (_playerLightLevel > levels)
             {
-                _playerLightOn = !_playerLightOn;
-                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, _playerLightOn ? "Light on" : "Light off");
+                _playerLightLevel = levels;
             }
 
-            if (!_playerLightOn)
+            if (PlayerLightHotkey.Value.IsDown())
             {
+                // One step past the brightest level wraps to off, so the cycle is levels + 1 long
+                _playerLightLevel = (_playerLightLevel + 1) % (levels + 1);
+            }
+
+            if (_playerLightLevel <= 0)
+            {
+                if (PlayerLightHotkey.Value.IsDown())
+                {
+                    _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Light off");
+                }
                 DestroyPlayerLight();
                 return;
             }
@@ -543,6 +569,16 @@ namespace ValheimMod
             if (range <= 0f)
             {
                 return;   // couldn't read the source item and no override configured
+            }
+            // Range only. Scaling intensity alongside it made each step blinding rather than
+            // wider - brightness stays wherever PlayerLightIntensity puts it, and the levels just
+            // reach further. Level 1 leaves the source item untouched, so the exponent is one less
+            // than the level.
+            range *= Mathf.Pow(Mathf.Max(1f, PlayerLightLevelStep.Value), _playerLightLevel - 1);
+            if (PlayerLightHotkey.Value.IsDown())
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    $"Light {_playerLightLevel}/{levels} - range {range:0.#}");
             }
 
             if (_playerLightObject == null)
@@ -562,6 +598,74 @@ namespace ValheimMod
             _playerLightObject.transform.localPosition = new Vector3(0f, PlayerLightHeight.Value, 0f);
             _playerLight.range = range;
             _playerLight.intensity = intensity;
+        }
+
+        // ---------------- Wisplight range ----------------
+        // The Wisplight clears mist with a ParticleSystemForceField on the wisp ball, and the field's
+        // endRange is the radius. Demister.Awake caches that component, so scaling it in a postfix
+        // catches each ball as it is created and never has to run again - the ball is spawned once
+        // when the status effect starts.
+        //
+        // endRange is read and written by reflection rather than typed directly, because
+        // ParticleSystemForceField lives in UnityEngine.ParticleSystemModule, which this project
+        // would otherwise have to reference for one float. The PropertyInfo is cached on first use.
+        //
+        // The multiplier is applied against the value the prefab shipped with, remembered per field,
+        // so changing the setting adjusts from the original rather than compounding on what was
+        // already written.
+        // Even assigning m_forceField to an object needs ParticleSystemForceField at compile time,
+        // so the field is read reflectively as well
+        private static readonly FieldInfo DemisterForceFieldField = AccessTools.Field(typeof(Demister), "m_forceField");
+        private static PropertyInfo _forceFieldEndRangeProperty;
+        private static float _wisplightLoggedMultiplier = float.NaN;
+
+        private static void ApplyWisplightRange(Demister demister)
+        {
+            float multiplier = Mathf.Max(1f, WisplightRangeMultiplier.Value);
+            if (multiplier == 1f || demister == null || DemisterForceFieldField == null)
+            {
+                return;
+            }
+            object field = DemisterForceFieldField.GetValue(demister);
+            if (field == null)
+            {
+                return;
+            }
+            if (_forceFieldEndRangeProperty == null)
+            {
+                _forceFieldEndRangeProperty = AccessTools.Property(field.GetType(), "endRange");
+                if (_forceFieldEndRangeProperty == null)
+                {
+                    Debug.LogWarning("Wisplight: could not find endRange on the force field");
+                    return;
+                }
+            }
+            if (!(_forceFieldEndRangeProperty.GetValue(field, null) is float current))
+            {
+                return;
+            }
+            // Scaled in place rather than against a remembered original. Awake runs once per
+            // instance and the value it sees is the prefab's, so there is nothing to compound with -
+            // and demisters turn out to be created often enough, with different base ranges per
+            // instance, that keeping a table of originals was both pointless and unbounded.
+            _forceFieldEndRangeProperty.SetValue(field, current * multiplier, null);
+            // Once per multiplier value, not once per demister; the old line fired every time the
+            // game spawned one, which is constantly
+            if (_wisplightLoggedMultiplier != multiplier)
+            {
+                _wisplightLoggedMultiplier = multiplier;
+                Debug.Log($"Wisplight demisting range set to {multiplier:0.##}x");
+            }
+        }
+
+        // Non-public in the shipped assembly, which only affects calling it
+        [HarmonyPatch(typeof(Demister), "Awake")]
+        class Demister_Awake_Patch
+        {
+            static void Postfix(Demister __instance)
+            {
+                ApplyWisplightRange(__instance);
+            }
         }
 
         // ---------------- On-screen clock ----------------
@@ -3630,6 +3734,9 @@ namespace ValheimMod
                 { "DG_Hildir_Cave", "Howling Cavern" },
                 { "DG_Hildir_ForestCrypt", "Smouldering Tomb" },
                 { "DG_GoblinCamp", "Fuling Camp" },
+                { "DG_Hole", "Winding Tunnels" },
+                { "DG_MorkHalla", "Mörkhalla" },
+                { "DG_NorthVillage", "North Village" },
             };
 
         private static string GeneratorBiomeName(string generatorName, Vector3 position, out string how)
