@@ -282,7 +282,7 @@ namespace ValheimMod
             ResourcePinIcon = Config.Bind("Map", "ResourcePinIcon", 3,
                 "Minimap.PinType index for resource pins, separate from the dungeon icon. 3 is the dot.");
             ResourcePinNames = Config.Bind("Map", "ResourcePinNames",
-                "rock4_copper=Copper,MineRock_Copper=Copper,rock3_silver=Silver,silvervein=Silver,mudpile=Mud Pile,FlametalRockstand=Flametal,LeviathanLava=Flametal,TarPit=Tar Pit,DragonEgg=Dragon Egg,Leviathan=Leviathan",
+                "rock4_copper=Copper,MineRock_Copper=Copper,rock3_silver=Silver,silvervein=Silver,mudpile=Mud Pile,FlametalRockstand=Flametal,LeviathanLava=Flametal,TarPit=Tar Pit,NorthMemorial=Memorial,DragonEgg=Dragon Egg,Leviathan=Leviathan",
                 "Comma separated prefab=label pairs. The prefab part is matched as a case insensitive fragment, so one entry covers every variant - mudpile also catches mudpile2. "
                 + "These are the real prefab names from the registry scan: the intact deposit you walk up to is rock4_copper or silvervein, while the _frac MineRock5 version only exists once mined. "
                 + "An entry with no '=' still works and gets a name derived from the prefab. Tin is deliberately absent. Every pin logs the prefab it matched.");
