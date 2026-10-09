@@ -30,6 +30,7 @@ namespace ValheimMod
         private static ConfigEntry<bool> HidePassivePowerIcons;
         private static ConfigEntry<bool> LogConsoleOutput;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
+        private static ConfigEntry<KeyboardShortcut> AchievementProgressHotkey;
         private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
         private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
@@ -315,7 +316,7 @@ namespace ValheimMod
             UnlearnRecipesApply = Config.Bind("General", "UnlearnRecipesApply", false,
                 "Let UnlearnRecipes actually write to the character. Off means it only reports. Back up the character .fch before turning this on.");
             FreeBuildHotkey = Config.Bind("Hotkeys", "FreeBuildHotkey", new KeyboardShortcut(KeyCode.Slash),
-                "Toggles building without resources, for when you are far from base and need one piece you cannot carry the materials for. Affects placing pieces only - crafting, upgrading and repairing still cost what they cost. Starts off each time the game launches, and is suspended in a shared session since the pieces it leaves behind are part of the world everyone sees.");
+                "Toggles building and crafting without resources, for when you are far from base and need something you cannot carry the materials for. Crafting still needs its station, and a piece you place while this is on drops nothing when you take it back down. Starts off each time the game launches, and is suspended in a shared session since the pieces it leaves behind are part of the world everyone sees.");
             JumpBufferSeconds = Config.Bind("General", "JumpBufferSeconds", 0.3f, new ConfigDescription(
                 "How long a jump press is remembered and retried when the game refuses it, in seconds. A press that lands a fraction too early - while still in the air from a stride or a step off a ledge - is otherwise dropped silently. Set to 0 to turn the buffer off.", new AcceptableValueRange<float>(0f, 1f)));
             LogJumpBlocks = Config.Bind("General", "LogJumpBlocks", false,
@@ -324,6 +325,8 @@ namespace ValheimMod
                 "Turns the MinHealthPercent damage floor on and off without editing the config. The floor keeps you alive through things like Ashlands lava, but it also makes it impossible to die on purpose - sailing off the edge of the world leaves no other way out. Starts on each time the game launches.");
             ReloadConfigHotkey = Config.Bind("Hotkeys", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
                 "Re-read this file from disk so edits take effect without relaunching. BepInEx has no file watcher, so nothing else notices the file changing - values parsed at startup are kept for the lifetime of the process. Settings read every frame apply at once; anything applied only at startup, such as which Harmony patches exist, still needs a relaunch.");
+            AchievementProgressHotkey = Config.Bind("Hotkeys", "AchievementProgressHotkey", new KeyboardShortcut(KeyCode.Period),
+                "Writes every unfinished achievement and the requirements still outstanding to a file in the BepInEx config folder, so a long list like the craft-everything achievements can be worked through without reopening the panel after each item.");
             StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
                 "Reports achievement stats that the vanilla bucket-latch bug has frozen, and repairs them when StatBucketRepairApply is on. Must be pressed in a loaded world.");
             StatBucketRepairApply = Config.Bind("General", "StatBucketRepairApply", false,
@@ -411,6 +414,11 @@ namespace ValheimMod
             if (StatBucketRepairHotkey.Value.IsDown())
             {
                 RepairStatBuckets();
+            }
+
+            if (AchievementProgressHotkey.Value.IsDown())
+            {
+                DumpAchievementProgress();
             }
 
             if (ReloadConfigHotkey.Value.IsDown())
@@ -1821,7 +1829,11 @@ namespace ValheimMod
         {
             static void Prefix(Player __instance, Piece.Requirement[] requirements, int qualityLevel, int itemQuality, int multiplier)
             {
-                if (!CraftFromContainers.Value || requirements == null)
+                // Nothing is about to be consumed, so pulling materials out of chests would just
+                // move them into the player's inventory and leave them there. Checked here rather
+                // than relying on the free-build prefix returning false to suppress this one -
+                // prefix ordering is not worth depending on when the two patches can simply agree.
+                if (!CraftFromContainers.Value || requirements == null || FreeBuildActive)
                 {
                     return;
                 }
@@ -3993,7 +4005,7 @@ namespace ValheimMod
             }
             else
             {
-                message = "Free building ON - pieces cost nothing and drop nothing";
+                message = "Free building ON - building and crafting cost nothing";
             }
             Debug.Log(message);
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
@@ -4060,6 +4072,68 @@ namespace ValheimMod
             static bool Prefix(Piece __instance)
             {
                 return !(FreeBuildActive && __instance != null && __instance.IsCreator());
+            }
+        }
+
+        // The crafting equivalent of the piece check above, and it carries the same trap: the
+        // recipe overload also serves discovery, distinguished only by its discover flag.
+        //
+        //     if (!m_knownRecipes.Contains(name) && HaveRequirements(recipe, discover: true, 0))
+        //         -> learn it
+        //
+        // Every crafting UI caller passes discover: false, so only those are answered. Getting this
+        // wrong on the piece overload taught a character 58 recipes it had not earned.
+        //
+        // The crafting station itself is deliberately still required. Valheim's own NoCostCheat
+        // would have covered every cost path in one patch, but it also waives needing a station at
+        // all, and its roof and fire requirements - the same kind of bypass that made hammer
+        // removal a skeleton key.
+        [HarmonyPatch(typeof(Player), nameof(Player.HaveRequirements), new Type[] { typeof(Recipe), typeof(bool), typeof(int), typeof(int) })]
+        class Player_HaveRequirementsRecipe_FreeBuild_Patch
+        {
+            static void Postfix(Player __instance, bool discover, ref bool __result)
+            {
+                if (!__result && !discover && FreeBuildActive && ReferenceEquals(__instance, Player.m_localPlayer))
+                {
+                    __result = true;
+                }
+            }
+        }
+
+        // Crafting takes its materials two ways. ConsumeResources covers the ordinary case and is
+        // already skipped above, but a recipe marked m_requireOnlyOneIngredient instead calls
+        // Inventory.RemoveItem(name, amount, quality) directly, which nothing else intercepts.
+        //
+        // RemoveItem is far too widely used to patch outright, so it is only skipped while
+        // DoCrafting is on the stack. The flag is set in a prefix and cleared in a finalizer so an
+        // exception mid-craft cannot leave item removal disabled for the rest of the session.
+        //
+        // Only the three-argument overload is suppressed. DoCrafting also calls
+        // RemoveItem(m_craftUpgradeItem), a different overload, which removes the item being
+        // upgraded rather than paying a cost - that still has to happen or the upgrade would
+        // duplicate the item.
+        private static bool _inCrafting;
+
+        [HarmonyPatch(typeof(InventoryGui), "DoCrafting")]
+        class InventoryGui_DoCrafting_FreeBuild_Patch
+        {
+            static void Prefix()
+            {
+                _inCrafting = true;
+            }
+
+            static void Finalizer()
+            {
+                _inCrafting = false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]
+        class Inventory_RemoveItem_FreeBuild_Patch
+        {
+            static bool Prefix()
+            {
+                return !(_inCrafting && FreeBuildActive);
             }
         }
 
@@ -4642,6 +4716,230 @@ namespace ValheimMod
             }
         }
 
+        // ---------------- Achievement progress dump ----------------
+        // The achievements panel shows one achievement at a time and has to be reopened after every
+        // craft, which makes a list like "craft one of everything" painful to work through. This
+        // writes the outstanding requirements to a file instead.
+        //
+        // Requirements come in three shapes and each knows how to test itself, so IsMet is called
+        // rather than the operator logic being reimplemented - RequirementOperator has four values
+        // and getting one wrong would quietly mislabel entries. The stats are read from the bucket
+        // the achievement itself declares, the same one AchievementsGui reads.
+        /// <summary>
+        /// Where a craftable item sits in the crafting UI: which station lists it, and the stable
+        /// part of that list's ordering.
+        ///
+        /// InventoryGui sorts by craftable-first, then m_listSortWeight, then the raw name token.
+        /// Only the last two are reproducible here - craftable-first depends on what is in the
+        /// inventory at that moment, and would reshuffle the file every time something is crafted,
+        /// which is the opposite of useful for a checklist.
+        /// </summary>
+        private struct RecipePlace
+        {
+            public string Station;
+            public int SortWeight;
+        }
+
+        private static Dictionary<string, RecipePlace> BuildRecipeIndex()
+        {
+            var index = new Dictionary<string, RecipePlace>();
+            ObjectDB odb = ObjectDB.instance;
+            if (odb?.m_recipes == null)
+            {
+                return index;
+            }
+            foreach (Recipe recipe in odb.m_recipes)
+            {
+                var shared = recipe?.m_item?.m_itemData?.m_shared;
+                if (shared == null || index.ContainsKey(shared.m_name))
+                {
+                    continue;
+                }
+                index[shared.m_name] = new RecipePlace
+                {
+                    Station = recipe.m_craftingStation != null
+                        ? Localization.instance.Localize(recipe.m_craftingStation.m_name)
+                        : "No station",
+                    SortWeight = recipe.m_listSortWeight,
+                };
+            }
+            return index;
+        }
+
+        private static string FormatRequirement(string label, float have, float need, bool met)
+        {
+            string name = Localization.instance.Localize(label);
+            if (string.IsNullOrEmpty(name) || name[0] == '[')
+            {
+                name = label;
+            }
+            return $"    [{(met ? "x" : " ")}] {name}  {have:0.##}/{need:0.##}";
+        }
+
+        private static void DumpAchievementProgress()
+        {
+            Achievements achievements = Achievements.m_instance;
+            Game game = Game.instance;
+            PlayerProfile profile = game != null ? game.GetPlayerProfile() : null;
+            if (achievements?.m_achievementLists == null || profile?.m_playerStats == null)
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Achievement dump needs a loaded world");
+                return;
+            }
+
+            _recipeIndex = null;
+            var report = new StringBuilder();
+            int incomplete = 0;
+            int outstanding = 0;
+            foreach (AchievementList list in achievements.m_achievementLists)
+            {
+                if (list?.m_achievements == null)
+                {
+                    continue;
+                }
+                foreach (Achievement achievement in list.m_achievements)
+                {
+                    if (achievement == null || achievement.m_unlocked)
+                    {
+                        continue;
+                    }
+                    int bucketIndex = (int)achievement.m_difficultyRequirement;
+                    if (bucketIndex < 0 || bucketIndex >= profile.m_playerStats.Length)
+                    {
+                        continue;
+                    }
+                    PlayerProfile.PlayerStats bucket = profile.m_playerStats[bucketIndex];
+                    if (bucket == null)
+                    {
+                        continue;
+                    }
+
+                    var lines = new List<string>();
+
+                    foreach (Achievement.PlayerStatRequirement req in achievement.m_statTrigger)
+                    {
+                        bucket.m_stats.TryGetValue(req.m_stat, out float have);
+                        bool met = req.IsMet(profile, achievement.m_difficultyRequirement);
+                        if (!met)
+                        {
+                            lines.Add(FormatRequirement("$stat_" + req.m_stat, have, req.m_amountAboveEquals, met));
+                        }
+                    }
+
+                    AddCraftRequirements(lines, achievement.m_itemCraftTriggers, bucket.m_itemCraftStats, achievement.m_difficultyRequirement);
+                    AddDictRequirements(lines, achievement.m_foodEatenTriggers, bucket.m_foodEatenStats, achievement.m_difficultyRequirement);
+                    AddDictRequirements(lines, achievement.m_itemPickupTriggers, bucket.m_itemPickupStats, achievement.m_difficultyRequirement);
+                    AddDictRequirements(lines, achievement.m_pickableTriggers, bucket.m_pickableStats, achievement.m_difficultyRequirement);
+                    AddDictRequirements(lines, achievement.m_piecePlacedTriggers, bucket.m_piecesPlacedStats, achievement.m_difficultyRequirement);
+
+                    foreach (Achievement.EnemyStatRequirement req in achievement.m_enemyStatsTriggers)
+                    {
+                        int modifier = (int)req.m_modifier;
+                        var dict = (bucket.m_enemyStats != null && modifier >= 0 && modifier < bucket.m_enemyStats.Length)
+                            ? bucket.m_enemyStats[modifier]
+                            : null;
+                        if (dict == null)
+                        {
+                            continue;
+                        }
+                        dict.TryGetValue(req.m_stat, out float have);
+                        if (!req.IsMet(dict, achievement.m_difficultyRequirement))
+                        {
+                            lines.Add(FormatRequirement(req.m_stat, have, req.m_amount, met: false));
+                        }
+                    }
+
+                    incomplete++;
+                    outstanding += lines.Count;
+                    string title = Localization.instance.Localize(achievement.m_name);
+                    report.AppendLine($"{title}  ({achievement.m_id}, {achievement.m_difficultyRequirement})");
+                    if (lines.Count == 0)
+                    {
+                        // Every listed requirement is already met - the lenient build achievements
+                        // are scored in aggregate rather than per requirement, so this is expected
+                        // for them rather than a sign the dump missed something
+                        report.AppendLine("    (no outstanding per-requirement entries)");
+                    }
+                    else
+                    {
+                        foreach (string line in lines)
+                        {
+                            report.AppendLine(line);
+                        }
+                    }
+                    report.AppendLine();
+                }
+            }
+
+            string path = Path.Combine(Paths.ConfigPath, "PipsMod_AchievementProgress.txt");
+            File.WriteAllText(path, report.ToString());
+            string summary = $"Achievement progress: {incomplete} unfinished, {outstanding} requirement(s) outstanding";
+            Debug.Log($"{summary} -> {path}");
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, summary);
+        }
+
+        /// <summary>
+        /// Craft requirements grouped by the station that makes them, each group in the crafting
+        /// list's own stable order, so the file can be worked through one station at a time instead
+        /// of walking back and forth between benches.
+        /// </summary>
+        private static void AddCraftRequirements(List<string> lines, List<Achievement.DictStatRequirement> triggers,
+            Dictionary<string, float> stats, DifficultyRequirement difficulty)
+        {
+            if (triggers == null || stats == null)
+            {
+                return;
+            }
+            Dictionary<string, RecipePlace> index = _recipeIndex ?? (_recipeIndex = BuildRecipeIndex());
+            var outstanding = new List<Achievement.DictStatRequirement>();
+            foreach (Achievement.DictStatRequirement req in triggers)
+            {
+                if (!req.IsMet(stats, difficulty))
+                {
+                    outstanding.Add(req);
+                }
+            }
+            if (outstanding.Count == 0)
+            {
+                return;
+            }
+            var grouped = outstanding
+                .GroupBy(r => index.TryGetValue(r.m_stat, out RecipePlace place) ? place.Station : "Unknown station")
+                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+            foreach (var group in grouped)
+            {
+                lines.Add($"    {group.Key}:");
+                var ordered = group
+                    .OrderBy(r => index.TryGetValue(r.m_stat, out RecipePlace place) ? place.SortWeight : int.MaxValue)
+                    .ThenBy(r => r.m_stat, StringComparer.Ordinal);
+                foreach (Achievement.DictStatRequirement req in ordered)
+                {
+                    stats.TryGetValue(req.m_stat, out float have);
+                    lines.Add("  " + FormatRequirement(req.m_stat, have, req.m_amount, met: false));
+                }
+            }
+        }
+
+        private static Dictionary<string, RecipePlace> _recipeIndex;
+
+        private static void AddDictRequirements(List<string> lines, List<Achievement.DictStatRequirement> triggers,
+            Dictionary<string, float> stats, DifficultyRequirement difficulty)
+        {
+            if (triggers == null || stats == null)
+            {
+                return;
+            }
+            foreach (Achievement.DictStatRequirement req in triggers)
+            {
+                if (req.IsMet(stats, difficulty))
+                {
+                    continue;
+                }
+                stats.TryGetValue(req.m_stat, out float have);
+                lines.Add(FormatRequirement(req.m_stat, have, req.m_amount, met: false));
+            }
+        }
+
         // ---------------- Achievement stat bucket repair ----------------
         // Vanilla keeps achievement stats in one bucket per DifficultyRequirement. Writes go to
         // bucket 0 (RawStats) unconditionally and to bucket 1 (Any) plus the bucket for the world's
@@ -4931,6 +5229,7 @@ namespace ValheimMod
         // and the hash is all AddStatusEffect needs to find the live asset in the current ObjectDB.
         private const float PowerCheckSeconds = 2f;
         private static float _powerCheckedAt = float.NegativeInfinity;
+        private static bool _lockedPowersReported;
         private static List<BossPower> _bossPowers;
 
         private class BossPower
@@ -5016,6 +5315,24 @@ namespace ValheimMod
             }
             bool enabled = PassiveForsakenPowers.Value;
             bool shared = IsSharedSession();
+
+            // A power is only held once the character has selected it at its stone at least once,
+            // because that is what writes the unique key this reads. Mounting the trophy is not
+            // enough. Reported once per session so the gap is visible rather than being something
+            // the player has to already know - "4 of 7 held" sat in the log unnoticed for weeks.
+            if (enabled && !_lockedPowersReported)
+            {
+                _lockedPowersReported = true;
+                var locked = _bossPowers
+                    .Where(b => !player.HaveUniqueKey(b.PowerName))
+                    .Select(b => b.PowerName)
+                    .ToArray();
+                if (locked.Length > 0)
+                {
+                    Debug.LogWarning($"Forsaken powers not yet unlocked on this character: {string.Join(", ", locked)}. "
+                        + "Select each once at its boss stone - mounting the trophy alone does not register it.");
+                }
+            }
             foreach (BossPower boss in _bossPowers)
             {
                 // The only part of a status effect that reaches other players is the four-flag
