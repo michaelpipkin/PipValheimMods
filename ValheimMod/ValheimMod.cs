@@ -29,6 +29,7 @@ namespace ValheimMod
         private static ConfigEntry<bool> PassiveForsakenPowers;
         private static ConfigEntry<bool> HidePassivePowerIcons;
         private static ConfigEntry<bool> LogConsoleOutput;
+        private static ConfigEntry<string> SuppressLogMessages;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
         private static ConfigEntry<KeyboardShortcut> AchievementProgressHotkey;
         private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
@@ -209,6 +210,8 @@ namespace ValheimMod
             MassPlantGridSize = Config.Bind("Farming", "MassPlantGridSize", 5, new ConfigDescription("Width of the grid planted while the mass-plant key is held. 5 plants a 5x5 block of 25. Set to 1 to disable.", new AcceptableValueRange<int>(1, 11)));
             PassiveForsakenPowers = Config.Bind("Powers", "PassiveForsakenPowers", true,
                 "Keep every forsaken power this character has unlocked permanently active - no selecting, no activating, no cooldown. A power counts as unlocked once you have selected it at its stone, which the game records on the character rather than in the world, so unlocked powers follow you into any world. Powers carrying a networked status attribute (Moder's sailing power) stay off in a shared session, since that flag reaches any ship you are aboard.");
+            SuppressLogMessages = Config.Bind("General", "SuppressLogMessages", "MagicaCloth component not found",
+                "Comma separated fragments. Any log line from the game containing one is dropped before it is written. Meant for vanilla messages that repeat endlessly and say nothing actionable - the default is Iron Gate's own prefab-authoring warning, which fires several times a second and is addressed to them, not to you. Clear it to let everything through.");
             LogConsoleOutput = Config.Bind("General", "LogConsoleOutput", true,
                 "Mirror in-game console output to the BepInEx log. The console keeps only a few lines and cannot be scrolled, so commands with long output - 'achievements' in particular - are unreadable in game without this.");
             HidePassivePowerIcons = Config.Bind("Powers", "HidePassivePowerIcons", true,
@@ -4714,6 +4717,61 @@ namespace ValheimMod
                     Debug.Log($"First trophy guaranteed: {prefab.name}");
                 }
             }
+        }
+
+        // ---------------- Log noise filter ----------------
+        // Dropped at ZLog rather than further down, because that is where the game writes and it
+        // keeps the line out of the BepInEx file, the console mirror and the in-game console at
+        // once. PlayerClothWindShelter is the motivating case: it logs an error every time a
+        // prefab without its MagicaCloth component wakes up, which is constant, and the message is
+        // Iron Gate telling themselves to fix prefab authoring.
+        //
+        // Only string messages are tested. ZLog takes object, and calling ToString on everything
+        // passing through the logger would allocate on a path that runs constantly.
+        private static string[] _suppressedLogFragments;
+        private static string _suppressedLogSource;
+
+        private static bool ShouldSuppressLog(object message)
+        {
+            string raw = SuppressLogMessages.Value ?? string.Empty;
+            if (_suppressedLogFragments == null || _suppressedLogSource != raw)
+            {
+                _suppressedLogSource = raw;
+                _suppressedLogFragments = raw.Split(',')
+                    .Select(f => f.Trim())
+                    .Where(f => f.Length > 0)
+                    .ToArray();
+            }
+            if (_suppressedLogFragments.Length == 0 || !(message is string text))
+            {
+                return false;
+            }
+            foreach (string fragment in _suppressedLogFragments)
+            {
+                if (text.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        [HarmonyPatch(typeof(ZLog), nameof(ZLog.LogError))]
+        class ZLog_LogError_Patch
+        {
+            static bool Prefix(object __0) => !ShouldSuppressLog(__0);
+        }
+
+        [HarmonyPatch(typeof(ZLog), nameof(ZLog.LogWarning))]
+        class ZLog_LogWarning_Patch
+        {
+            static bool Prefix(object __0) => !ShouldSuppressLog(__0);
+        }
+
+        [HarmonyPatch(typeof(ZLog), nameof(ZLog.Log))]
+        class ZLog_Log_Patch
+        {
+            static bool Prefix(object __0) => !ShouldSuppressLog(__0);
         }
 
         // ---------------- Achievement progress dump ----------------
