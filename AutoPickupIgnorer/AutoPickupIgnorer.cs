@@ -44,9 +44,39 @@ namespace AutoPickupIgnorer
             harmony.PatchAll();
         }
 
+        /// <summary>
+        /// The hotkey is read straight from the keyboard, which the game never sees and therefore
+        /// never suppresses, so a typed character still reached it. The default hotkey is Quote -
+        /// the apostrophe - which meant typing a word like "don't" on a sign or in chat silently
+        /// cycled the pickup behaviour.
+        ///
+        /// Only text focus is checked, not the game's full TakeInput: toggling pickup behaviour
+        /// with the inventory open is reasonable and was always allowed.
+        /// </summary>
+        private static bool IsTypingText()
+        {
+            if (Console.IsVisible() || TextInput.IsVisible() || Minimap.InTextInput()
+                || PlayerCustomizaton.IsBarberGuiVisible())
+            {
+                return true;
+            }
+            if (Chat.instance != null && Chat.instance.HasFocus())
+            {
+                return true;
+            }
+            // The build menu's search box takes typed input without any of the above being true
+            BuildUi buildUi = Hud.instance != null ? Hud.instance.m_buildUi : null;
+            return buildUi != null && buildUi.SearchFieldFocused;
+        }
+
+        private static bool HotkeyDown(ConfigEntry<KeyboardShortcut> hotkey)
+        {
+            return hotkey != null && hotkey.Value.IsDown() && !IsTypingText();
+        }
+
         private void Update()
         {
-            if (ToggleBehaviorHotkey.Value.IsDown())
+            if (HotkeyDown(ToggleBehaviorHotkey))
             {
                 switch (_currentPickupBehavior)
                 {

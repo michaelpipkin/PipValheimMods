@@ -54,6 +54,7 @@ namespace ValheimMod
         private static ConfigEntry<string> PinExcludeNames;
         private static ConfigEntry<string> PinIncludeLocations;
         private static ConfigEntry<bool> AutoPinResources;
+        private static ConfigEntry<bool> PinDiagnostics;
         private static ConfigEntry<bool> ShowMapCursorCoordinates;
         private static ConfigEntry<string> HudFontName;
         private static ConfigEntry<float> MapCursorPositionX;
@@ -281,6 +282,8 @@ namespace ValheimMod
                 "Map cursor readout offset in pixels from the left edge of the map panel, not the screen.");
             MapCursorPositionY = Config.Bind("Map", "MapCursorPositionY", 12f,
                 "Map cursor readout offset in pixels from the top edge of the map panel, not the screen.");
+            PinDiagnostics = Config.Bind("Map", "PinDiagnostics", false,
+                "Logs a line every time an automatic pin is declined, naming the reason and - when an existing pin blocked it - that pin's name and distance. Off by default because a dungeon re-pins every time its zone reloads, which would fill the log. Turn it on for a session when something that should have been pinned was not.");
             AutoPinResources = Config.Bind("Map", "AutoPinResources", true,
                 "Pin resource nodes as they load - tar pits, ore deposits, scrap piles.");
             ResourcePinIcon = Config.Bind("Map", "ResourcePinIcon", 3,
@@ -352,7 +355,7 @@ namespace ValheimMod
 
         private void Update()
         {
-            if (RepairHotkey.Value.IsDown())
+            if (HotkeyDown(RepairHotkey))
             {
                 // Read the local player at point of use; m_localPlayer isn't assigned until
                 // SetLocalPlayer runs, which is after Player.Awake
@@ -409,32 +412,32 @@ namespace ValheimMod
                 }
             }
 
-            if (DumpItemListHotkey.Value.IsDown())
+            if (HotkeyDown(DumpItemListHotkey))
             {
                 DumpItemList();
             }
 
-            if (StatBucketRepairHotkey.Value.IsDown())
+            if (HotkeyDown(StatBucketRepairHotkey))
             {
                 RepairStatBuckets();
             }
 
-            if (AchievementProgressHotkey.Value.IsDown())
+            if (HotkeyDown(AchievementProgressHotkey))
             {
                 DumpAchievementProgress();
             }
 
-            if (ReloadConfigHotkey.Value.IsDown())
+            if (HotkeyDown(ReloadConfigHotkey))
             {
                 ReloadModConfig();
             }
 
-            if (HealthFloorToggleHotkey.Value.IsDown())
+            if (HotkeyDown(HealthFloorToggleHotkey))
             {
                 ToggleHealthFloor();
             }
 
-            if (FreeBuildHotkey.Value.IsDown())
+            if (HotkeyDown(FreeBuildHotkey))
             {
                 ToggleFreeBuild();
             }
@@ -558,7 +561,7 @@ namespace ValheimMod
                 _playerLightLevel = levels;
             }
 
-            if (PlayerLightHotkey.Value.IsDown())
+            if (HotkeyDown(PlayerLightHotkey))
             {
                 // One step past the brightest level wraps to off, so the cycle is levels + 1 long
                 _playerLightLevel = (_playerLightLevel + 1) % (levels + 1);
@@ -566,7 +569,7 @@ namespace ValheimMod
 
             if (_playerLightLevel <= 0)
             {
-                if (PlayerLightHotkey.Value.IsDown())
+                if (HotkeyDown(PlayerLightHotkey))
                 {
                     _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Light off");
                 }
@@ -586,7 +589,7 @@ namespace ValheimMod
             // reach further. Level 1 leaves the source item untouched, so the exponent is one less
             // than the level.
             range *= Mathf.Pow(Mathf.Max(1f, PlayerLightLevelStep.Value), _playerLightLevel - 1);
-            if (PlayerLightHotkey.Value.IsDown())
+            if (HotkeyDown(PlayerLightHotkey))
             {
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
                     $"Light {_playerLightLevel}/{levels} - range {range:0.#}");
@@ -3473,14 +3476,14 @@ namespace ValheimMod
         // itself. Pins only care about X and Z, so the vertical offset between the generator and
         // the surface entrance does not matter.
         //
-        // Spawn, GetClosestPin and m_pins are all non-public in the shipped assembly even though
-        // the publicized reference shows them public. Spawn is only *patched*, which is always
-        // allowed; GetClosestPin has to be invoked, so it goes through an AccessTools handle. It is
-        // called with mustBeVisible false deliberately - the vanilla default only counts pins whose
-        // UI element is currently active, which would let duplicates through for pins off-screen.
-        private static readonly MethodInfo GetClosestPinMethod = AccessTools.Method(
-            typeof(Minimap), "GetClosestPin", new[] { typeof(Vector3), typeof(float), typeof(bool) });
+        // Spawn, AddPin and m_pins are all non-public in the shipped assembly even though the
+        // publicized reference shows them public. Spawn is only *patched*, which is always allowed;
+        // the other two are read or invoked, so they go through AccessTools handles.
+        //
+        // Duplicate suppression deliberately does not use Minimap.GetClosestPin - see
+        // FindBlockingPin for why comparing distance alone was wrong here.
         private static readonly MethodInfo AddPinMethod = AccessTools.Method(typeof(Minimap), "AddPin");
+        private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
 
         /// <summary>
         /// Calls Minimap.AddPin without referencing Splatform. Its last parameter is a
@@ -4177,6 +4180,69 @@ namespace ValheimMod
             }
         }
 
+        // ---------------- Input guards ----------------
+        // Every hotkey here is read straight from the keyboard in Update, which the game never
+        // sees and therefore never suppresses. With a sign, the chat box or the console open, a
+        // typed character still reached the mod: typing an emote fired the free-build toggle on
+        // the slash, and a space jumped.
+        //
+        // Two different guards, because they answer different questions.
+        //
+        // IsTypingText is for the hotkeys: it asks only whether a text field has focus. Using the
+        // broader TakeInput would also disable them whenever the inventory or map is open, and the
+        // achievement dump is most useful with the achievements panel in front of you.
+        private static bool IsTypingText()
+        {
+            if (Console.IsVisible() || TextInput.IsVisible() || Minimap.InTextInput()
+                || PlayerCustomizaton.IsBarberGuiVisible())
+            {
+                return true;
+            }
+            if (Chat.instance != null && Chat.instance.HasFocus())
+            {
+                return true;
+            }
+            // The build menu's search box takes typed input without any of the above being true
+            BuildUi buildUi = Hud.instance != null ? Hud.instance.m_buildUi : null;
+            return buildUi != null && buildUi.SearchFieldFocused;
+        }
+
+        /// <summary>
+        /// Every mod hotkey is read through this one place, so the typing guard cannot be forgotten
+        /// when a new hotkey is added. Cached per frame because Update polls several hotkeys and the
+        /// check walks a handful of UI singletons.
+        /// </summary>
+        private static int _typingCheckedFrame = -1;
+        private static bool _typingCached;
+
+        private static bool HotkeyDown(ConfigEntry<KeyboardShortcut> hotkey)
+        {
+            if (hotkey == null || !hotkey.Value.IsDown())
+            {
+                return false;
+            }
+            if (_typingCheckedFrame != Time.frameCount)
+            {
+                _typingCheckedFrame = Time.frameCount;
+                _typingCached = IsTypingText();
+            }
+            return !_typingCached;
+        }
+
+        // The jump buffer uses the game's own aggregate instead, so a buffered press can never
+        // fire somewhere vanilla would have refused the original - it also covers menus, cutscenes,
+        // death and teleporting. Non-public in the shipped assembly, hence the handle.
+        private static readonly MethodInfo TakeInputMethod = AccessTools.Method(typeof(Player), "TakeInput");
+
+        private static bool PlayerTakingInput(Player player)
+        {
+            if (TakeInputMethod == null)
+            {
+                return !IsTypingText();
+            }
+            return TakeInputMethod.Invoke(player, null) is bool taking && taking;
+        }
+
         // ---------------- Jump leniency ----------------
         // Player.SetControls routes the jump key three ways, and only the last one jumps:
         //
@@ -4212,6 +4278,13 @@ namespace ValheimMod
             Player player = Player.m_localPlayer;
             if (player == null)
             {
+                return;
+            }
+            // Vanilla only reads the jump button through a path gated on TakeInput, so without
+            // this the buffer jumps while the player is typing
+            if (!PlayerTakingInput(player))
+            {
+                _jumpPressedAt = float.NegativeInfinity;
                 return;
             }
             bool pressed = ZInput.GetButtonDown("Jump");
@@ -4373,21 +4446,68 @@ namespace ValheimMod
                 }
                 return false;
             }
-            if (GetClosestPinMethod != null)
+            if (FindBlockingPin(map, position, Mathf.Max(0f, mergeRadius), label, out string blocker, out float blockerDistance))
             {
-                object existing = GetClosestPinMethod.Invoke(map,
-                    new object[] { position, Mathf.Max(0f, mergeRadius), false });
-                if (existing != null)
+                if (PinDiagnostics.Value)
                 {
-                    return false;
+                    Debug.Log($"Pin declined: '{label}' at X {position.x:0} Z {position.z:0} - "
+                        + $"'{blocker}' already pinned {blockerDistance:0.#}m away ({detail})");
                 }
+                return false;
             }
             if (!AddMapPin(map, position, type, label, true, false))
             {
+                // Reflection into AddPin failed, which is a mod problem rather than a map one, so
+                // this is reported whether or not diagnostics are on
+                Debug.LogWarning($"Pin failed: '{label}' at X {position.x:0} Z {position.z:0} - "
+                    + $"could not call Minimap.AddPin ({detail})");
                 return false;
             }
             Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} ({detail})");
             return true;
+        }
+
+        /// <summary>
+        /// Whether something with the same label is already pinned within the merge radius.
+        ///
+        /// This used to call Minimap.GetClosestPin, which compares nothing but distance, so any pin
+        /// of any kind suppressed the new one. In Black Forest that is close to fatal: copper and
+        /// tin deposits are auto-pinned too and cluster around exactly the places troll and bear
+        /// caves sit, so a cave 30m from a Copper pin was silently declined. Comparing the label
+        /// keeps the behaviour the radius is actually for - not pinning the same dungeon twice as
+        /// its zone reloads - without letting unrelated pins mask a real discovery.
+        ///
+        /// GetClosestPin would also only have returned the single nearest pin, so a same-label pin
+        /// slightly further out than an unrelated one could be missed entirely. Scanning handles
+        /// both. Unsaved pins are skipped to match vanilla, which treats them as transient.
+        /// </summary>
+        private static bool FindBlockingPin(Minimap map, Vector3 position, float radius, string label,
+            out string blocker, out float blockerDistance)
+        {
+            blocker = null;
+            blockerDistance = 0f;
+            var pins = PinsField?.GetValue(map) as List<Minimap.PinData>;
+            if (pins == null)
+            {
+                // Without the pin list there is no way to tell a duplicate from a new find. Adding
+                // is the recoverable mistake - a stray extra pin can be deleted, a dungeon that
+                // never pins is one the player has to stumble on again.
+                return false;
+            }
+            foreach (Minimap.PinData pin in pins)
+            {
+                if (pin == null || !pin.m_save || !string.Equals(pin.m_name, label, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                float distance = Utils.DistanceXZ(position, pin.m_pos);
+                if (distance < radius && (blocker == null || distance < blockerDistance))
+                {
+                    blocker = pin.m_name;
+                    blockerDistance = distance;
+                }
+            }
+            return blocker != null;
         }
 
         private static void FlushPendingPins()
