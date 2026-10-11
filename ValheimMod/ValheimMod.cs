@@ -270,7 +270,8 @@ namespace ValheimMod
                 "Never pin anything whose location, generator or prefab name contains one of these comma separated fragments, case insensitive. "
                 + "The Ashlands are full of ruins that qualify as dungeons structurally but hold nothing worth walking back to, and they bury the useful pins. "
                 + "Checked before everything else, so an excluded name cannot be brought back by a rule elsewhere.");
-            PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress",
+            PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress,Mistlands_Excavation,Mistlands_Harbour"
+                + ",Mistlands_GuardTower1_new,Mistlands_GuardTower2_new,Mistlands_GuardTower3_new",
                 "Also pin surface locations whose name contains one of these comma separated fragments, even though they have no interior and no dungeon generator. "
                 + "Those two are what the other hooks key off, so a structure that is simply built on the surface - a charred fortress, for instance - is otherwise invisible to all of them. "
                 + "PinExcludeNames still wins, so a fragment listed in both is excluded.");
@@ -300,7 +301,7 @@ namespace ValheimMod
                 "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
                 + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
                 + "Keyed off Location.m_hasInterior, the same flag the game uses to decide whether to create an interior zone at all.");
-            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Draugr Village=0,Meadows Farm=0,North Village=0,GoblinCamp2=0,DG_NorthVillage=0",
+            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Dvergr Camp=0,Dvergr Harbor=0,Dvergr Tower=0,Draugr Village=0,Meadows Farm=0,North Village=0,GoblinCamp2=0,DG_NorthVillage=0",
                 "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
                 + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
                 + "or the surface location name for a single variant. Indexes are the same Minimap.PinType numbers as DungeonPinIcon, which is used for anything unlisted.");
@@ -1104,9 +1105,53 @@ namespace ValheimMod
             string listPath = Path.Combine(dir, "PipsMod_AutoPickupIgnoreList.txt");
             File.WriteAllText(listPath, string.Join(", ", eligible));
 
-            Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup) to {dir}");
+            int locations = DumpLocationList(dir);
+
+            Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup) and {locations} locations to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
-                $"Dumped {rows.Count} items ({eligible.Count} auto-pickup) to BepInEx/config");
+                $"Dumped {rows.Count} items and {locations} locations to BepInEx/config");
+        }
+
+        /// <summary>
+        /// Writes every location the world generator knows about. Unlike items, location prefab
+        /// names appear nowhere in the managed assemblies - they live in Unity asset data - so
+        /// there is no way to look up the name of a structure from outside the running game. That
+        /// made every missing auto-pin a guessing game, or a wait until the player happened to walk
+        /// past the thing again with diagnostics on. One keypress at any loaded world replaces both.
+        ///
+        /// PinExcludeNames and PinIncludeLocations both match on the prefab name in this file.
+        /// m_interiorRadius is included because a location with no interior never reaches the pin
+        /// hook on its own and has to be named in PinIncludeLocations to be pinned at all.
+        /// </summary>
+        private static int DumpLocationList(string dir)
+        {
+            var zoneLocations = ZoneSystem.instance?.m_locations;
+            if (zoneLocations == null)
+            {
+                return 0;
+            }
+            var table = new StringBuilder();
+            table.AppendLine("PrefabName	Name	Biome	Quantity	Unique	Group	InteriorRadius	ExteriorRadius	Enabled");
+            int count = 0;
+            foreach (ZoneSystem.ZoneLocation loc in zoneLocations)
+            {
+                if (loc == null)
+                {
+                    continue;
+                }
+                // m_prefabName is the authored id and is what the pin code compares against;
+                // m_name is only a display label and is sometimes empty
+                string prefabName = !string.IsNullOrEmpty(loc.m_prefabName) ? loc.m_prefabName : loc.m_name;
+                if (string.IsNullOrEmpty(prefabName))
+                {
+                    continue;
+                }
+                table.AppendLine($"{prefabName}	{loc.m_name}	{loc.m_biome}	{loc.m_quantity}	{loc.m_unique}	"
+                    + $"{loc.m_group}	{loc.m_interiorRadius:0.#}	{loc.m_exteriorRadius:0.#}	{loc.m_enable}");
+                count++;
+            }
+            File.WriteAllText(Path.Combine(dir, "PipsMod_LocationList.tsv"), table.ToString());
+            return count;
         }
 
         /// <summary>
@@ -3718,6 +3763,21 @@ namespace ValheimMod
                 { "SunkenCrypt3", "Sunken Crypt" },
                 { "SunkenCrypt4", "Sunken Crypt" },
                 { "Mistlands_DvergrTownEntrance1", "Infested Mine" },
+                // Both entrance variants lead to the same dungeon - our log shows each running
+                // DG_DvergrTown - so they have to share a label. Entrance2 was absent from this
+                // table and fell through to a prettified prefab name, which both read wrong and,
+                // because duplicate suppression matches on label, left a second pin roughly 30m
+                // from the "Infested Mine" one at the same site.
+                { "Mistlands_DvergrTownEntrance2", "Infested Mine" },
+                // Dvergr excavation sites - a fenced camp with dvergr, extractor crates and a
+                // part-dug Jotunn skeleton that yields black marble. Three numbered variants, all
+                // covered by this one fragment. Surface-only, so they also have to be named in
+                // PinIncludeLocations to reach the pin hook at all.
+                { "Mistlands_Excavation", "Dvergr Camp" },
+                { "Mistlands_Harbour", "Dvergr Harbor" },
+                // One fragment is enough for the label - only the variants named in
+                // PinIncludeLocations ever get this far, so the ruined ones cannot pick it up
+                { "Mistlands_GuardTower", "Dvergr Tower" },
                 { "GoblinCamp2", "Fuling Camp" },
                 { "MeadowsVillage", "Draugr Village" },
                 { "MeadowsFarm", "Meadows Farm" },
