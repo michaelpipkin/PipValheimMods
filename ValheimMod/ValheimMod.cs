@@ -211,7 +211,7 @@ namespace ValheimMod
             MassPlantGridSize = Config.Bind("Farming", "MassPlantGridSize", 5, new ConfigDescription("Width of the grid planted while the mass-plant key is held. 5 plants a 5x5 block of 25. Set to 1 to disable.", new AcceptableValueRange<int>(1, 11)));
             PassiveForsakenPowers = Config.Bind("Powers", "PassiveForsakenPowers", true,
                 "Keep every forsaken power this character has unlocked permanently active - no selecting, no activating, no cooldown. A power counts as unlocked once you have selected it at its stone, which the game records on the character rather than in the world, so unlocked powers follow you into any world. Powers carrying a networked status attribute (Moder's sailing power) stay off in a shared session, since that flag reaches any ship you are aboard.");
-            SuppressLogMessages = Config.Bind("General", "SuppressLogMessages", "MagicaCloth component not found",
+            SuppressLogMessages = Config.Bind("General", "SuppressLogMessages", "MagicaCloth component not found,Rotation quaternions must be unit length",
                 "Comma separated fragments. Any log line from the game containing one is dropped before it is written. Meant for vanilla messages that repeat endlessly and say nothing actionable - the default is Iron Gate's own prefab-authoring warning, which fires several times a second and is addressed to them, not to you. Clear it to let everything through.");
             LogConsoleOutput = Config.Bind("General", "LogConsoleOutput", true,
                 "Mirror in-game console output to the BepInEx log. The console keeps only a few lines and cannot be scrolled, so commands with long output - 'achievements' in particular - are unreadable in game without this.");
@@ -270,7 +270,7 @@ namespace ValheimMod
                 "Never pin anything whose location, generator or prefab name contains one of these comma separated fragments, case insensitive. "
                 + "The Ashlands are full of ruins that qualify as dungeons structurally but hold nothing worth walking back to, and they bury the useful pins. "
                 + "Checked before everything else, so an excluded name cannot be brought back by a rule elsewhere.");
-            PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress,Mistlands_Excavation,Mistlands_Harbour"
+            PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress,Mistlands_Excavation,Mistlands_Harbour,Mistlands_Lighthouse"
                 + ",Mistlands_GuardTower1_new,Mistlands_GuardTower2_new,Mistlands_GuardTower3_new",
                 "Also pin surface locations whose name contains one of these comma separated fragments, even though they have no interior and no dungeon generator. "
                 + "Those two are what the other hooks key off, so a structure that is simply built on the surface - a charred fortress, for instance - is otherwise invisible to all of them. "
@@ -290,7 +290,7 @@ namespace ValheimMod
             ResourcePinIcon = Config.Bind("Map", "ResourcePinIcon", 3,
                 "Minimap.PinType index for resource pins, separate from the dungeon icon. 3 is the dot.");
             ResourcePinNames = Config.Bind("Map", "ResourcePinNames",
-                "rock4_copper=Copper,MineRock_Copper=Copper,rock3_silver=Silver,silvervein=Silver,mudpile=Mud Pile,FlametalRockstand=Flametal,LeviathanLava=Flametal,TarPit=Tar Pit,NorthMemorial=Memorial,DragonEgg=Dragon Egg,Leviathan=Leviathan",
+                "rock4_copper=Copper,MineRock_Copper=Copper,rock3_silver=Silver,silvervein=Silver,mudpile=Mud Pile,FlametalRockstand=Flametal,LeviathanLava=Flametal,TarPit=Tar Pit,NorthMemorial=Memorial,DragonEgg=Dragon Egg,Leviathan=Leviathan,Mistlands_Giant=Jotunn Skeleton,YggdrasilRoot=Root,TrollFrost_Dead=Petrified Gameltroll,TrollFrost_Frac=Petrified Gameltroll",
                 "Comma separated prefab=label pairs. The prefab part is matched as a case insensitive fragment, so one entry covers every variant - mudpile also catches mudpile2. "
                 + "These are the real prefab names from the registry scan: the intact deposit you walk up to is rock4_copper or silvervein, while the _frac MineRock5 version only exists once mined. "
                 + "An entry with no '=' still works and gets a name derived from the prefab. Tin is deliberately absent. Every pin logs the prefab it matched.");
@@ -301,7 +301,7 @@ namespace ValheimMod
                 "Also pin locations that declare an interior but build it as one fixed space rather than from rooms - troll caves, bear caves, putrid holes. "
                 + "Those carry no room data, so DungeonGenerator never reaches the stage the other hook listens for and they were never pinned. "
                 + "Keyed off Location.m_hasInterior, the same flag the game uses to decide whether to create an interior zone at all.");
-            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Dvergr Camp=0,Dvergr Harbor=0,Dvergr Tower=0,Draugr Village=0,Meadows Farm=0,North Village=0,GoblinCamp2=0,DG_NorthVillage=0",
+            DungeonPinIconOverrides = Config.Bind("Map", "DungeonPinIconOverrides", "Fuling Camp=0,Dvergr Camp=0,Dvergr Harbor=0,Dvergr Tower=0,Dvergr Guard Tower=0,Draugr Village=0,Meadows Farm=0,North Village=0,GoblinCamp2=0,DG_NorthVillage=0",
                 "Per-type icons, as comma separated name=index pairs, for example 'Fuling Camp=0,Infested Mine=4'. "
                 + "The name can be the label that ends up on the pin, which is the stable choice since every variant of a type resolves to the same one, "
                 + "or the surface location name for a single variant. Indexes are the same Minimap.PinType numbers as DungeonPinIcon, which is used for anything unlisted.");
@@ -1106,10 +1106,13 @@ namespace ValheimMod
             File.WriteAllText(listPath, string.Join(", ", eligible));
 
             int locations = DumpLocationList(dir);
+            int prefabs = DumpPrefabList(dir);
+            int nearby = DumpNearbyObjects(dir);
 
-            Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup) and {locations} locations to {dir}");
+            Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup), "
+                + $"{locations} locations, {prefabs} prefabs and {nearby} nearby objects to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
-                $"Dumped {rows.Count} items and {locations} locations to BepInEx/config");
+                $"Dumped {rows.Count} items, {locations} locations, {prefabs} prefabs, {nearby} nearby to BepInEx/config");
         }
 
         /// <summary>
@@ -1123,6 +1126,95 @@ namespace ValheimMod
         /// m_interiorRadius is included because a location with no interior never reaches the pin
         /// hook on its own and has to be named in PinIncludeLocations to be pinned at all.
         /// </summary>
+        /// <summary>
+        /// Every prefab registered with ZNetScene - which is to say every object that can exist in
+        /// the world, including the ore deposits, mineable rocks and roots that ResourcePinNames
+        /// keys on.
+        ///
+        /// The item dump covers ObjectDB, which only holds things that can sit in an inventory, and
+        /// the location dump covers whole structures. Neither lists a deposit you walk up to and
+        /// mine, so the names in ResourcePinNames previously had to come from somewhere outside the
+        /// game and be confirmed by going and standing next to one. A web source has already been
+        /// wrong about prefab names in this project more than once.
+        /// </summary>
+        /// <summary>
+        /// Every networked object within NearbyDumpRadius of the player, nearest first.
+        ///
+        /// The registry dump says which prefabs exist; this says which one you are standing on,
+        /// which is the question that actually comes up. A resource that fails to pin logs nothing
+        /// at all - TryMatchResource simply returns false and PinResource returns - so a wrong
+        /// prefab name and a prefab none of the hooks can see are indistinguishable from the log.
+        /// This separates them: if the object is listed here with its component, the name was wrong;
+        /// if it is listed with no hookable component, the hooks are the problem.
+        ///
+        /// The scan is slow and would be the wrong thing to put on a per-frame path, but this runs
+        /// once when a key is pressed, which is cheap enough to be worth the certainty. Sorted by
+        /// distance here, so the unsorted overload is the right one to ask for.
+        /// </summary>
+        private const float NearbyDumpRadius = 25f;
+
+        private static int DumpNearbyObjects(string dir)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return 0;
+            }
+            Vector3 origin = player.transform.position;
+            var report = new StringBuilder();
+            report.AppendLine($"Objects within {NearbyDumpRadius:0}m of X {origin.x:0.#} Z {origin.z:0.#}");
+            report.AppendLine("Distance	PrefabName	HookableComponents");
+
+            var found = new List<KeyValuePair<float, string>>();
+            foreach (ZNetView view in UnityEngine.Object.FindObjectsByType<ZNetView>(FindObjectsSortMode.None))
+            {
+                if (view == null)
+                {
+                    continue;
+                }
+                float distance = Vector3.Distance(origin, view.transform.position);
+                if (distance > NearbyDumpRadius)
+                {
+                    continue;
+                }
+                // Exactly the component types that feed PinResource, so a blank column means the
+                // object cannot currently be pinned no matter what ResourcePinNames says
+                var hooks = new List<string>();
+                if (view.GetComponent<Destructible>() != null) hooks.Add("Destructible");
+                if (view.GetComponent<MineRock5>() != null) hooks.Add("MineRock5");
+                if (view.GetComponent<MineRock>() != null) hooks.Add("MineRock");
+                if (view.GetComponent<Pickable>() != null) hooks.Add("Pickable");
+                if (view.GetComponent<Location>() != null) hooks.Add("Location");
+                found.Add(new KeyValuePair<float, string>(distance,
+                    $"{distance:0.#}	{StripClone(view.gameObject.name)}	{(hooks.Count > 0 ? string.Join("+", hooks) : "(none)")}"));
+            }
+            found.Sort((a, b) => a.Key.CompareTo(b.Key));
+            foreach (var entry in found)
+            {
+                report.AppendLine(entry.Value);
+            }
+            File.WriteAllText(Path.Combine(dir, "PipsMod_NearbyObjects.tsv"), report.ToString());
+            return found.Count;
+        }
+
+        private static int DumpPrefabList(string dir)
+        {
+            var prefabs = ZNetScene.instance?.m_prefabs;
+            if (prefabs == null)
+            {
+                return 0;
+            }
+            var names = prefabs
+                .Where(prefab => prefab != null)
+                .Select(prefab => prefab.name)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            File.WriteAllText(Path.Combine(dir, "PipsMod_PrefabList.txt"), string.Join(Environment.NewLine, names));
+            return names.Count;
+        }
+
         private static int DumpLocationList(string dir)
         {
             var zoneLocations = ZoneSystem.instance?.m_locations;
@@ -3775,9 +3867,17 @@ namespace ValheimMod
                 // PinIncludeLocations to reach the pin hook at all.
                 { "Mistlands_Excavation", "Dvergr Camp" },
                 { "Mistlands_Harbour", "Dvergr Harbor" },
+                // The tall dvergr tower with dvergr and component crates inside is authored as
+                // "Lighthouse", not as any of the GuardTower variants - the log settled it, at the
+                // exact coordinates the player was standing on.
+                { "Mistlands_Lighthouse", "Dvergr Tower" },
+                // Kept distinct from "Dvergr Tower" rather than sharing it: duplicate suppression
+                // matches on label within DungeonPinMergeRadius, so one label for two different
+                // structures would let a guard tower hide a real tower 40m away.
+                //
                 // One fragment is enough for the label - only the variants named in
                 // PinIncludeLocations ever get this far, so the ruined ones cannot pick it up
-                { "Mistlands_GuardTower", "Dvergr Tower" },
+                { "Mistlands_GuardTower", "Dvergr Guard Tower" },
                 { "GoblinCamp2", "Fuling Camp" },
                 { "MeadowsVillage", "Draugr Village" },
                 { "MeadowsFarm", "Meadows Farm" },
@@ -4654,6 +4754,79 @@ namespace ValheimMod
             return false;
         }
 
+        /// <summary>
+        /// Names every location this hook sees, once per distinct prefab, while PinDiagnostics is on.
+        ///
+        /// The gap this fills: a location with no interior that is not in PinIncludeLocations is
+        /// dropped here, before any pin is attempted, so it produced no log line of any kind. An
+        /// expected pin that never appeared was therefore indistinguishable from a location the hook
+        /// never ran for at all, and the only way to tell them apart was to add the thing to the
+        /// include list and go back out to look.
+        ///
+        /// Once per name rather than per instance because a location re-Awakes every time its zone
+        /// reloads, which for something common would be thousands of lines a session.
+        /// </summary>
+        private static readonly HashSet<string> _reportedLocations =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private static void ReportLocationSeen(string name, bool hasInterior, bool willPin, Vector3 position)
+        {
+            if (!PinDiagnostics.Value || string.IsNullOrEmpty(name) || !_reportedLocations.Add(name))
+            {
+                return;
+            }
+            string verdict = willPin
+                ? "will pin"
+                : hasInterior
+                    ? "no pin - has an interior but PinInteriorLocations is off"
+                    : "no pin - surface only and not matched by PinIncludeLocations";
+            Debug.Log($"Location seen: {name} at X {position.x:0} Z {position.z:0} "
+                + $"(hasInterior={hasInterior}) - {verdict}");
+        }
+
+        // The six component hooks below cover anything mineable, pickable or structural, which was
+        // every resource until the Yggdrasil root. The root is a sap-extractor attachment point
+        // rather than a deposit: it carries a ZNetView and nothing else, so none of them ever saw
+        // it, and because a name that matches no rule returns silently it looked identical to a
+        // wrong prefab name. The nearby-object dump is what separated the two - "YggdrasilRoot
+        // (none)" at 5.4m.
+        //
+        // ZNetView is the common denominator of everything that exists in the world, so this closes
+        // the gap for good rather than for one prefab. Awake runs for every networked object
+        // including projectiles and effects, so the order inside matters: the name test comes first
+        // because it is cheap and almost always fails, and the component checks - which cost a
+        // GetComponent each - only run for something that already matched a rule.
+        //
+        // Those checks exist to avoid pinning twice. A copper deposit is a Destructible and is
+        // already handled by its own hook; without this it would be pinned here as well and the
+        // second attempt would show up as a declined duplicate.
+        [HarmonyPatch(typeof(ZNetView), "Awake")]
+        class ZNetView_Awake_ResourcePin_Patch
+        {
+            static void Postfix(ZNetView __instance)
+            {
+                if (!AutoPinResources.Value || __instance == null)
+                {
+                    return;
+                }
+                string prefabName = __instance.gameObject.name;
+                if (!TryMatchResource(prefabName, out _))
+                {
+                    return;
+                }
+                if (__instance.GetComponent<Destructible>() != null
+                    || __instance.GetComponent<MineRock5>() != null
+                    || __instance.GetComponent<MineRock>() != null
+                    || __instance.GetComponent<Pickable>() != null
+                    || __instance.GetComponent<Leviathan>() != null
+                    || __instance.GetComponent<Location>() != null)
+                {
+                    return;
+                }
+                PinResource(__instance.transform.position, prefabName);
+            }
+        }
+
         private static void PinResource(Vector3 position, string prefabName)
         {
             // Reached for every destructible that loads, so the cheap rejections come first and the
@@ -4768,8 +4941,12 @@ namespace ValheimMod
                 PinResource(__instance.transform.position, __instance.gameObject.name);
                 // A surface structure has neither an interior nor a generator, so it only pins when
                 // it has been named explicitly
+                string locationName = StripClone(__instance.gameObject.name);
                 bool interior = PinInteriorLocations.Value && __instance.m_hasInterior;
-                if (!interior && !IsIncludedLocation(StripClone(__instance.gameObject.name)))
+                bool included = IsIncludedLocation(locationName);
+                ReportLocationSeen(locationName, __instance.m_hasInterior, interior || included,
+                    __instance.transform.position);
+                if (!interior && !included)
                 {
                     return;
                 }
@@ -4913,6 +5090,11 @@ namespace ValheimMod
 
         private static bool ShouldSuppressLog(object message)
         {
+            if (SuppressLogMessages == null)
+            {
+                // Reached for log events raised before Awake binds the config
+                return false;
+            }
             string raw = SuppressLogMessages.Value ?? string.Empty;
             if (_suppressedLogFragments == null || _suppressedLogSource != raw)
             {
@@ -4922,7 +5104,16 @@ namespace ValheimMod
                     .Where(f => f.Length > 0)
                     .ToArray();
             }
-            if (_suppressedLogFragments.Length == 0 || !(message is string text))
+            if (_suppressedLogFragments.Length == 0 || message == null)
+            {
+                return false;
+            }
+            // ZLog hands us a string, but a BepInEx log event's Data can be any object - Unity's
+            // messages arrive as strings, while a plugin may pass something else. ToString is only
+            // reached once a fragment is actually configured, so the common no-filter case still
+            // allocates nothing.
+            string text = message as string ?? message.ToString();
+            if (text == null)
             {
                 return false;
             }
@@ -4952,6 +5143,45 @@ namespace ValheimMod
         class ZLog_Log_Patch
         {
             static bool Prefix(object __0) => !ShouldSuppressLog(__0);
+        }
+
+        // The ZLog patches above only catch what the game logs through its own logger. Unity's own
+        // messages - the ones BepInEx files under "[Unity Log]" - never pass through ZLog, so they
+        // need a second interception point. "Rotation quaternions must be unit length." comes from
+        // native Unity code reacting to a non-normalised rotation and is raised through the log
+        // callback; devcommands fly triggers it several times a second.
+        //
+        // Logger.InternalLogEvent is the funnel every BepInEx log event passes through, whatever
+        // raised it, so one prefix here covers Unity, other plugins and anything the game forwards.
+        // Suppressing at this level keeps the line out of the BepInEx log file and the console
+        // mirror; the ZLog patches are still worth keeping because they stop a game-raised message
+        // earlier, before it reaches the in-game console as well.
+        //
+        // It is private, which is fine - Harmony patches non-public methods through reflection.
+        // Matched on LogEventArgs.Data rather than the formatted line so the test is the same one
+        // the ZLog patches use.
+        [HarmonyPatch(typeof(BepInEx.Logging.Logger), "InternalLogEvent")]
+        class Logger_InternalLogEvent_Patch
+        {
+            // This is the one patch in the mod aimed at BepInEx rather than the game, so a BepInEx
+            // update could rename it out from under us. Harmony throws from PatchAll when a target
+            // cannot be resolved, which would take the whole plugin down over a log filter, so the
+            // class opts itself out instead. Prepare runs before Harmony resolves the target.
+            static bool Prepare()
+            {
+                if (AccessTools.Method(typeof(BepInEx.Logging.Logger), "InternalLogEvent") != null)
+                {
+                    return true;
+                }
+                Debug.LogWarning("PipsMod: BepInEx.Logging.Logger.InternalLogEvent not found - "
+                    + "SuppressLogMessages will still filter the game's own messages, but not Unity's.");
+                return false;
+            }
+
+            static bool Prefix(BepInEx.Logging.LogEventArgs __1)
+            {
+                return __1 == null || !ShouldSuppressLog(__1.Data);
+            }
         }
 
         // ---------------- Achievement progress dump ----------------
