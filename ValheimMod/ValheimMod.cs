@@ -688,35 +688,66 @@ namespace ValheimMod
         }
 
         /// <summary>
-        /// Hides the wisp without disabling it. The demisting lives on a ParticleSystemForceField,
-        /// which is not a Renderer, so switching the visuals off leaves the mist clearing exactly
-        /// as it was - and leaves SE_Demister free to keep flying the now-invisible ball around.
+        /// Hides the wisp ball belonging to the player's own demister effect, and only that.
         ///
-        /// Destroying the ball or disabling the GameObject would both break it: Demister.OnDisable
-        /// removes it from the static instance list that ParticleMist reads, so the mist would
-        /// close back in.
+        /// The first attempt hooked Demister.Awake and hid every Demister in the world. The log
+        /// showed what that actually caught: Ravens(Clone) - Hugin and Munin, 6 renderers and 2
+        /// lights - plus dverger_demister, dverger_demister_ruins and the Wisplight item model.
+        /// Demister is a shared component, so the player's wisp has to be identified by ownership
+        /// rather than by type: SE_Demister holds the instance it created in m_ballInstance.
         ///
-        /// The light goes out with it. The glow is a Light component on the same ball rather than
-        /// anything the force field does, so there is no way to keep one and not the other here -
-        /// PlayerLightHotkey is the way to get light back.
+        /// Climbing to the transform root is gone with it. That was only needed because the
+        /// component was the starting point; the ball instance is already the root of its own
+        /// hierarchy, and climbing from a raven's Demister is how the ravens got hidden.
+        ///
+        /// Disabling the Light is not enough on its own. LightLod owns that flag - its UpdateLoop
+        /// forces m_light.enabled = true and ramps range back toward m_baseRange, then waits
+        /// s_waitFor1Sec - so a disabled light came back about once a second, which is the pulse
+        /// the player saw. Disabling the LightLod component stops its coroutine via OnDisable, so
+        /// nothing contests the flag afterwards.
         /// </summary>
-        private static void ApplyWisplightVisibility(Demister demister)
+        private static void ApplyWisplightVisibility(StatusEffect effect)
         {
-            if (demister == null)
+            if (!(effect is SE_Demister) || BallInstanceField == null)
             {
                 return;
             }
+            var ball = BallInstanceField.GetValue(effect) as GameObject;
+            if (ball == null)
+            {
+                return;   // SE_Demister has not spawned it yet; the next sweep will catch it
+            }
             bool visible = !HideWisplightWisp.Value;
-            // Children included: the mesh, the trail particles and the light all hang off the ball
-            foreach (Renderer renderer in demister.GetComponentsInChildren<Renderer>(true))
+
+            // Order matters: stop LightLod before touching the light, or its loop can re-enable it
+            foreach (LightLod lod in ball.GetComponentsInChildren<LightLod>(true))
+            {
+                lod.enabled = visible;
+            }
+            Renderer[] renderers = ball.GetComponentsInChildren<Renderer>(true);
+            Light[] lights = ball.GetComponentsInChildren<Light>(true);
+            foreach (Renderer renderer in renderers)
             {
                 renderer.enabled = visible;
             }
-            foreach (Light light in demister.GetComponentsInChildren<Light>(true))
+            foreach (Light light in lights)
             {
                 light.enabled = visible;
             }
+
+            if (HideWisplightWisp.Value && !_wisplightHideReported)
+            {
+                _wisplightHideReported = true;
+                Debug.Log($"Wisplight hidden on '{ball.name}': {renderers.Length} renderer(s), "
+                    + $"{lights.Length} light(s) disabled");
+            }
         }
+
+        private static bool _wisplightHideReported;
+        // Non-public in the shipped assembly despite the publicized reference declaring it public.
+        // The audit caught this one on the deploy gate rather than in the build.
+        private static readonly FieldInfo BallInstanceField =
+            AccessTools.Field(typeof(SE_Demister), "m_ballInstance");
 
         // Non-public in the shipped assembly, which only affects calling it
         [HarmonyPatch(typeof(Demister), "Awake")]
@@ -725,7 +756,6 @@ namespace ValheimMod
             static void Postfix(Demister __instance)
             {
                 ApplyWisplightRange(__instance);
-                ApplyWisplightVisibility(__instance);
             }
         }
 
@@ -5861,7 +5891,12 @@ namespace ValheimMod
         private static int _wisplightEffectHash;
         private static string _wisplightCraftStat;
         private static bool _wisplightLookupDone;
-        private static bool _passiveWisplightReported;
+        private static int _passiveWisplightAdds;
+        private static bool _passiveWisplightEffectsCleared;
+        // Non-public in the shipped assembly even though the publicized reference declares it
+        // public - the access audit caught this after the build looked clean
+        private static readonly MethodInfo RemoveStartEffectsMethod =
+            AccessTools.Method(typeof(StatusEffect), "RemoveStartEffects");
 
         /// <summary>
         /// Resolves the Wisplight's equip effect and its craft-stat key from ObjectDB rather than
@@ -5934,12 +5969,6 @@ namespace ValheimMod
                 return;
             }
             _wisplightCheckedAt = now;
-            // Re-applied every sweep so toggling HideWisplightWisp takes effect on a ball that is
-            // already in the air, rather than only on the next one spawned
-            foreach (Demister demister in Demister.GetDemisters())
-            {
-                ApplyWisplightVisibility(demister);
-            }
             ResolveWisplight();
             SEMan seman = player.GetSEMan();
             if (_wisplightEffectHash == 0 || seman == null)
@@ -5954,11 +5983,35 @@ namespace ValheimMod
             {
                 if (active == null)
                 {
-                    active = seman.AddStatusEffect(_wisplightEffectHash, false, 0, 0f, -1);
-                    if (active != null && !_passiveWisplightReported)
+                    // StatusEffect.Setup posts m_startMessage - "You release the bound wisp" - and
+                    // our sweep adds the effect fresh every time the character loads, so without
+                    // this it greeted the player on every login for something they never did
+                    _suppressStatusStartFeedback = true;
+                    try
                     {
-                        _passiveWisplightReported = true;
-                        Debug.Log("Wisplight held passively - the Mistlands mist clears with nothing equipped");
+                        active = seman.AddStatusEffect(_wisplightEffectHash, false, 0, 0f, -1);
+                    }
+                    finally
+                    {
+                        _suppressStatusStartFeedback = false;
+                    }
+                    if (active != null)
+                    {
+                        // Counted, not just flagged. The previous version logged only the first
+                        // add, so an effect being re-added every sweep would have looked identical
+                        // to one added once - and a once-per-second re-add is exactly what a
+                        // once-per-second pulse implies.
+                        _passiveWisplightAdds++;
+                        if (_passiveWisplightAdds == 1)
+                        {
+                            Debug.Log("Wisplight held passively - the Mistlands mist clears with nothing equipped");
+                        }
+                        else if (_passiveWisplightAdds == 5)
+                        {
+                            Debug.LogWarning("PassiveWisplight: the effect has been added 5 times, so something is "
+                                + "dropping it between sweeps rather than it persisting - SEMan.GetStatusEffect is "
+                                + "not finding what AddStatusEffect created.");
+                        }
                     }
                 }
                 if (active != null)
@@ -5967,13 +6020,73 @@ namespace ValheimMod
                     // SEMan's own clone so the asset the equipped item uses is left alone
                     active.m_ttl = 0f;
                     active.m_hidden = true;
+                    // Every sweep, so toggling HideWisplightWisp reaches a ball already in the air
+                    // and a ball respawned by SE_Demister is caught too
+                    ApplyWisplightVisibility(active);
+                    // Clears anything a previous Setup already parented to the character - the
+                    // suppression above only prevents new instances being created
+                    if (!_passiveWisplightEffectsCleared && RemoveStartEffectsMethod != null)
+                    {
+                        _passiveWisplightEffectsCleared = true;
+                        RemoveStartEffectsMethod.Invoke(active, null);
+                    }
                 }
+            }
+            else if (active != null && active.m_ttl != 0f)
+            {
+                // An equipped Wisplight produces the same effect hash, so the hiding applies to it
+                // too - which is what the config promises - without touching its lifetime
+                ApplyWisplightVisibility(active);
             }
             else if (active != null && active.m_ttl == 0f && !IsWisplightEquipped(player))
             {
                 // Withdraw only an unlimited effect we granted, and never while the item is
                 // actually equipped - that effect belongs to the item and carries its own ttl
                 seman.RemoveStatusEffect(_wisplightEffectHash, true);
+            }
+        }
+
+        // Only true for the instant our own AddStatusEffect call is on the stack, so an effect the
+        // player earns normally still announces itself. Blanking the message on the shared asset
+        // instead would have silenced the equipped Wisplight too, and mutating a ScriptableObject
+        // the game reuses is the kind of global edit that has bitten this project before.
+        private static bool _suppressStatusStartFeedback;
+
+        // StatusEffect.Setup posts the message and then calls TriggerStartEffects, which creates
+        // the effect instances **parented to m_character.transform** - on the player, not on the
+        // wisp. That is what pulsed: hiding the ball could never have hidden it, because it was
+        // never on the ball. Skipping creation also covers the case where the effect is a looping
+        // one, since there is then nothing attached to keep looping.
+        [HarmonyPatch(typeof(StatusEffect), nameof(StatusEffect.TriggerStartEffects))]
+        class StatusEffect_TriggerStartEffects_Patch
+        {
+            static bool Prefix()
+            {
+                return !_suppressStatusStartFeedback;
+            }
+        }
+
+        [HarmonyPatch(typeof(StatusEffect), nameof(StatusEffect.Setup))]
+        class StatusEffect_Setup_Patch
+        {
+            static void Prefix(StatusEffect __instance, ref string __state)
+            {
+                if (!_suppressStatusStartFeedback || __instance == null)
+                {
+                    return;
+                }
+                __state = __instance.m_startMessage;
+                __instance.m_startMessage = string.Empty;
+            }
+
+            // Restored rather than left blank: this is SEMan's clone, but the effect may be
+            // re-Setup later and the message is not ours to delete permanently
+            static void Postfix(StatusEffect __instance, string __state)
+            {
+                if (__state != null && __instance != null)
+                {
+                    __instance.m_startMessage = __state;
+                }
             }
         }
 

@@ -96,6 +96,9 @@ $stamp = (Get-Item $Dll).LastWriteTime
 Write-Host "audited $Dll (built $stamp)"
 if ($findings.Count -eq 0) {
   Write-Host "CLEAN - every direct member access is public in the shipped assemblies"
+  # Explicit, because a script that merely falls off the end leaves $LASTEXITCODE at whatever a
+  # previous command set - which made the deploy gate read a stale failure as this run's result
+  exit 0
 } else {
   Write-Host "$($findings.Count) finding(s):"
   $findings | ForEach-Object { Write-Host $_ }
