@@ -55,6 +55,7 @@ namespace ValheimMod
         private static ConfigEntry<string> PinIncludeLocations;
         private static ConfigEntry<bool> AutoPinResources;
         private static ConfigEntry<bool> PinDiagnostics;
+        private static ConfigEntry<bool> AutoPinKeepIconFilter;
         private static ConfigEntry<bool> ShowMapCursorCoordinates;
         private static ConfigEntry<string> HudFontName;
         private static ConfigEntry<float> MapCursorPositionX;
@@ -116,6 +117,8 @@ namespace ValheimMod
         private static ConfigEntry<int> PlayerLightLevels;
         private static ConfigEntry<float> PlayerLightLevelStep;
         private static ConfigEntry<float> WisplightRangeMultiplier;
+        private static ConfigEntry<bool> PassiveWisplight;
+        private static ConfigEntry<bool> HideWisplightWisp;
         private static ConfigEntry<bool> WeightlessPlayerInventory;
         private static ConfigEntry<bool> SuppressPickupMessages;
         private static ConfigEntry<bool> SuppressRemovedMessages;
@@ -230,6 +233,12 @@ namespace ValheimMod
             PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
             PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
             PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            PassiveWisplight = Config.Bind("General", "PassiveWisplight", false,
+                "Clear the Mistlands mist without carrying the Wisplight, once this character has crafted one at least once. "
+                + "This frees the utility slot, which is a real gameplay change rather than a convenience, so it starts off. "
+                + "Suspended in a shared session: the wisp is a networked object, so others would see one orbiting a player with nothing equipped.");
+            HideWisplightWisp = Config.Bind("General", "HideWisplightWisp", false,
+                "Hide the floating wisp. Demisting is unaffected - that comes from a force field on the ball rather than from anything visible - but the ball also carries the light it gives off, so hiding it costs that light too. Applies to an equipped Wisplight as well as a passive one.");
             WisplightRangeMultiplier = Config.Bind("General", "WisplightRangeMultiplier", 1f, new ConfigDescription(
                 "Multiplies how far the Wisplight pushes the Mistlands mist back. 1 leaves it alone. This is the demisting radius, not the glow - the light the wisp gives off is unchanged.",
                 new AcceptableValueRange<float>(1f, 20f)));
@@ -283,6 +292,10 @@ namespace ValheimMod
                 "Map cursor readout offset in pixels from the left edge of the map panel, not the screen.");
             MapCursorPositionY = Config.Bind("Map", "MapCursorPositionY", 12f,
                 "Map cursor readout offset in pixels from the top edge of the map panel, not the screen.");
+            AutoPinKeepIconFilter = Config.Bind("Map", "AutoPinKeepIconFilter", true,
+                "Leave a hidden pin type hidden when an automatic pin is added. Valheim un-hides an icon type whenever a pin of that type appears, "
+                + "which means hiding icons to keep the map clear while exploring does not survive the next thing that gets pinned automatically. "
+                + "Turn this off to get the vanilla behaviour, where a new pin always reveals its type.");
             PinDiagnostics = Config.Bind("Map", "PinDiagnostics", false,
                 "Logs a line every time an automatic pin is declined, naming the reason and - when an existing pin blocked it - that pin's name and distance. Off by default because a dungeon re-pins every time its zone reloads, which would fill the log. Turn it on for a session when something that should have been pinned was not.");
             AutoPinResources = Config.Bind("Map", "AutoPinResources", true,
@@ -453,6 +466,7 @@ namespace ValheimMod
             ProcessUnlearnRecipes();
             FlushPendingPins();
             UpdatePassiveForsakenPowers();
+            UpdatePassiveWisplight();
         }
 
         // ---------------- Toggleable personal light ----------------
@@ -673,6 +687,37 @@ namespace ValheimMod
             }
         }
 
+        /// <summary>
+        /// Hides the wisp without disabling it. The demisting lives on a ParticleSystemForceField,
+        /// which is not a Renderer, so switching the visuals off leaves the mist clearing exactly
+        /// as it was - and leaves SE_Demister free to keep flying the now-invisible ball around.
+        ///
+        /// Destroying the ball or disabling the GameObject would both break it: Demister.OnDisable
+        /// removes it from the static instance list that ParticleMist reads, so the mist would
+        /// close back in.
+        ///
+        /// The light goes out with it. The glow is a Light component on the same ball rather than
+        /// anything the force field does, so there is no way to keep one and not the other here -
+        /// PlayerLightHotkey is the way to get light back.
+        /// </summary>
+        private static void ApplyWisplightVisibility(Demister demister)
+        {
+            if (demister == null)
+            {
+                return;
+            }
+            bool visible = !HideWisplightWisp.Value;
+            // Children included: the mesh, the trail particles and the light all hang off the ball
+            foreach (Renderer renderer in demister.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = visible;
+            }
+            foreach (Light light in demister.GetComponentsInChildren<Light>(true))
+            {
+                light.enabled = visible;
+            }
+        }
+
         // Non-public in the shipped assembly, which only affects calling it
         [HarmonyPatch(typeof(Demister), "Awake")]
         class Demister_Awake_Patch
@@ -680,6 +725,7 @@ namespace ValheimMod
             static void Postfix(Demister __instance)
             {
                 ApplyWisplightRange(__instance);
+                ApplyWisplightVisibility(__instance);
             }
         }
 
@@ -3621,6 +3667,10 @@ namespace ValheimMod
         // FindBlockingPin for why comparing distance alone was wrong here.
         private static readonly MethodInfo AddPinMethod = AccessTools.Method(typeof(Minimap), "AddPin");
         private static readonly FieldInfo PinsField = AccessTools.Field(typeof(Minimap), "m_pins");
+        // Non-public in the shipped assembly even though the publicized reference declares it
+        // "public bool[]" - the access audit caught this one before it shipped
+        private static readonly FieldInfo VisibleIconTypesField =
+            AccessTools.Field(typeof(Minimap), "m_visibleIconTypes");
 
         /// <summary>
         /// Calls Minimap.AddPin without referencing Splatform. Its last parameter is a
@@ -3657,7 +3707,43 @@ namespace ValheimMod
                     ? parameters[i].DefaultValue
                     : fallback;
             }
-            AddPinMethod.Invoke(map, args);
+            // Minimap.AddPin un-hides the icon type it is adding:
+            //
+            //     if ((int)type < m_visibleIconTypes.Length && !m_visibleIconTypes[(int)type])
+            //         ToggleIconFilter(type);
+            //
+            // That is reasonable for a pin the player just placed by hand, but an automatic pin
+            // turning the whole category back on undoes the filtering the player set up to keep the
+            // map readable while exploring - and it happens again with every new discovery.
+            //
+            // Marking the type visible for the duration of the call is what stops it, rather than
+            // calling ToggleIconFilter a second time to flip it back: the toggle also plays a
+            // gamepad rumble and recolours the legend, so undoing it that way would be audible and
+            // visible. This way the branch is simply never taken and the array ends up exactly as
+            // the player left it. AddPin sets m_pinUpdateRequired itself, and the redraw already
+            // skips hidden types, so the new pin stays hidden until the player unhides it.
+            // Reflection hands back the array itself, so the elements can be set in place
+            bool[] filters = AutoPinKeepIconFilter.Value
+                ? VisibleIconTypesField?.GetValue(map) as bool[]
+                : null;
+            int filterIndex = (int)type;
+            bool rehide = filters != null && filterIndex >= 0 && filterIndex < filters.Length
+                && !filters[filterIndex];
+            if (rehide)
+            {
+                filters[filterIndex] = true;
+            }
+            try
+            {
+                AddPinMethod.Invoke(map, args);
+            }
+            finally
+            {
+                if (rehide)
+                {
+                    filters[filterIndex] = false;
+                }
+            }
             return true;
         }
 
@@ -5754,6 +5840,163 @@ namespace ValheimMod
             _bossPowers = found;
             Debug.Log($"Discovered {found.Count} boss stone power(s): " +
                 string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
+        }
+
+        // ---------------- Passive Wisplight ----------------
+        // Demisting is not a property of the item. Equipping a Wisplight applies its
+        // m_equipStatusEffect (SE_Demister), whose UpdateStatusEffect spawns the wisp ball and
+        // flies it around the player; the ball carries the ParticleSystemForceField that pushes the
+        // mist back, and ParticleMist.InsideDemister reads exactly two things from it - the
+        // transform position and m_forceField.endRange.
+        //
+        // So the effect is applied the way the forsaken powers are and vanilla does the rest.
+        // Building our own invisible force field was the alternative and was rejected: the vanilla
+        // field is tuned, InsideDemister dereferences m_forceField with no null check, and a
+        // hand-made one would have to guess the shape and strength that make the push look right.
+        //
+        // WisplightRangeMultiplier needs nothing extra - the ball this spawns is a Demister like
+        // any other, so the existing Demister.Awake postfix already scales it.
+        private const float WisplightCheckSeconds = 1f;
+        private static float _wisplightCheckedAt = float.NegativeInfinity;
+        private static int _wisplightEffectHash;
+        private static string _wisplightCraftStat;
+        private static bool _wisplightLookupDone;
+        private static bool _passiveWisplightReported;
+
+        /// <summary>
+        /// Resolves the Wisplight's equip effect and its craft-stat key from ObjectDB rather than
+        /// hard-coding either. The item prefab is "Demister"; the craft stat is keyed on the shared
+        /// display token, which is what IncrementStatItemCraft records.
+        /// </summary>
+        private static void ResolveWisplight()
+        {
+            if (_wisplightLookupDone)
+            {
+                return;
+            }
+            ObjectDB odb = ObjectDB.instance;
+            if (odb == null)
+            {
+                return;   // not loaded yet, try again on the next sweep
+            }
+            _wisplightLookupDone = true;
+            GameObject prefab = odb.GetItemPrefab("Demister");
+            ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+            var shared = drop != null && drop.m_itemData != null ? drop.m_itemData.m_shared : null;
+            if (shared == null)
+            {
+                Debug.LogWarning("PassiveWisplight: could not find the Demister item in ObjectDB");
+                return;
+            }
+            _wisplightCraftStat = shared.m_name;
+            StatusEffect equipEffect = shared.m_equipStatusEffect;
+            if (equipEffect == null)
+            {
+                Debug.LogWarning("PassiveWisplight: the Wisplight has no equip status effect");
+                return;
+            }
+            _wisplightEffectHash = equipEffect.NameHash();
+        }
+
+        /// <summary>
+        /// Whether this character has ever crafted a Wisplight. Bucket 0 is the lifetime tally and
+        /// is incremented unconditionally, unlike the achievement buckets which are only credited
+        /// when CanGetAchievements allows it - so this still reads true on a character the game
+        /// considers cheated, which every modded session is.
+        /// </summary>
+        private static bool HasCraftedWisplight()
+        {
+            if (string.IsNullOrEmpty(_wisplightCraftStat))
+            {
+                return false;
+            }
+            PlayerProfile profile = Game.instance != null ? Game.instance.GetPlayerProfile() : null;
+            var buckets = profile != null ? profile.m_playerStats : null;
+            if (buckets == null || buckets.Length == 0 || buckets[0] == null
+                || buckets[0].m_itemCraftStats == null)
+            {
+                return false;
+            }
+            return buckets[0].m_itemCraftStats.TryGetValue(_wisplightCraftStat, out float crafted)
+                && crafted > 0f;
+        }
+
+        private static void UpdatePassiveWisplight()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now - _wisplightCheckedAt < WisplightCheckSeconds)
+            {
+                return;
+            }
+            _wisplightCheckedAt = now;
+            // Re-applied every sweep so toggling HideWisplightWisp takes effect on a ball that is
+            // already in the air, rather than only on the next one spawned
+            foreach (Demister demister in Demister.GetDemisters())
+            {
+                ApplyWisplightVisibility(demister);
+            }
+            ResolveWisplight();
+            SEMan seman = player.GetSEMan();
+            if (_wisplightEffectHash == 0 || seman == null)
+            {
+                return;
+            }
+
+            bool wanted = PassiveWisplight.Value && !IsSharedSession() && HasCraftedWisplight();
+            StatusEffect active = seman.GetStatusEffect(_wisplightEffectHash);
+
+            if (wanted)
+            {
+                if (active == null)
+                {
+                    active = seman.AddStatusEffect(_wisplightEffectHash, false, 0, 0f, -1);
+                    if (active != null && !_passiveWisplightReported)
+                    {
+                        _passiveWisplightReported = true;
+                        Debug.Log("Wisplight held passively - the Mistlands mist clears with nothing equipped");
+                    }
+                }
+                if (active != null)
+                {
+                    // Same reasoning as the forsaken powers: a zero ttl never lapses, and this is
+                    // SEMan's own clone so the asset the equipped item uses is left alone
+                    active.m_ttl = 0f;
+                    active.m_hidden = true;
+                }
+            }
+            else if (active != null && active.m_ttl == 0f && !IsWisplightEquipped(player))
+            {
+                // Withdraw only an unlimited effect we granted, and never while the item is
+                // actually equipped - that effect belongs to the item and carries its own ttl
+                seman.RemoveStatusEffect(_wisplightEffectHash, true);
+            }
+        }
+
+        /// <summary>
+        /// Guards the withdrawal path. An equipped Wisplight re-applies its effect continuously, so
+        /// removing it would fight the item rather than simply failing.
+        /// </summary>
+        private static bool IsWisplightEquipped(Player player)
+        {
+            Inventory inventory = player.GetInventory();
+            if (inventory == null)
+            {
+                return false;
+            }
+            foreach (ItemDrop.ItemData item in inventory.GetEquippedItems())
+            {
+                if (item != null && item.m_shared != null && item.m_shared.m_equipStatusEffect != null
+                    && item.m_shared.m_equipStatusEffect.NameHash() == _wisplightEffectHash)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
