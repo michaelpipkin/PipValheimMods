@@ -119,6 +119,11 @@ namespace ValheimMod
         private static ConfigEntry<float> WisplightRangeMultiplier;
         private static ConfigEntry<bool> PassiveWisplight;
         private static ConfigEntry<float> SwimSpeedAtMaxSkill;
+        private static ConfigEntry<bool> SneakTweaks;
+        private static ConfigEntry<float> SneakStealthAtMinSkill;
+        private static ConfigEntry<float> SneakStealthAtMaxSkill;
+        private static ConfigEntry<float> SneakTransitionSeconds;
+        private static ConfigEntry<float> SneakSpeedPenalty;
         private static ConfigEntry<string> HoeLevelOpPrefab;
         private static ConfigEntry<bool> HoeLevelScrollRadius;
         private static ConfigEntry<float> HoeLevelMaxRadiusMultiplier;
@@ -239,6 +244,22 @@ namespace ValheimMod
             PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
             PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
             PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            SneakTweaks = Config.Bind("Sneak", "SneakTweaks", true,
+                "Replace the stealth calculation with the settings below. The one change not covered by a setting is that light is ignored: vanilla makes a creature spot you from up to twice as far when you are lit, which means carrying any light source undoes sneaking regardless of skill. "
+                + "Off restores vanilla entirely, including its light handling. Suspended in a shared session.");
+            SneakStealthAtMinSkill = Config.Bind("Sneak", "SneakStealthAtMinSkill", 0.5f, new ConfigDescription(
+                "Fraction of its normal sight and alert range a creature keeps against you while crouched at sneak skill 0. Vanilla is 0.5 in darkness and 1.0 in bright light.",
+                new AcceptableValueRange<float>(0.01f, 1f)));
+            SneakStealthAtMaxSkill = Config.Bind("Sneak", "SneakStealthAtMaxSkill", 0.05f, new ConfigDescription(
+                "The same fraction at sneak skill 100, scaling linearly from SneakStealthAtMinSkill. Vanilla is 0.2 in darkness and 0.6 in bright light, so 0.05 is a quarter of vanilla's best case.",
+                new AcceptableValueRange<float>(0.01f, 1f)));
+            SneakTransitionSeconds = Config.Bind("Sneak", "SneakTransitionSeconds", 0.5f, new ConfigDescription(
+                "Seconds to move the whole way between fully visible and fully hidden after crouching or standing. Vanilla is 4, which is long enough that crouching to avoid something already in view rarely helps.",
+                new AcceptableValueRange<float>(0.1f, 4f)));
+            SneakSpeedPenalty = Config.Bind("Sneak", "SneakSpeedPenalty", 0.25f, new ConfigDescription(
+                "How much of the crouch movement penalty to keep. 1 is the vanilla crouch speed, 0 removes the penalty entirely so crouching moves at your normal jog, and 0.25 keeps a quarter of it. "
+                + "Running still overrides crouching, and this does not touch the sneak stamina drain. Suspended in a shared session.",
+                new AcceptableValueRange<float>(0f, 1f)));
             SwimSpeedAtMaxSkill = Config.Bind("General", "SwimSpeedAtMaxSkill", 1f, new ConfigDescription(
                 "Swim speed at swim skill 100, as a multiple of normal. Scales smoothly from 1x at skill 0, so 10 means a fully trained swimmer moves ten times as fast and an untrained one is unchanged. Vanilla does not tie swim speed to the skill at all - the skill only reduces stamina drain - so this adds the scaling rather than steepening it. 1 leaves swimming alone. "
                 + "Stamina is spent per second rather than per metre, so this also multiplies how far a given amount of stamina carries you. Suspended in a shared session.",
@@ -1210,9 +1231,10 @@ namespace ValheimMod
             int prefabs = DumpPrefabList(dir);
             int nearby = DumpNearbyObjects(dir);
             int terrainOps = DumpTerrainOps(dir);
+            int mapPins = DumpMapPins(dir);
 
             Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup), "
-                + $"{locations} locations, {prefabs} prefabs, {terrainOps} terrain ops and {nearby} nearby objects to {dir}");
+                + $"{locations} locations, {prefabs} prefabs, {terrainOps} terrain ops, {mapPins} map pins and {nearby} nearby objects to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
                 $"Dumped {rows.Count} items, {locations} locations, {prefabs} prefabs, {nearby} nearby to BepInEx/config");
         }
@@ -1308,6 +1330,46 @@ namespace ValheimMod
         /// while the ghosts the game actually builds are "mud_road_v2" and "cultivate_v2". This is
         /// the list that answers which operation levels and how wide it reaches.
         /// </summary>
+        /// <summary>
+        /// Every pin currently on the map, with the flags that decide whether it is drawn and
+        /// whether it is written to the save.
+        ///
+        /// A pin that the log says was added but that is not visible has several possible fates and
+        /// they are indistinguishable from the map itself: still present but filtered out by its
+        /// icon type, present but never saved, or gone. Dumping the live list after a reload
+        /// separates them - if it is here, it was saved and the problem is display; if it is not,
+        /// it never survived the session.
+        /// </summary>
+        private static int DumpMapPins(string dir)
+        {
+            Minimap map = Minimap.instance;
+            var pins = map != null ? PinsField?.GetValue(map) as List<Minimap.PinData> : null;
+            if (pins == null)
+            {
+                return 0;
+            }
+            var visible = VisibleIconTypesField?.GetValue(map) as bool[];
+            var table = new StringBuilder();
+            table.AppendLine("Name	Type	IconShown	Saved	Checked	OwnerID	X	Z");
+            int count = 0;
+            foreach (Minimap.PinData pin in pins)
+            {
+                if (pin == null)
+                {
+                    continue;
+                }
+                int type = (int)pin.m_type;
+                string shown = visible != null && type >= 0 && type < visible.Length
+                    ? visible[type].ToString()
+                    : "unknown";
+                table.AppendLine($"{pin.m_name}	{pin.m_type}	{shown}	{pin.m_save}	{pin.m_checked}	"
+                    + $"{pin.m_ownerID}	{pin.m_pos.x:0}	{pin.m_pos.z:0}");
+                count++;
+            }
+            File.WriteAllText(Path.Combine(dir, "PipsMod_MapPins.tsv"), table.ToString());
+            return count;
+        }
+
         private static int DumpTerrainOps(string dir)
         {
             var ops = ObjectDB.instance?.m_terrainOps;
@@ -5966,6 +6028,137 @@ namespace ValheimMod
             _bossPowers = found;
             Debug.Log($"Discovered {found.Count} boss stone power(s): " +
                 string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
+        }
+
+        // ---------------- Sneak ----------------
+        // Vanilla's whole stealth calculation is these few lines in Player.UpdateStealth:
+        //
+        //     float skillFactor = m_skills.GetSkillFactor(Skills.SkillType.Sneak);
+        //     float lightFactor = StealthSystem.instance.GetLightFactor(GetCenterPoint());
+        //     m_stealthFactorTarget = Mathf.Lerp(0.5f + lightFactor * 0.5f, 0.2f + lightFactor * 0.4f, skillFactor);
+        //     ...
+        //     float num = Mathf.MoveTowards(m_stealthFactor, m_stealthFactorTarget, dt / 4f);
+        //
+        // The result multiplies the creature's view range in BaseAI.CanSeeTarget and its alert
+        // range in MonsterAI, so it is a straight scale on how close you can get.
+        //
+        // Three things change here, and the method is reimplemented rather than transpiled: all
+        // three live in different parts of one short method, and an IL rewrite of three separate
+        // constants would be far harder to read than the method itself.
+        //
+        // Everything not being changed is kept exactly, including m_lastStealthPosition, the
+        // SEMan.ModifyStealth hook that lets status effects adjust stealth, both Clamp01 calls, the
+        // 0.5s target recalculation interval, and only writing the ZDO when the value actually
+        // moved. That last one matters - the ZDO is what every other client and the AI read.
+        private static readonly FieldInfo SneakSkillsField = AccessTools.Field(typeof(Player), "m_skills");
+
+        [HarmonyPatch(typeof(Player), nameof(Player.UpdateStealth))]
+        class Player_UpdateStealth_Patch
+        {
+            static bool Prefix(Player __instance, float dt,
+                ref float ___m_stealthFactorUpdateTimer, ref float ___m_stealthFactorTarget,
+                ref float ___m_stealthFactor, ref Vector3 ___m_lastStealthPosition,
+                ZNetView ___m_nview, SEMan ___m_seman)
+            {
+                if (!SneakTweaks.Value || __instance == null || ___m_nview == null
+                    || !ReferenceEquals(__instance, Player.m_localPlayer) || IsSharedSession())
+                {
+                    return true;   // vanilla, including its light handling
+                }
+                Skills skills = SneakSkillsField?.GetValue(__instance) as Skills;
+                if (skills == null)
+                {
+                    return true;
+                }
+
+                ___m_stealthFactorUpdateTimer += dt;
+                if (___m_stealthFactorUpdateTimer > 0.5f)
+                {
+                    ___m_stealthFactorUpdateTimer = 0f;
+                    ___m_stealthFactorTarget = 0f;
+                    if (__instance.IsCrouching())
+                    {
+                        ___m_lastStealthPosition = __instance.transform.position;
+                        float skillFactor = Mathf.Clamp01(skills.GetSkillFactor(Skills.SkillType.Sneak));
+                        // No light term. Vanilla adds up to lightFactor * 0.5 here, which is what
+                        // makes a torch - or a passive Wisplight - undo sneaking at any skill.
+                        ___m_stealthFactorTarget = Mathf.Lerp(
+                            SneakStealthAtMinSkill.Value, SneakStealthAtMaxSkill.Value, skillFactor);
+                        ___m_stealthFactorTarget = Mathf.Clamp01(___m_stealthFactorTarget);
+                        if (___m_seman != null)
+                        {
+                            ___m_seman.ModifyStealth(___m_stealthFactorTarget, ref ___m_stealthFactorTarget);
+                        }
+                        ___m_stealthFactorTarget = Mathf.Clamp01(___m_stealthFactorTarget);
+                    }
+                    else
+                    {
+                        ___m_stealthFactorTarget = 1f;
+                    }
+                }
+
+                // Vanilla's dt / 4f is a rate of one unit per four seconds; this is the same
+                // expressed as a configurable duration for the full range
+                float seconds = Mathf.Max(0.1f, SneakTransitionSeconds.Value);
+                float moved = Mathf.MoveTowards(___m_stealthFactor, ___m_stealthFactorTarget, dt / seconds);
+                if (!___m_stealthFactor.Equals(moved))
+                {
+                    ___m_nview.GetZDO().Set(ZDOVars.s_stealth, moved);
+                }
+                ___m_stealthFactor = moved;
+                return false;
+            }
+        }
+
+        // Crouching sets a flat speed in Character.UpdateWalking:
+        //
+        //     else if (flag || IsEncumbered()) { speed = m_crouchSpeed; }
+        //
+        // where flag is IsCrouching(). m_crouchSpeed has exactly one reader - that line - so it can
+        // be scaled in place for the duration of the call without anything else observing the
+        // altered value, the same approach the swim speed change uses. A finalizer restores it, so
+        // an exception mid-frame cannot bake the change into the character.
+        //
+        // The value is interpolated towards the jog speed that the uncrouched branch would have
+        // used, which is what makes 0 mean "no penalty" rather than some arbitrary multiple.
+        //
+        // Only applied while actually crouching. That same branch also catches being encumbered
+        // while standing, and an over-encumbered player is meant to be slow.
+        private static readonly MethodInfo JogSpeedFactorMethod =
+            AccessTools.Method(typeof(Character), "GetJogSpeedFactor");
+
+        [HarmonyPatch(typeof(Character), nameof(Character.UpdateWalking))]
+        class Character_UpdateWalking_SneakSpeed_Patch
+        {
+            static void Prefix(Character __instance, ref float __state)
+            {
+                __state = 0f;
+                if (__instance == null || !ReferenceEquals(__instance, Player.m_localPlayer)
+                    || SneakSpeedPenalty.Value >= 1f || !__instance.IsCrouching() || IsSharedSession())
+                {
+                    return;
+                }
+                // GetJogSpeedFactor is non-public in the shipped assembly; a failed lookup falls
+                // back to the unmodified jog speed rather than skipping the feature
+                float jogFactor = JogSpeedFactorMethod != null
+                    ? (float)JogSpeedFactorMethod.Invoke(__instance, null)
+                    : 1f;
+                float jogSpeed = __instance.m_speed * jogFactor;
+                if (jogSpeed <= 0f)
+                {
+                    return;
+                }
+                __state = __instance.m_crouchSpeed;
+                __instance.m_crouchSpeed = Mathf.Lerp(jogSpeed, __state, Mathf.Clamp01(SneakSpeedPenalty.Value));
+            }
+
+            static void Finalizer(Character __instance, float __state)
+            {
+                if (__state > 0f && __instance != null)
+                {
+                    __instance.m_crouchSpeed = __state;
+                }
+            }
         }
 
         // ---------------- Swim speed from swim skill ----------------
