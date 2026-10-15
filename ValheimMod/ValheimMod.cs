@@ -118,6 +118,12 @@ namespace ValheimMod
         private static ConfigEntry<float> PlayerLightLevelStep;
         private static ConfigEntry<float> WisplightRangeMultiplier;
         private static ConfigEntry<bool> PassiveWisplight;
+        private static ConfigEntry<float> SwimSpeedAtMaxSkill;
+        private static ConfigEntry<string> HoeLevelOpPrefab;
+        private static ConfigEntry<bool> HoeLevelScrollRadius;
+        private static ConfigEntry<float> HoeLevelMaxRadiusMultiplier;
+        private static ConfigEntry<bool> HoeLevelPerfect;
+        private static ConfigEntry<float> HoeLevelMaxDelta;
         private static ConfigEntry<bool> HideWisplightWisp;
         private static ConfigEntry<bool> WeightlessPlayerInventory;
         private static ConfigEntry<bool> SuppressPickupMessages;
@@ -233,6 +239,24 @@ namespace ValheimMod
             PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
             PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
             PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            SwimSpeedAtMaxSkill = Config.Bind("General", "SwimSpeedAtMaxSkill", 1f, new ConfigDescription(
+                "Swim speed at swim skill 100, as a multiple of normal. Scales smoothly from 1x at skill 0, so 10 means a fully trained swimmer moves ten times as fast and an untrained one is unchanged. Vanilla does not tie swim speed to the skill at all - the skill only reduces stamina drain - so this adds the scaling rather than steepening it. 1 leaves swimming alone. "
+                + "Stamina is spent per second rather than per metre, so this also multiplies how far a given amount of stamina carries you. Suspended in a shared session.",
+                new AcceptableValueRange<float>(1f, 20f)));
+            HoeLevelOpPrefab = Config.Bind("Hoe", "HoeLevelOpPrefab", "mud_road_v2",
+                "The terrain operation these settings apply to, by prefab name. The hoe's Level ground is mud_road_v2; the name of every operation and what it does is in PipsMod_TerrainOps.tsv, written by the dump hotkey. "
+                + "Named explicitly rather than detected, because Cultivate and Pave smooth the ground too and should be left alone.");
+            HoeLevelScrollRadius = Config.Bind("Hoe", "HoeLevelScrollRadius", true,
+                "Let the mouse wheel resize the hoe's level-ground area while it is selected. The wheel is free in that state - vanilla only uses it to rotate a piece that can rotate, and a terrain operation cannot - so this takes it over and stops it zooming the camera. 1x is the vanilla size and the setting is not remembered between sessions.");
+            HoeLevelMaxRadiusMultiplier = Config.Bind("Hoe", "HoeLevelMaxRadiusMultiplier", 2f, new ConfigDescription(
+                "How far the wheel can grow the level-ground area, as a multiple of the vanilla radius.",
+                new AcceptableValueRange<float>(1f, 4f)));
+            HoeLevelPerfect = Config.Bind("Hoe", "HoeLevelPerfect", true,
+                "Make level ground actually level. Vanilla does not flatten at all - it lerps each point partway towards your feet, weighted by distance from the centre, so only the exact centre ever arrives, and caps the whole move at 1 metre. This sets every point in the circle to your foot height instead, up to HoeLevelMaxDelta. "
+                + "Suspended in a shared session, because terrain is permanent world state everyone sees.");
+            HoeLevelMaxDelta = Config.Bind("Hoe", "HoeLevelMaxDelta", 8f, new ConfigDescription(
+                "How far one point may be moved by a levelling pass, in metres. Vanilla allows 1, which is the reason a step in the ground survives however many times it is levelled.",
+                new AcceptableValueRange<float>(1f, 32f)));
             PassiveWisplight = Config.Bind("General", "PassiveWisplight", false,
                 "Clear the Mistlands mist without carrying the Wisplight, once this character has crafted one at least once. "
                 + "This frees the utility slot, which is a real gameplay change rather than a convenience, so it starts off. "
@@ -467,6 +491,7 @@ namespace ValheimMod
             FlushPendingPins();
             UpdatePassiveForsakenPowers();
             UpdatePassiveWisplight();
+            UpdateHoeLevelRadius();
         }
 
         // ---------------- Toggleable personal light ----------------
@@ -1184,9 +1209,10 @@ namespace ValheimMod
             int locations = DumpLocationList(dir);
             int prefabs = DumpPrefabList(dir);
             int nearby = DumpNearbyObjects(dir);
+            int terrainOps = DumpTerrainOps(dir);
 
             Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup), "
-                + $"{locations} locations, {prefabs} prefabs and {nearby} nearby objects to {dir}");
+                + $"{locations} locations, {prefabs} prefabs, {terrainOps} terrain ops and {nearby} nearby objects to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
                 $"Dumped {rows.Count} items, {locations} locations, {prefabs} prefabs, {nearby} nearby to BepInEx/config");
         }
@@ -1271,6 +1297,41 @@ namespace ValheimMod
             }
             File.WriteAllText(Path.Combine(dir, "PipsMod_NearbyObjects.tsv"), report.ToString());
             return found.Count;
+        }
+
+        /// <summary>
+        /// Every terrain operation the hoe and cultivator can place, with the settings that decide
+        /// what each one does to the ground.
+        ///
+        /// These are registered in ObjectDB rather than ZNetScene, so the prefab dump never showed
+        /// them - which is why the hoe pieces appeared in that file as "mud_road" and "cultivate"
+        /// while the ghosts the game actually builds are "mud_road_v2" and "cultivate_v2". This is
+        /// the list that answers which operation levels and how wide it reaches.
+        /// </summary>
+        private static int DumpTerrainOps(string dir)
+        {
+            var ops = ObjectDB.instance?.m_terrainOps;
+            if (ops == null)
+            {
+                return 0;
+            }
+            var table = new StringBuilder();
+            table.AppendLine("Prefab	Level	LevelRadius	Square	LevelOffset	Raise	RaiseRadius	Smooth	SmoothRadius	SmoothPower	PaintRadius");
+            int count = 0;
+            foreach (TerrainOp op in ops)
+            {
+                var set = op != null ? op.m_settings : null;
+                if (set == null)
+                {
+                    continue;
+                }
+                table.AppendLine($"{op.name}	{set.m_level}	{set.m_levelRadius:0.##}	{set.m_square}	{set.m_levelOffset:0.##}	"
+                    + $"{set.m_raise}	{set.m_raiseRadius:0.##}	{set.m_smooth}	{set.m_smoothRadius:0.##}	"
+                    + $"{set.m_smoothPower:0.##}	{set.m_paintRadius:0.##}");
+                count++;
+            }
+            File.WriteAllText(Path.Combine(dir, "PipsMod_TerrainOps.tsv"), table.ToString());
+            return count;
         }
 
         private static int DumpPrefabList(string dir)
@@ -5614,6 +5675,10 @@ namespace ValheimMod
             try
             {
                 Config.Reload();
+                // Diagnostics that report once per thing are re-armed here, so a report can be
+                // retriggered from in-game instead of by restarting
+                _reportedGhosts.Clear();
+                _ghostParticlesReported = false;
                 Debug.Log($"PipsMod config reloaded from {Config.ConfigFilePath}");
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "PipsMod config reloaded");
             }
@@ -5754,9 +5819,40 @@ namespace ValheimMod
                 {
                     return true;
                 }
-                Debug.Log($"Blocked stat regression: {stat} would have been set to {amount:0.##}, keeping {best:0.##}");
+                ReportStatRegression(stat, amount, best);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// One line per stat per in-game day, with however many were swallowed in between.
+        ///
+        /// The block itself fires as often as the game writes the stat, which for something written
+        /// every few seconds filled the log and buried everything else. The first occurrence of a
+        /// given stat on a given day is the informative one; the rest only matter as a count.
+        /// </summary>
+        private static readonly Dictionary<PlayerStatType, int> _statRegressionDay =
+            new Dictionary<PlayerStatType, int>();
+        private static readonly Dictionary<PlayerStatType, int> _statRegressionSuppressed =
+            new Dictionary<PlayerStatType, int>();
+
+        private static void ReportStatRegression(PlayerStatType stat, float amount, float best)
+        {
+            // Falls back to a single bucket before the world clock exists, which only means the
+            // first few lines of a session share a day number
+            int day = EnvMan.instance != null && ZNet.instance != null ? EnvMan.instance.GetDay() : -1;
+            if (_statRegressionDay.TryGetValue(stat, out int lastDay) && lastDay == day)
+            {
+                _statRegressionSuppressed.TryGetValue(stat, out int count);
+                _statRegressionSuppressed[stat] = count + 1;
+                return;
+            }
+            _statRegressionSuppressed.TryGetValue(stat, out int suppressed);
+            _statRegressionSuppressed[stat] = 0;
+            _statRegressionDay[stat] = day;
+            string tail = suppressed > 0 ? $" ({suppressed} more since the last report)" : string.Empty;
+            Debug.Log($"Blocked stat regression on day {day}: {stat} would have been set to "
+                + $"{amount:0.##}, keeping {best:0.##}{tail}");
         }
 
         // The in-game console keeps only a handful of lines and cannot be scrolled, so any command
@@ -5870,6 +5966,495 @@ namespace ValheimMod
             _bossPowers = found;
             Debug.Log($"Discovered {found.Count} boss stone power(s): " +
                 string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
+        }
+
+        // ---------------- Swim speed from swim skill ----------------
+        // Vanilla never ties swim speed to the swim skill. UpdateSwimming computes
+        //
+        //     float speed = m_swimSpeed * GetAttackSpeedFactorMovement();
+        //
+        // and the skill is read only in Player.OnSwimming, where it lerps the stamina drain between
+        // m_swimStaminaDrainMinSkill and MaxSkill. So a skill-100 swimmer is no faster than a
+        // beginner, only cheaper. This adds the speed scaling.
+        //
+        // m_swimSpeed is scaled in place for the duration of the call rather than reimplementing
+        // UpdateSwimming, which is long and also handles liquid level, landing callbacks, stamina
+        // and ragdolling. It has exactly one reader - the line above - so nothing else can observe
+        // the altered value. A finalizer restores it, so an exception mid-swim cannot leave the
+        // multiplier baked into the character.
+        private static float SwimSkillSpeedMultiplier(Character character)
+        {
+            float atMax = SwimSpeedAtMaxSkill.Value;
+            if (atMax <= 1f || character == null || !ReferenceEquals(character, Player.m_localPlayer)
+                || IsSharedSession())
+            {
+                return 1f;
+            }
+            Skills skills = character.GetSkills();
+            if (skills == null)
+            {
+                return 1f;
+            }
+            // GetSkillFactor is the 0-1 form of the level, so this is 1x untrained rising to
+            // atMax at skill 100. Strictly that is 0.09x per point for a 10x cap rather than
+            // 0.1x, because the curve starts at 1x instead of 0x - swimming at zero speed on a
+            // fresh character being the alternative.
+            float factor = Mathf.Clamp01(skills.GetSkillFactor(Skills.SkillType.Swim));
+            return Mathf.Lerp(1f, atMax, factor);
+        }
+
+        [HarmonyPatch(typeof(Character), nameof(Character.UpdateSwimming))]
+        class Character_UpdateSwimming_Patch
+        {
+            static void Prefix(Character __instance, ref float __state)
+            {
+                __state = 0f;
+                float multiplier = SwimSkillSpeedMultiplier(__instance);
+                if (multiplier <= 1f)
+                {
+                    return;
+                }
+                __state = __instance.m_swimSpeed;
+                __instance.m_swimSpeed *= multiplier;
+            }
+
+            static void Finalizer(Character __instance, float __state)
+            {
+                if (__state > 0f && __instance != null)
+                {
+                    __instance.m_swimSpeed = __state;
+                }
+            }
+        }
+
+        // ---------------- Hoe: level ground ----------------
+        // Two separate jobs, and the game fights us on each in a different way.
+        //
+        // RADIUS. The wheel is genuinely free while a level-ground ghost is up: Player only reads
+        // it when the ghost's Piece.m_canRotate is set, which a terrain operation does not have.
+        // It is not unclaimed, though - GameCamera zooms on it, and its guard explicitly allows
+        // that while placing something unrotatable (!localPlayer.CanRotatePiece()). So the wheel is
+        // intercepted at ZInput.GetMouseScrollWheel rather than merely read, otherwise resizing the
+        // area would zoom the camera at the same time.
+        //
+        // The size itself has to be changed on the prefab's Settings, not the ghost's. A TerrainOp
+        // serialises as nothing but a prefab hash, and the receiving side looks the settings back
+        // up with ObjectDB.TryGetTerrainOp - so the ghost's copy is never consulted, and the change
+        // is inherently client-local. That is also why this is suspended in a shared session: the
+        // other side would apply the vanilla radius and the terrain would disagree.
+        // Non-public in the shipped assembly, like most of what this feature touches
+        private static readonly FieldInfo PlacementGhostField =
+            AccessTools.Field(typeof(Player), "m_placementGhost");
+
+        private static TerrainOp.Settings _hoeLevelSettings;
+        private static float _hoeLevelBaseRadius;
+        private static float _hoeLevelBasePaintRadius;
+        private static float _hoeLevelMultiplier = 1f;
+
+        // Raw wheel movement for the frame, captured by the patch below. Stored per frame rather
+        // than accumulated because GameCamera alone calls the getter several times a frame.
+        private static bool _hoeCaptureScroll;
+        private static int _hoeScrollFrame = -1;
+        private static float _hoeScrollValue;
+
+        [HarmonyPatch(typeof(ZInput), nameof(ZInput.GetMouseScrollWheel))]
+        class ZInput_GetMouseScrollWheel_Patch
+        {
+            static void Postfix(ref float __result)
+            {
+                if (!_hoeCaptureScroll)
+                {
+                    return;
+                }
+                if (_hoeScrollFrame != Time.frameCount)
+                {
+                    _hoeScrollFrame = Time.frameCount;
+                    _hoeScrollValue = __result;
+                }
+                // Everyone else sees nothing, which is what stops the camera zooming
+                __result = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Whether the player currently has a levelling operation selected, and which of the two
+        /// implementations it uses.
+        ///
+        /// Valheim has two parallel terrain systems. TerrainOp goes through TerrainComp and is the
+        /// one the newer pieces use; TerrainModifier is the older one and applies through
+        /// Heightmap.ApplyModifier. Both declare m_level and m_levelRadius and neither is a subclass
+        /// of the other. The first version of this looked for TerrainOp only, found nothing, and
+        /// logged nothing at all - because the report sat behind the very checks that were failing.
+        /// It reports first now.
+        /// </summary>
+        // Cleared on the config-reload hotkey so a ghost can be re-reported without restarting
+        private static readonly HashSet<string> _reportedGhosts =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private static GameObject _reportGhostObject;
+
+        /// <summary>
+        /// The name the build menu shows, so a prefab can be matched to the entry the player picked
+        /// without having to guess from the id - "mud_road_v2" does not obviously mean Level ground.
+        /// </summary>
+        private static string DescribePiece()
+        {
+            Piece piece = _reportGhostObject != null ? _reportGhostObject.GetComponent<Piece>() : null;
+            if (piece == null || string.IsNullOrEmpty(piece.m_name))
+            {
+                return "unnamed";
+            }
+            string label = Localization.instance != null
+                ? Localization.instance.Localize(piece.m_name)
+                : piece.m_name;
+            return string.IsNullOrEmpty(label) ? piece.m_name : label;
+        }
+
+        /// <summary>
+        /// Every component on the ghost and its children. The hoe's ring is drawn by something, and
+        /// it is not a CircleProjector - the ghost reported having none - so this names the
+        /// candidates rather than guessing at which Valheim type renders it.
+        /// </summary>
+        private static string DescribeComponents()
+        {
+            if (_reportGhostObject == null)
+            {
+                return "none";
+            }
+            var names = new List<string>();
+            foreach (Component c in _reportGhostObject.GetComponentsInChildren<Component>(true))
+            {
+                if (c != null)
+                {
+                    names.Add(c.GetType().Name);
+                }
+            }
+            return names.Count == 0
+                ? "none"
+                : string.Join(", ", names.Distinct().OrderBy(n => n, StringComparer.Ordinal).ToArray());
+        }
+
+        private static void ReportGhost(string name, TerrainOp op, TerrainModifier mod)
+        {
+            if (!_reportedGhosts.Add(name))
+            {
+                return;
+            }
+            if (op != null && op.m_settings != null)
+            {
+                var set = op.m_settings;
+                Debug.Log($"Terrain ghost '{name}' ({DescribePiece()}) components: {DescribeComponents()}");
+                Debug.Log($"Terrain ghost '{name}' ({DescribePiece()}): TerrainOp, level={set.m_level} radius={set.m_levelRadius:0.##} "
+                    + $"square={set.m_square} offset={set.m_levelOffset:0.##} smooth={set.m_smooth} "
+                    + $"smoothRadius={set.m_smoothRadius:0.##} smoothPower={set.m_smoothPower:0.##}");
+            }
+            else if (mod != null)
+            {
+                Debug.Log($"Terrain ghost '{name}': TerrainModifier, level={mod.m_level} radius={mod.m_levelRadius:0.##} "
+                    + $"square={mod.m_square} offset={mod.m_levelOffset:0.##} smooth={mod.m_smooth} "
+                    + $"smoothRadius={mod.m_smoothRadius:0.##} smoothPower={mod.m_smoothPower:0.##}");
+            }
+            else
+            {
+                Debug.Log($"Terrain ghost '{name}': neither TerrainOp nor TerrainModifier. "
+                    + $"Components: {DescribeComponents()}");
+            }
+        }
+
+        /// <summary>
+        /// Resolves the selected levelling op. For TerrainOp the prefab's own Settings must be
+        /// edited, because the op serialises as a prefab hash and the receiver looks the settings
+        /// back up - the ghost's copy is never consulted. TerrainModifier needs none of that: it is
+        /// applied from the placed instance, so its radius is scaled per instance in Awake instead.
+        /// </summary>
+        private static bool ResolveSelectedLevelOp(Player player, out bool isTerrainOp)
+        {
+            isTerrainOp = false;
+            var ghost = PlacementGhostField?.GetValue(player) as GameObject;
+            if (ghost == null)
+            {
+                return false;
+            }
+            // Children included: the component is not necessarily on the ghost root, and the
+            // first two attempts at this both looked only at the root and found nothing.
+            TerrainOp op = ghost.GetComponentInChildren<TerrainOp>(true);
+            TerrainModifier mod = ghost.GetComponentInChildren<TerrainModifier>(true);
+
+            // Reported before every bailout, including the one for "neither of them". Twice now a
+            // report placed after a check has told us nothing precisely when the check was what
+            // failed, which is indistinguishable from the code never running at all.
+            string prefabName = Utils.GetPrefabName(ghost.name);
+            _reportGhostObject = ghost;
+            ReportGhost(prefabName, op, mod);
+
+            if (op == null && mod == null)
+            {
+                return false;
+            }
+
+            // Not m_level. Every TerrainOp in the game has m_level false - the dump confirmed it
+            // across all 28 - and the hoe levels through the smoothing pass instead. So the op is
+            // identified by name.
+            if (op == null || op.m_settings == null
+                || !string.Equals(prefabName, HoeLevelOpPrefab.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            ObjectDB odb = ObjectDB.instance;
+            if (odb == null || !odb.TryGetTerrainOp(prefabName.GetStableHashCode(), out TerrainOp prefab)
+                || prefab == null || prefab.m_settings == null)
+            {
+                Debug.LogWarning($"Hoe level radius: '{prefabName}' is a TerrainOp but ObjectDB could not "
+                    + "return its prefab, so the radius cannot be changed for it.");
+                return false;
+            }
+            if (!ReferenceEquals(_hoeLevelSettings, prefab.m_settings))
+            {
+                _hoeLevelSettings = prefab.m_settings;
+                // The smoothing radius is the working radius for this op, and the paint radius is
+                // scaled with it so the dirt patch keeps matching the ground that moved. Captured
+                // before anything is scaled so these stay the vanilla sizes.
+                _hoeLevelBaseRadius = prefab.m_settings.m_smoothRadius;
+                _hoeLevelBasePaintRadius = prefab.m_settings.m_paintRadius;
+            }
+            isTerrainOp = true;
+            return true;
+        }
+
+        private const float HoeRadiusSettleSeconds = 0.5f;
+        private static float _hoeRadiusSettledAt;
+        private static bool _hoeRadiusMessagePending;
+        private static bool _hoeWatcherAnnounced;
+
+        private static void UpdateHoeLevelRadius()
+        {
+            Player player = Player.m_localPlayer;
+            // One line, once, the first time this runs with a player in the world. Without it,
+            // "nothing in the log" cannot be told apart from "this code never executes", which is
+            // the ambiguity that has cost two rounds on this feature already.
+            if (player != null && !_hoeWatcherAnnounced)
+            {
+                _hoeWatcherAnnounced = true;
+                Debug.Log($"Hoe level watcher active (scrollRadius={HoeLevelScrollRadius.Value}, "
+                    + $"ghostField={(PlacementGhostField != null ? "ok" : "MISSING")})");
+            }
+            bool active = player != null && HoeLevelScrollRadius.Value && !IsTypingText()
+                && ResolveSelectedLevelOp(player, out bool isTerrainOp);
+            if (!active)
+            {
+                // Hand the wheel straight back, and restore any radius we scaled so a scaled value
+                // cannot leak into an operation placed some other way
+                _hoeCaptureScroll = false;
+                if (_hoeLevelSettings != null && _hoeLevelBaseRadius > 0f)
+                {
+                    _hoeLevelSettings.m_smoothRadius = _hoeLevelBaseRadius;
+                    _hoeLevelSettings.m_paintRadius = _hoeLevelBasePaintRadius;
+                }
+                return;
+            }
+
+            _hoeCaptureScroll = true;
+            // Our own call is intercepted too: it returns zero but leaves the raw value behind,
+            // which also makes this independent of the order Update methods happen to run in
+            ZInput.GetMouseScrollWheel();
+            float scroll = _hoeScrollFrame == Time.frameCount ? _hoeScrollValue : 0f;
+
+            if (Mathf.Abs(scroll) > 0.001f)
+            {
+                float max = Mathf.Max(1f, HoeLevelMaxRadiusMultiplier.Value);
+                float clamped = Mathf.Clamp(_hoeLevelMultiplier + (scroll > 0f ? 0.25f : -0.25f), 1f, max);
+                if (!Mathf.Approximately(clamped, _hoeLevelMultiplier))
+                {
+                    _hoeLevelMultiplier = clamped;
+                    // Only note that it changed. MessageHud holds each message for a minimum time
+                    // and queues the rest, so one per notch meant spinning the wheel bought several
+                    // seconds of backlog before the player could see where they had ended up.
+                    _hoeRadiusSettledAt = Time.realtimeSinceStartup + HoeRadiusSettleSeconds;
+                    _hoeRadiusMessagePending = true;
+                }
+            }
+
+            // Sent once the wheel has been still for a moment, so a long spin produces one message
+            // showing the final size rather than one per notch
+            if (_hoeRadiusMessagePending && Time.realtimeSinceStartup >= _hoeRadiusSettledAt)
+            {
+                _hoeRadiusMessagePending = false;
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    $"Level ground {_hoeLevelMultiplier:0.##}x ({_hoeLevelBaseRadius * _hoeLevelMultiplier:0.#}m)");
+            }
+
+            // Only the TerrainOp path needs the prefab edited here; TerrainModifier is scaled per
+            // instance in its own Awake. Suspended in a shared session either way, since the other
+            // side resolves its own settings and the terrain would disagree.
+            if (_hoeLevelSettings != null && _hoeLevelBaseRadius > 0f)
+            {
+                float scale = IsSharedSession() ? 1f : _hoeLevelMultiplier;
+                _hoeLevelSettings.m_smoothRadius = _hoeLevelBaseRadius * scale;
+                _hoeLevelSettings.m_paintRadius = _hoeLevelBasePaintRadius * scale;
+                UpdateGhostVisualScale(scale);
+            }
+        }
+
+        /// <summary>
+        /// Resizes the expanding rings drawn under the cursor, so the area that will be flattened
+        /// is visible rather than inferred from a number in the corner.
+        ///
+        /// These are particles, not a projector and not the mesh, and the system reported
+        /// startSpeed=0 with scalingMode=Local. Both numbers rule something out: at zero speed the
+        /// rings do not travel outward at all, so scaling speed multiplies nothing - they expand by
+        /// growing, which makes particle size the dial. And Local scaling means the system uses its
+        /// own transform only and ignores every ancestor, which is why scaling the ghost root had
+        /// no effect either.
+        ///
+        /// Cosmetic in the strict sense: placing instantiates the prefab, never the ghost, and
+        /// TerrainOp takes its radius from the settings rather than from anything here.
+        /// </summary>
+        private static int _ghostParticleInstanceId;
+        private static readonly List<KeyValuePair<ParticleSystem, float>> _ghostParticleBases =
+            new List<KeyValuePair<ParticleSystem, float>>();
+        private static bool _ghostParticlesReported;
+
+        private static void UpdateGhostVisualScale(float multiplier)
+        {
+            if (_reportGhostObject == null || multiplier <= 0f)
+            {
+                return;
+            }
+
+            // The ghost is destroyed and rebuilt at vanilla values whenever the selection changes,
+            // so the authored speeds are re-read whenever the instance changes rather than cached
+            // once - otherwise a multiplier would compound against an already-scaled value
+            int instanceId = _reportGhostObject.GetInstanceID();
+            if (instanceId != _ghostParticleInstanceId)
+            {
+                _ghostParticleInstanceId = instanceId;
+                _ghostParticleBases.Clear();
+                foreach (ParticleSystem ps in _reportGhostObject.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    if (ps != null)
+                    {
+                        _ghostParticleBases.Add(new KeyValuePair<ParticleSystem, float>(
+                            ps, ps.main.startSizeMultiplier));
+                    }
+                }
+                if (!_ghostParticlesReported && _ghostParticleBases.Count > 0)
+                {
+                    _ghostParticlesReported = true;
+                    ParticleSystem first = _ghostParticleBases[0].Key;
+                    var main = first.main;
+                    Debug.Log($"Hoe level rings: {_ghostParticleBases.Count} particle system(s), "
+                        + $"startSize={main.startSizeMultiplier:0.##} startSpeed={main.startSpeedMultiplier:0.##} "
+                        + $"lifetime={main.startLifetimeMultiplier:0.##} "
+                        + $"simulationSpace={main.simulationSpace} scalingMode={main.scalingMode}");
+                }
+            }
+
+            foreach (KeyValuePair<ParticleSystem, float> entry in _ghostParticleBases)
+            {
+                ParticleSystem ps = entry.Key;
+                if (ps == null)
+                {
+                    continue;
+                }
+                ParticleSystem.MainModule main = ps.main;
+                float wanted = entry.Value * multiplier;
+                if (Mathf.Approximately(main.startSizeMultiplier, wanted))
+                {
+                    continue;
+                }
+                // Only newly emitted particles take the new size, so the rings already in flight
+                // finish at the old one and the change settles over roughly their lifetime. That
+                // lag is why this looked like it was doing nothing until the read-back proved the
+                // value was landing. Calling Clear() would snap it instantly at the cost of
+                // blinking every visible ring out of existence, which is the worse trade.
+                main.startSizeMultiplier = wanted;
+            }
+        }
+
+        private static bool HoeLevelPerfectActive => HoeLevelPerfect.Value && !IsSharedSession();
+
+        // Marks the window during which a smoothing pass belongs to the levelling operation.
+        // SmoothTerrain is shared - Cultivate and Pave use it too - and it is handed only a
+        // position, a radius and a power, so the call itself cannot be identified. The operation
+        // that owns it can be, one level up.
+        private static bool _inHoeLevelOp;
+
+        [HarmonyPatch(typeof(TerrainComp), nameof(TerrainComp.InternalDoOperation))]
+        class TerrainComp_InternalDoOperation_Patch
+        {
+            static void Prefix(TerrainOp.Settings modifier)
+            {
+                _inHoeLevelOp = modifier != null && ReferenceEquals(modifier, _hoeLevelSettings);
+            }
+
+            // A finalizer, not a postfix: terrain work throwing partway through must not leave the
+            // flag set and turn every later smoothing pass into a flattening one
+            static void Finalizer()
+            {
+                _inHoeLevelOp = false;
+            }
+        }
+
+        // What vanilla actually does for "level ground", and why it never quite levels:
+        //
+        //     float t = 1f - Mathf.Pow(distance / radius, power);
+        //     float delta = Mathf.Lerp(height, target, t) - height;
+        //     m_smoothDelta[n] = Mathf.Clamp(m_smoothDelta[n] + delta, -1f, 1f);
+        //
+        // The lerp is weighted by distance from the centre, so only the exact centre ever reaches
+        // the target and everything else is left on a dome; and the whole move is capped at one
+        // metre, which is why a step in the ground survives any number of passes. Neither is the
+        // -8/+8 clamp in LevelTerrain - that belongs to m_level, which no operation in the game
+        // sets. An earlier version of this patched LevelTerrain and could never have had an effect.
+        //
+        // This sets every point in the circle to the target instead, with a clamp wide enough to be
+        // worth having. The circle test and the vertex bookkeeping are vanilla's.
+        [HarmonyPatch(typeof(TerrainComp), nameof(TerrainComp.SmoothTerrain))]
+        class TerrainComp_SmoothTerrain_Patch
+        {
+            static bool Prefix(TerrainComp __instance, Vector3 worldPos, float radius, bool square,
+                Heightmap ___m_hmap, int ___m_width, float[] ___m_smoothDelta, bool[] ___m_modifiedHeight)
+            {
+                if (!_inHoeLevelOp || !HoeLevelPerfectActive || __instance == null || ___m_hmap == null
+                    || ___m_smoothDelta == null || ___m_modifiedHeight == null)
+                {
+                    return true;   // fall back to vanilla rather than half-apply anything
+                }
+                float limit = Mathf.Max(1f, HoeLevelMaxDelta.Value);
+                float target = worldPos.y - __instance.transform.position.y;
+                ___m_hmap.WorldToVertex(worldPos, out int x, out int y);
+                float vertexRadius = radius / ___m_hmap.m_scale;
+                int span = Mathf.CeilToInt(vertexRadius);
+                int stride = ___m_width + 1;
+                var centre = new Vector2(x, y);
+
+                for (int i = y - span; i <= y + span; i++)
+                {
+                    for (int j = x - span; j <= x + span; j++)
+                    {
+                        if (Vector2.Distance(centre, new Vector2(j, i)) > vertexRadius)
+                        {
+                            continue;
+                        }
+                        if (j < 0 || i < 0 || j >= stride || i >= stride)
+                        {
+                            continue;
+                        }
+                        int n = i * stride + j;
+                        if (n < 0 || n >= ___m_smoothDelta.Length)
+                        {
+                            continue;
+                        }
+                        // The whole difference, not a fraction of it, and the same for every point
+                        // in the circle - which is what makes the result actually flat
+                        float delta = target - ___m_hmap.GetHeight(j, i);
+                        ___m_smoothDelta[n] = Mathf.Clamp(___m_smoothDelta[n] + delta, -limit, limit);
+                        ___m_modifiedHeight[n] = true;
+                    }
+                }
+                return false;
+            }
         }
 
         // ---------------- Passive Wisplight ----------------
