@@ -127,6 +127,9 @@ namespace ValheimMod
         private static ConfigEntry<float> RunSpeedSkillBonus;
         private static ConfigEntry<float> JumpPowerSkillBonus;
         private static ConfigEntry<string> HoeLevelOpPrefab;
+        private static ConfigEntry<bool> HoeLevelClearsRocks;
+        private static ConfigEntry<string> HoeLevelRockNames;
+        private static ConfigEntry<string> HoeLevelRockExclude;
         private static ConfigEntry<bool> HoeLevelScrollRadius;
         private static ConfigEntry<float> HoeLevelMaxRadiusMultiplier;
         private static ConfigEntry<bool> HoeLevelPerfect;
@@ -246,6 +249,13 @@ namespace ValheimMod
             PlayerLightRange = Config.Bind("General", "PlayerLightRange", 0f, "Light radius in metres. 0 copies the source item's own value.");
             PlayerLightIntensity = Config.Bind("General", "PlayerLightIntensity", 0f, "Light brightness. 0 copies the source item's own value.");
             PlayerLightHeight = Config.Bind("General", "PlayerLightHeight", 1.7f, "Height above your feet, in metres, that the light sits at. Roughly head height by default.");
+            HoeLevelClearsRocks = Config.Bind("Hoe", "HoeLevelClearsRocks", false,
+                "Let a levelling pass also break the loose rocks and cliffs standing in the area. The hoe only ever moves the heightmap, so a boulder sitting on the ground is left poking out of otherwise flat terrain - this removes it as well. "
+                + "Off by default because it destroys world objects and cannot be undone. Only objects matching HoeLevelRockNames are touched, player-built pieces are never touched, and it is suspended in a shared session.");
+            HoeLevelRockNames = Config.Bind("Hoe", "HoeLevelRockNames", "rock1_,rock2_,rock3_,rock4_,Rock_3,Rock_4,Rock_7,Rock_destructible,cliff_,Ashlands_rock,BigRock",
+                "Comma separated prefab name fragments that count as rock, matched case insensitively. The registry uses two unrelated schemes for boulders - rock1_mistlands / rock4_coast with the digit after 'rock', and Rock_3 / Rock_4 / Rock_7 with it after the underscore - so both shapes are listed. Note that a bare 'Rock_' would also catch caverock_ice_pillar_wall and HoleRock_rootFloor1, which are cave and dungeon structure. which is why the ore deposits are kept out by HoeLevelRockExclude rather than by the fragment itself. Use the nearby-objects dump from the dump hotkey to read the real names of whatever you are standing next to.");
+            HoeLevelRockExclude = Config.Bind("Hoe", "HoeLevelRockExclude", "copper,silver,tin,iron,flametal,obsidian,meteorite,mudpile,BossStone,guardstone,Gemstone,Rocket,Runestone",
+                "Fragments that are never broken even when they match HoeLevelRockNames, checked before the include list. Every ore is named individually rather than excluding MineRock wholesale, because the plain stone deposits are MineRock prefabs too and those are exactly what a levelling pass should be able to clear. Ore deposits are the obvious case, but the registry is full of names that a loose fragment would catch by accident - BossStone_Eikthyr and the other boss altars contain \"Stone_\", and FireworksRocket contains \"rock\".");
             SneakTweaks = Config.Bind("Sneak", "SneakTweaks", true,
                 "Replace the stealth calculation with the settings below. The one change not covered by a setting is that light is ignored: vanilla makes a creature spot you from up to twice as far when you are lit, which means carrying any light source undoes sneaking regardless of skill. "
                 + "Off restores vanilla entirely, including its light handling. Suspended in a shared session.");
@@ -6167,6 +6177,366 @@ namespace ValheimMod
             _bossPowers = found;
             Debug.Log($"Discovered {found.Count} boss stone power(s): " +
                 string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
+        }
+
+        // ---------------- Hoe: clearing rock ----------------
+        // The hoe only ever edits the heightmap. A boulder is a separate object standing on that
+        // terrain, so levelling under it changes nothing about the boulder and it ends up poking
+        // out of flat ground. Removing it is therefore a different operation, not a tweak to the
+        // levelling maths, which is why this is kept entirely separate from the terrain patches.
+        //
+        // Destructible.m_destructibleType would have been the obvious filter, but the enum only has
+        // None/Default/Tree/Character - a rock is Default, exactly like a crate or a barrel. So the
+        // filter is by name, and the guards around it matter more than the list does:
+        //
+        //   - must have a Destructible, so it is something the game already considers breakable
+        //   - must NOT have a Piece, which is what every player-built object carries
+        //   - must NOT be a Character
+        //   - MineRock5 is deliberately not handled: that is the mineable-deposit type, and a tool
+        //     aimed at scenery should not be able to delete an ore vein
+        //
+        // DestroyNow is vanilla's own entry point. It checks ownership and then runs the normal
+        // destruction path, so effects and drops happen exactly as if the rock had been mined.
+        private static string[] _rockNames;
+        private static string _rockNamesSource;
+        private static string[] _rockExcludes;
+        private static string _rockExcludesSource;
+        private static readonly HashSet<string> _clearedRockNames =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> _reportedTerrainOps =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private static string[] ParseFragments(string raw, ref string[] cache, ref string cacheSource)
+        {
+            raw = raw ?? string.Empty;
+            if (cache == null || cacheSource != raw)
+            {
+                cacheSource = raw;
+                cache = raw.Split(',')
+                    .Select(f => f.Trim())
+                    .Where(f => f.Length > 0)
+                    .ToArray();
+            }
+            return cache;
+        }
+
+        /// <summary>
+        /// The prefab a world object was spawned from, which is not always what its GameObject is
+        /// called. A MineRock5 renames itself to "___MineRock5 m_meshFilter" once it has merged its
+        /// meshes, so matching on the GameObject name silently failed for every mineable rock.
+        ///
+        /// The ZDO still carries the prefab hash, and ZNetScene can turn that back into the real
+        /// prefab, which is the name the config is written against.
+        /// </summary>
+        private static string ResolvePrefabName(GameObject candidate)
+        {
+            string fallback = StripClone(candidate.name);
+            ZNetView view = candidate.GetComponentInParent<ZNetView>();
+            ZDO zdo = view != null && view.IsValid() ? view.GetZDO() : null;
+            if (zdo == null || ZNetScene.instance == null)
+            {
+                return fallback;
+            }
+            GameObject prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
+            return prefab != null ? StripClone(prefab.name) : fallback;
+        }
+
+        private static bool IsClearableRock(GameObject candidate)
+        {
+            string name = ResolvePrefabName(candidate);
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+            string[] excludes = ParseFragments(HoeLevelRockExclude.Value, ref _rockExcludes, ref _rockExcludesSource);
+            foreach (string fragment in excludes)
+            {
+                if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return false;
+                }
+            }
+            string[] includes = ParseFragments(HoeLevelRockNames.Value, ref _rockNames, ref _rockNamesSource);
+            foreach (string fragment in includes)
+            {
+                if (name.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Walks the full ancestor chain of the collider nearest the cursor and names every
+        /// component on each level.
+        ///
+        /// Three rounds have gone to guessing which component makes a rock breakable - Destructible,
+        /// then MineRock5, then MineRock - and each guess produced a diagnostic that could only see
+        /// the type it was already looking for. This asks the object what it is instead.
+        /// </summary>
+        private static string DescribeNearestHierarchy(Collider[] hits, Vector3 centre)
+        {
+            Collider closest = null;
+            float bestDistance = float.MaxValue;
+            foreach (Collider collider in hits)
+            {
+                if (collider == null)
+                {
+                    continue;
+                }
+                Vector3 flat = collider.bounds.ClosestPoint(centre) - centre;
+                flat.y = 0f;
+                if (flat.magnitude < bestDistance)
+                {
+                    bestDistance = flat.magnitude;
+                    closest = collider;
+                }
+            }
+            if (closest == null)
+            {
+                return "Nearest collider: none";
+            }
+
+            var chain = new List<string>();
+            Transform node = closest.transform;
+            int depth = 0;
+            while (node != null && depth < 8)
+            {
+                var components = new List<string>();
+                foreach (Component component in node.GetComponents<Component>())
+                {
+                    if (component != null)
+                    {
+                        components.Add(component.GetType().Name);
+                    }
+                }
+                chain.Add($"{StripClone(node.name)}({string.Join("+", components.Distinct().ToArray())})");
+                node = node.parent;
+                depth++;
+            }
+            return $"Nearest collider at {bestDistance:0.#}m, hierarchy child->root: "
+                + string.Join(" <- ", chain.ToArray());
+        }
+
+        // Reused between swings. OverlapSphere allocates a fresh array every call, and with a 4x
+        // radius this scan sees several hundred colliders each time the hoe is used.
+        private static readonly Collider[] _rockScanBuffer = new Collider[1024];
+
+        private sealed class RockCandidate
+        {
+            public GameObject Owner;
+            public float Distance;
+            public Destructible AsDestructible;
+            public MineRock5 AsMineable;
+            public MineRock AsLegacy;
+            public List<Collider> LegacyAreas;
+        }
+
+        private static void ClearRocksAround(Vector3 centre, float radius)
+        {
+            if (radius <= 0f)
+            {
+                return;
+            }
+            bool verbose = PinDiagnostics.Value;
+
+            // The sphere is widened because a rock is judged by its extent, not its origin, and a
+            // large one can reach into the circle from well outside it
+            int hitCount = Physics.OverlapSphereNonAlloc(centre, radius + 16f, _rockScanBuffer);
+
+            // One upward walk per collider, not three. A rock's components all sit on the same
+            // object as its ZNetView, so finding that once and reading the three types off it
+            // replaces three separate GetComponentInParent searches - and a big rock contributes
+            // a dozen or more colliders, all of which resolve to the same object.
+            var byOwner = new Dictionary<GameObject, RockCandidate>();
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider collider = _rockScanBuffer[i];
+                if (collider == null)
+                {
+                    continue;
+                }
+                Vector3 flat = collider.bounds.ClosestPoint(centre) - centre;
+                flat.y = 0f;
+                float distance = flat.magnitude;
+
+                ZNetView view = collider.GetComponentInParent<ZNetView>();
+                GameObject owner = view != null ? view.gameObject : null;
+                if (owner == null)
+                {
+                    // Static scenery and terrain have no ZNetView and cannot be broken at all
+                    continue;
+                }
+
+                if (!byOwner.TryGetValue(owner, out RockCandidate candidate))
+                {
+                    candidate = new RockCandidate
+                    {
+                        Owner = owner,
+                        Distance = distance,
+                        AsDestructible = owner.GetComponent<Destructible>(),
+                        AsMineable = owner.GetComponent<MineRock5>(),
+                        AsLegacy = owner.GetComponent<MineRock>(),
+                    };
+                    byOwner[owner] = candidate;
+                }
+                else if (distance < candidate.Distance)
+                {
+                    candidate.Distance = distance;
+                }
+
+                // The legacy MineRock has no area-hit path: Damage resolves which area was struck
+                // from hit.m_hitCollider and refuses the hit without one, so its colliders are kept
+                if (candidate.AsLegacy != null && distance <= radius)
+                {
+                    if (candidate.LegacyAreas == null)
+                    {
+                        candidate.LegacyAreas = new List<Collider>();
+                    }
+                    candidate.LegacyAreas.Add(collider);
+                }
+            }
+
+            var destroyed = new List<string>();
+            var reported = new List<KeyValuePair<float, string>>();
+
+            foreach (RockCandidate candidate in byOwner.Values)
+            {
+                GameObject go = candidate.Owner;
+                if (go == null)
+                {
+                    continue;
+                }
+                bool breakable = candidate.AsDestructible != null || candidate.AsMineable != null
+                    || candidate.AsLegacy != null;
+                if (!breakable)
+                {
+                    continue;
+                }
+
+                // The ZDO's prefab hash, not the GameObject name: a MineRock5 renames itself to
+                // "___MineRock5 m_meshFilter" once it has merged its meshes
+                string name = ResolvePrefabName(go);
+                bool matches = IsClearableRock(go);
+                bool inRange = candidate.Distance <= radius;
+                bool isPiece = go.GetComponentInParent<Piece>() != null;
+                bool isCharacter = go.GetComponentInParent<Character>() != null;
+
+                if (verbose)
+                {
+                    string kind = candidate.AsMineable != null ? "mineable"
+                        : candidate.AsLegacy != null ? $"minerock,{(candidate.LegacyAreas?.Count ?? 0)} area(s)"
+                        : "destructible";
+                    reported.Add(new KeyValuePair<float, string>(candidate.Distance,
+                        $"{name}<{kind}>[{candidate.Distance:0.#}m"
+                        + (isPiece ? ",piece" : "") + (isCharacter ? ",character" : "")
+                        + (matches ? ",matches" : ",noMatch") + (inRange ? "" : ",outOfRange") + "]"));
+                }
+
+                if (!matches || !inRange || isPiece || isCharacter)
+                {
+                    continue;
+                }
+
+                if (candidate.AsDestructible != null)
+                {
+                    candidate.AsDestructible.DestroyNow();
+                }
+                else if (candidate.AsMineable != null)
+                {
+                    // Vanilla's own recipe for forcing a mined area to give way, from
+                    // MineRock5.CheckSupport: tool tier 100 clears m_minToolTier, and Structural is
+                    // the hit type it uses for rock collapsing under its own weight. m_radius makes
+                    // it an area hit, so only the part standing in the circle is removed.
+                    var hit = new HitData();
+                    hit.m_damage.m_damage = 1E+09f;
+                    hit.m_point = centre;
+                    hit.m_radius = radius;
+                    hit.m_toolTier = 100;
+                    hit.m_hitType = HitData.HitType.Structural;
+                    candidate.AsMineable.Damage(hit);
+                }
+                else if (candidate.LegacyAreas != null)
+                {
+                    foreach (Collider area in candidate.LegacyAreas)
+                    {
+                        if (area == null)
+                        {
+                            continue;
+                        }
+                        var legacyHit = new HitData();
+                        legacyHit.m_damage.m_damage = 1E+09f;
+                        legacyHit.m_point = area.bounds.center;
+                        legacyHit.m_hitCollider = area;
+                        legacyHit.m_toolTier = 100;
+                        legacyHit.m_hitType = HitData.HitType.Structural;
+                        candidate.AsLegacy.Damage(legacyHit);
+                    }
+                }
+                else
+                {
+                    continue;
+                }
+
+                destroyed.Add(name);
+                _clearedRockNames.Add(name);
+            }
+
+            if (destroyed.Count > 0)
+            {
+                // Named rather than counted, because a wrong fragment in the config shows up here as
+                // something unexpected being broken, and that is worth noticing immediately
+                Debug.Log($"Hoe cleared {destroyed.Count} object(s) while levelling: "
+                    + string.Join(", ", destroyed.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray()));
+            }
+            else if (verbose)
+            {
+                // Nearest first: this list is truncated, and sorting it any other way has twice
+                // hidden the one object the whole scan was about
+                Debug.Log($"Hoe cleared nothing at X {centre.x:0} Z {centre.z:0} radius {radius:0.##}. "
+                    + $"Colliders scanned: {hitCount}. Breakables seen: "
+                    + (reported.Count == 0
+                        ? "none"
+                        : string.Join(", ", reported.OrderBy(e => e.Key).Select(e => e.Value).Distinct().Take(12).ToArray())));
+            }
+        }
+
+        // TerrainOp.Awake is the whole operation - it finds the heightmaps, applies itself and then
+        // destroys its own GameObject - so a postfix here runs once per placed operation with the
+        // final position and radius already settled.
+        //
+        // Identified by prefab name rather than by comparing settings: the placed instance carries
+        // its own copy of Settings, not the prefab's, so a reference comparison would never match.
+        [HarmonyPatch(typeof(TerrainOp), "Awake")]
+        class TerrainOp_Awake_ClearRocks_Patch
+        {
+            static void Postfix(TerrainOp __instance)
+            {
+                if (__instance == null)
+                {
+                    return;
+                }
+                string prefabName = Utils.GetPrefabName(__instance.gameObject.name);
+                bool wanted = string.Equals(prefabName, HoeLevelOpPrefab.Value, StringComparison.OrdinalIgnoreCase);
+
+                // Reported before every bailout and once per distinct operation, so "nothing
+                // happened" can be told apart from "this never ran". Two rounds have already gone
+                // to a rock-clearing report that only printed on success.
+                if (_reportedTerrainOps.Add(prefabName))
+                {
+                    Debug.Log($"Terrain op placed: '{prefabName}' radius={__instance.GetRadius():0.##} "
+                        + $"(wantedOp={wanted}, clearsRocks={HoeLevelClearsRocks.Value}, "
+                        + $"shared={IsSharedSession()}, ghostFlag={TerrainOp.m_forceDisableTerrainOps})");
+                }
+
+                if (!HoeLevelClearsRocks.Value || !wanted || IsSharedSession()
+                    || TerrainOp.m_forceDisableTerrainOps)
+                {
+                    return;   // the last check keeps the placement ghost from clearing anything
+                }
+                ClearRocksAround(__instance.transform.position, __instance.GetRadius());
+            }
         }
 
         // ---------------- Sneak ----------------
