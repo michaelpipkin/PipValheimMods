@@ -519,6 +519,7 @@ namespace ValheimMod
             UpdateJumpBuffer();
             ProcessUnlearnRecipes();
             FlushPendingPins();
+            UpdateWatchedPins();
             UpdatePassiveForsakenPowers();
             UpdatePassiveWisplight();
             UpdateHoeLevelRadius();
@@ -3841,16 +3842,29 @@ namespace ValheimMod
         /// through reflection and filling the trailing optional parameters here avoids adding a
         /// dependency for one call, and survives Iron Gate appending further optional parameters.
         /// </summary>
+        private static Minimap.PinData AddMapPinAndReturn(Minimap map, Vector3 pos, Minimap.PinType type,
+            string name, bool save, bool isChecked)
+        {
+            // Minimap.AddPin returns the PinData it created, which is the handle needed to see
+            // whether UpdatePins ever builds a marker for it
+            return AddMapPinCore(map, pos, type, name, save, isChecked) as Minimap.PinData;
+        }
+
         private static bool AddMapPin(Minimap map, Vector3 pos, Minimap.PinType type, string name, bool save, bool isChecked)
+        {
+            return AddMapPinCore(map, pos, type, name, save, isChecked) != null;
+        }
+
+        private static object AddMapPinCore(Minimap map, Vector3 pos, Minimap.PinType type, string name, bool save, bool isChecked)
         {
             if (AddPinMethod == null)
             {
-                return false;
+                return null;
             }
             ParameterInfo[] parameters = AddPinMethod.GetParameters();
             if (parameters.Length < 5)
             {
-                return false;
+                return null;
             }
             object[] args = new object[parameters.Length];
             args[0] = pos;
@@ -3897,7 +3911,7 @@ namespace ValheimMod
             }
             try
             {
-                AddPinMethod.Invoke(map, args);
+                return AddPinMethod.Invoke(map, args);
             }
             finally
             {
@@ -3906,7 +3920,6 @@ namespace ValheimMod
                     filters[filterIndex] = false;
                 }
             }
-            return true;
         }
 
         private static Dictionary<string, string> ParsePairs(string raw)
@@ -4863,7 +4876,8 @@ namespace ValheimMod
                 }
                 return false;
             }
-            if (!AddMapPin(map, position, type, label, true, false))
+            Minimap.PinData added = AddMapPinAndReturn(map, position, type, label, true, false);
+            if (added == null)
             {
                 // Reflection into AddPin failed, which is a mod problem rather than a map one, so
                 // this is reported whether or not diagnostics are on
@@ -4871,7 +4885,18 @@ namespace ValheimMod
                     + $"could not call Minimap.AddPin ({detail})");
                 return false;
             }
-            Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} ({detail})");
+            // The icon-filter state is reported on the same line rather than as a second one: a pin
+            // that is added but not drawn has been reported twice now, and the filter for its type
+            // is the first thing worth ruling out. UpdatePins skips any pin whose type is hidden,
+            // and AutoPinKeepIconFilter deliberately leaves a hidden type hidden.
+            bool[] shownTypes = VisibleIconTypesField?.GetValue(map) as bool[];
+            int typeIndex = (int)type;
+            string iconShown = shownTypes != null && typeIndex >= 0 && typeIndex < shownTypes.Length
+                ? shownTypes[typeIndex].ToString()
+                : "unknown";
+            Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} "
+                + $"(iconShown={iconShown}; {detail})");
+            WatchPinMarker(added, label);
             return true;
         }
 
@@ -4916,6 +4941,99 @@ namespace ValheimMod
                 }
             }
             return blocker != null;
+        }
+
+        /// <summary>
+        /// Checks, a moment after a pin is added, whether Minimap.UpdatePins actually built a
+        /// marker for it.
+        ///
+        /// UpdatePins either instantiates m_pinPrefab into m_uiElement or calls DestroyPinMarker
+        /// and moves on, so that one field is the difference between "the pin exists but is not
+        /// drawn" and "the pin is drawn and was simply not spotted". Guessing between those from a
+        /// screenshot has already wasted a round.
+        ///
+        /// Delayed rather than immediate because UpdatePins runs later in the frame loop, off the
+        /// m_pinUpdateRequired flag that AddPin sets.
+        /// </summary>
+        private const float PinMarkerCheckSeconds = 2f;
+
+        private class WatchedPin
+        {
+            public Minimap.PinData Pin;
+            public string Label;
+            public float DueAt;
+        }
+
+        private static readonly List<WatchedPin> _watchedPins = new List<WatchedPin>();
+
+        private static void WatchPinMarker(Minimap.PinData pin, string label)
+        {
+            if (pin == null || _watchedPins.Count > 32)
+            {
+                return;
+            }
+            _watchedPins.Add(new WatchedPin
+            {
+                Pin = pin,
+                Label = label,
+                DueAt = Time.realtimeSinceStartup + PinMarkerCheckSeconds,
+            });
+        }
+
+        private static void UpdateWatchedPins()
+        {
+            if (_watchedPins.Count == 0)
+            {
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            for (int i = _watchedPins.Count - 1; i >= 0; i--)
+            {
+                WatchedPin watched = _watchedPins[i];
+                if (now < watched.DueAt)
+                {
+                    continue;
+                }
+                _watchedPins.RemoveAt(i);
+                Minimap.PinData pin = watched.Pin;
+                if (pin == null)
+                {
+                    Debug.LogWarning($"Pin marker check: '{watched.Label}' - the PinData itself is gone");
+                    continue;
+                }
+                bool inList = false;
+                Minimap map = Minimap.instance;
+                var pins = map != null ? PinsField?.GetValue(map) as List<Minimap.PinData> : null;
+                if (pins != null)
+                {
+                    inList = pins.Contains(pin);
+                }
+                bool built = pin.m_uiElement != null;
+                // A pin with no marker is ordinary: UpdatePins only builds one for a pin inside the
+                // displayed area, so everything off-screen reports NONE. What is not ordinary is a
+                // pin with no marker that the player is standing next to, which is the case that
+                // has gone unexplained twice. Only that combination is reported when diagnostics
+                // are off, so the tripwire can stay armed without filling the log.
+                Player player = Player.m_localPlayer;
+                float distance = player != null
+                    ? Vector3.Distance(player.transform.position, pin.m_pos)
+                    : float.MaxValue;
+                bool suspicious = !built && inList && distance < 64f;
+
+                if (suspicious)
+                {
+                    Debug.LogWarning($"Pin marker missing: '{watched.Label}' is {distance:0}m away and in the "
+                        + $"pin list, but UpdatePins built no marker for it (mapMode="
+                        + $"{(map != null ? map.m_mode.ToString() : "no map")}). This is the case where a pin "
+                        + "exists but never appears until the world is reloaded.");
+                }
+                else if (PinDiagnostics.Value)
+                {
+                    Debug.Log($"Pin marker check: '{watched.Label}' after {PinMarkerCheckSeconds:0.#}s - "
+                        + $"marker={(built ? "built" : "NONE")}, stillInPinList={inList}, {distance:0}m away, "
+                        + $"mapMode={(map != null ? map.m_mode.ToString() : "no map")}");
+                }
+            }
         }
 
         private static void FlushPendingPins()
