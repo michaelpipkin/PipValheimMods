@@ -400,12 +400,12 @@ namespace ValheimMod
             ReloadConfigHotkey = Config.Bind("Hotkeys", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
                 "Re-read this file from disk so edits take effect without relaunching. BepInEx has no file watcher, so nothing else notices the file changing - values parsed at startup are kept for the lifetime of the process. Settings read every frame apply at once; anything applied only at startup, such as which Harmony patches exist, still needs a relaunch.");
             AchievementProgressHotkey = Config.Bind("Hotkeys", "AchievementProgressHotkey", new KeyboardShortcut(KeyCode.Period),
-                "Writes every unfinished achievement and the requirements still outstanding to a file in the BepInEx config folder, so a long list like the craft-everything achievements can be worked through without reopening the panel after each item.");
+                "Writes every unfinished achievement and the requirements still outstanding to a file in the BepInEx folder, next to LogOutput.log, so a long list like the craft-everything achievements can be worked through without reopening the panel after each item.");
             StatBucketRepairHotkey = Config.Bind("Hotkeys", "StatBucketRepairHotkey", new KeyboardShortcut(KeyCode.Backslash),
                 "Reports achievement stats that the vanilla bucket-latch bug has frozen, and repairs them when StatBucketRepairApply is on. Must be pressed in a loaded world.");
             StatBucketRepairApply = Config.Bind("General", "StatBucketRepairApply", false,
                 "Let the stat bucket repair hotkey actually write to the character profile. Off means it only reports what it would change. Back up the character .fch file before turning this on.");
-            DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump every item prefab in the game to files in the BepInEx config folder. Must be pressed in a loaded world.");
+            DumpItemListHotkey = Config.Bind("Hotkeys", "DumpItemListHotkey", new KeyboardShortcut(KeyCode.RightBracket), "Hotkey to dump reference files - items, locations, prefabs, terrain operations, map pins and nearby objects - into the BepInEx folder, next to LogOutput.log. Must be pressed in a loaded world.");
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MooseKebab,SealSoup,SmokedMooseMeat,Pancakes,OatmealLingonberryJam,OatMilk,OvenPancake,MeatballsMashedPoteitr,FishSoup", "Comma-separated list of foods to spawn");
             FavoriteAmmoList = Config.Bind("Inventory", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "Comma-separated list of ammo to replenish when repairing gear");
@@ -1148,7 +1148,19 @@ namespace ValheimMod
         }
 
         /// <summary>
-        /// Writes every item prefab known to ObjectDB out to two files in the BepInEx config folder:
+        /// Where the dump files are written: the BepInEx root, alongside LogOutput.log, rather than
+        /// the config folder they used to share with the .cfg files. They are diagnostic output and
+        /// belong with the log, and BepInEx rewrites the config directory on every launch, which is
+        /// no place to leave files it does not own.
+        ///
+        /// Falls back to the config folder if the root is somehow unavailable, so a dump still goes
+        /// somewhere rather than throwing.
+        /// </summary>
+        private static string DumpOutputDirectory =>
+            string.IsNullOrEmpty(Paths.BepInExRootPath) ? Paths.ConfigPath : Paths.BepInExRootPath;
+
+        /// <summary>
+        /// Writes every item prefab known to ObjectDB out to two files in the BepInEx folder:
         /// a tab-separated reference table, and a ready-to-paste AutoPickupIgnorer ignore list.
         /// ObjectDB isn't fully populated until a world is loaded, so this does nothing at the menu.
         /// </summary>
@@ -1198,7 +1210,7 @@ namespace ValheimMod
             }
             rows.Sort((a, b) => string.Compare(a.PrefabName, b.PrefabName, StringComparison.OrdinalIgnoreCase));
 
-            string dir = Paths.ConfigPath;
+            string dir = DumpOutputDirectory;
 
             // Reference table: prefab name is the id the "spawn" console command takes
             var table = new StringBuilder();
@@ -5705,7 +5717,7 @@ namespace ValheimMod
                 }
             }
 
-            string path = Path.Combine(Paths.ConfigPath, "PipsMod_AchievementProgress.txt");
+            string path = Path.Combine(DumpOutputDirectory, "PipsMod_AchievementProgress.txt");
             File.WriteAllText(path, report.ToString());
             string summary = $"Achievement progress: {incomplete} unfinished, {outstanding} requirement(s) outstanding";
             Debug.Log($"{summary} -> {path}");
