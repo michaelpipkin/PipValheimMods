@@ -124,6 +124,8 @@ namespace ValheimMod
         private static ConfigEntry<float> SneakStealthAtMaxSkill;
         private static ConfigEntry<float> SneakTransitionSeconds;
         private static ConfigEntry<float> SneakSpeedPenalty;
+        private static ConfigEntry<float> RunSpeedSkillBonus;
+        private static ConfigEntry<float> JumpPowerSkillBonus;
         private static ConfigEntry<string> HoeLevelOpPrefab;
         private static ConfigEntry<bool> HoeLevelScrollRadius;
         private static ConfigEntry<float> HoeLevelMaxRadiusMultiplier;
@@ -260,6 +262,13 @@ namespace ValheimMod
                 "How much of the crouch movement penalty to keep. 1 is the vanilla crouch speed, 0 removes the penalty entirely so crouching moves at your normal jog, and 0.25 keeps a quarter of it. "
                 + "Running still overrides crouching, and this does not touch the sneak stamina drain. Suspended in a shared session.",
                 new AcceptableValueRange<float>(0f, 1f)));
+            RunSpeedSkillBonus = Config.Bind("Skills", "RunSpeedSkillBonus", 0.25f, new ConfigDescription(
+                "Extra run speed at run skill 100, as a fraction. Vanilla is 0.25, so a fully trained runner is 25% faster than an untrained one; 1 would make them twice as fast. Scales linearly with the skill and stacks with the equipment modifier exactly as vanilla does.",
+                new AcceptableValueRange<float>(0f, 5f)));
+            JumpPowerSkillBonus = Config.Bind("Skills", "JumpPowerSkillBonus", 0.4f, new ConfigDescription(
+                "Extra jump power at jump skill 100, as a fraction. Vanilla is 0.4. This is the same number vanilla applies to both the upward and the forward part of a jump, so raising it increases distance as well as height. "
+                + "Stamina cost does not change, and a tired jump is still weakened afterwards.",
+                new AcceptableValueRange<float>(0f, 5f)));
             SwimSpeedAtMaxSkill = Config.Bind("General", "SwimSpeedAtMaxSkill", 1f, new ConfigDescription(
                 "Swim speed at swim skill 100, as a multiple of normal. Scales smoothly from 1x at skill 0, so 10 means a fully trained swimmer moves ten times as fast and an untrained one is unchanged. Vanilla does not tie swim speed to the skill at all - the skill only reduces stamina drain - so this adds the scaling rather than steepening it. 1 leaves swimming alone. "
                 + "Stamina is spent per second rather than per metre, so this also multiplies how far a given amount of stamina carries you. Suspended in a shared session.",
@@ -6050,7 +6059,8 @@ namespace ValheimMod
         // SEMan.ModifyStealth hook that lets status effects adjust stealth, both Clamp01 calls, the
         // 0.5s target recalculation interval, and only writing the ZDO when the value actually
         // moved. That last one matters - the ZDO is what every other client and the AI read.
-        private static readonly FieldInfo SneakSkillsField = AccessTools.Field(typeof(Player), "m_skills");
+        // Non-public in the shipped assembly; shared by the sneak, run and jump tweaks
+        private static readonly FieldInfo PlayerSkillsField = AccessTools.Field(typeof(Player), "m_skills");
 
         [HarmonyPatch(typeof(Player), nameof(Player.UpdateStealth))]
         class Player_UpdateStealth_Patch
@@ -6065,7 +6075,7 @@ namespace ValheimMod
                 {
                     return true;   // vanilla, including its light handling
                 }
-                Skills skills = SneakSkillsField?.GetValue(__instance) as Skills;
+                Skills skills = PlayerSkillsField?.GetValue(__instance) as Skills;
                 if (skills == null)
                 {
                     return true;
@@ -6157,6 +6167,90 @@ namespace ValheimMod
                 if (__state > 0f && __instance != null)
                 {
                     __instance.m_crouchSpeed = __state;
+                }
+            }
+        }
+
+        // ---------------- Run and jump skill scaling ----------------
+        // Both of these are a single constant in vanilla.
+        //
+        //     Player.GetRunSpeedFactor:  (1f + skillFactor * 0.25f) * (1f + equipment * 1.5f)
+        //     Character.Jump:            float num2 = 1f + num * 0.4f;
+        //
+        // Neither is reimplemented. The run one is rescaled by the ratio between the wanted bonus
+        // and vanilla's, which leaves the equipment term - and anything Iron Gate adds to that
+        // expression later - exactly as it was. The jump one multiplies the two force fields by the
+        // same ratio, which reproduces the effect precisely because num2 is applied to both and to
+        // nothing else.
+        private static float SkillBonusRatio(float wanted, float vanilla, float skillFactor)
+        {
+            float from = 1f + skillFactor * vanilla;
+            float to = 1f + skillFactor * wanted;
+            return from > 0f ? to / from : 1f;
+        }
+
+        private static float LocalPlayerSkillFactor(Character character, Skills.SkillType skill)
+        {
+            if (character == null || !ReferenceEquals(character, Player.m_localPlayer) || IsSharedSession())
+            {
+                return -1f;   // not ours to touch
+            }
+            var skills = PlayerSkillsField?.GetValue(character) as Skills;
+            return skills == null ? -1f : Mathf.Clamp01(skills.GetSkillFactor(skill));
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.GetRunSpeedFactor))]
+        class Player_GetRunSpeedFactor_Patch
+        {
+            static void Postfix(Player __instance, ref float __result)
+            {
+                if (Mathf.Approximately(RunSpeedSkillBonus.Value, 0.25f))
+                {
+                    return;
+                }
+                float skillFactor = LocalPlayerSkillFactor(__instance, Skills.SkillType.Run);
+                if (skillFactor < 0f)
+                {
+                    return;
+                }
+                __result *= SkillBonusRatio(RunSpeedSkillBonus.Value, 0.25f, skillFactor);
+            }
+        }
+
+        // m_jumpForce and m_jumpForceForward are read in Character.Jump and nowhere else, so
+        // scaling them for the duration of the call is safe. A finalizer restores them, so a throw
+        // mid-jump cannot leave a character permanently springy.
+        [HarmonyPatch(typeof(Character), nameof(Character.Jump))]
+        class Character_Jump_SkillBonus_Patch
+        {
+            static void Prefix(Character __instance, ref float[] __state)
+            {
+                __state = null;
+                if (Mathf.Approximately(JumpPowerSkillBonus.Value, 0.4f))
+                {
+                    return;
+                }
+                float skillFactor = LocalPlayerSkillFactor(__instance, Skills.SkillType.Jump);
+                if (skillFactor < 0f)
+                {
+                    return;
+                }
+                float ratio = SkillBonusRatio(JumpPowerSkillBonus.Value, 0.4f, skillFactor);
+                if (Mathf.Approximately(ratio, 1f))
+                {
+                    return;
+                }
+                __state = new[] { __instance.m_jumpForce, __instance.m_jumpForceForward };
+                __instance.m_jumpForce *= ratio;
+                __instance.m_jumpForceForward *= ratio;
+            }
+
+            static void Finalizer(Character __instance, float[] __state)
+            {
+                if (__state != null && __instance != null)
+                {
+                    __instance.m_jumpForce = __state[0];
+                    __instance.m_jumpForceForward = __state[1];
                 }
             }
         }
