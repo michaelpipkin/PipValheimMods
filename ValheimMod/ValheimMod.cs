@@ -119,6 +119,8 @@ namespace ValheimMod
         private static ConfigEntry<float> WisplightRangeMultiplier;
         private static ConfigEntry<bool> PassiveWisplight;
         private static ConfigEntry<float> SwimSpeedAtMaxSkill;
+        private static ConfigEntry<bool> MatchBoatCameraZoom;
+        private static ConfigEntry<float> MaxCameraDistance;
         private static ConfigEntry<bool> SneakTweaks;
         private static ConfigEntry<float> SneakStealthAtMinSkill;
         private static ConfigEntry<float> SneakStealthAtMaxSkill;
@@ -279,6 +281,12 @@ namespace ValheimMod
                 "Extra jump power at jump skill 100, as a fraction. Vanilla is 0.4. This is the same number vanilla applies to both the upward and the forward part of a jump, so raising it increases distance as well as height. "
                 + "Stamina cost does not change, and a tired jump is still weakened afterwards.",
                 new AcceptableValueRange<float>(0f, 5f)));
+            MatchBoatCameraZoom = Config.Bind("Camera", "MatchBoatCameraZoom", true,
+                "Allow the same zoom-out distance on foot that the game already allows at a ship's helm. Vanilla keeps two separate limits and picks between them by whether you are steering, so on foot you are held closer in for no reason that affects anything. "
+                + "Purely a local camera setting - nothing about it is sent anywhere or seen by anyone else. Ignored when MaxCameraDistance is set.");
+            MaxCameraDistance = Config.Bind("Camera", "MaxCameraDistance", 0f, new ConfigDescription(
+                "Maximum third-person camera distance in metres, overriding MatchBoatCameraZoom. 0 leaves both alone. The vanilla on-foot and boat limits are written to the log once when a world loads, so there is a number to compare against.",
+                new AcceptableValueRange<float>(0f, 60f)));
             SwimSpeedAtMaxSkill = Config.Bind("General", "SwimSpeedAtMaxSkill", 1f, new ConfigDescription(
                 "Swim speed at swim skill 100, as a multiple of normal. Scales smoothly from 1x at skill 0, so 10 means a fully trained swimmer moves ten times as fast and an untrained one is unchanged. Vanilla does not tie swim speed to the skill at all - the skill only reduces stamina drain - so this adds the scaling rather than steepening it. 1 leaves swimming alone. "
                 + "Stamina is spent per second rather than per metre, so this also multiplies how far a given amount of stamina carries you. Suspended in a shared session.",
@@ -533,6 +541,7 @@ namespace ValheimMod
             UpdatePassiveForsakenPowers();
             UpdatePassiveWisplight();
             UpdateHoeLevelRadius();
+            ApplyCameraDistance();
         }
 
         // ---------------- Toggleable personal light ----------------
@@ -6752,6 +6761,61 @@ namespace ValheimMod
                     __instance.m_jumpForce = __state[0];
                     __instance.m_jumpForceForward = __state[1];
                 }
+            }
+        }
+
+        // ---------------- Camera zoom distance ----------------
+        // GameCamera keeps two limits and chooses between them every frame:
+        //
+        //     float max = ((localPlayer.GetControlledShip() != null) ? m_maxDistanceBoat : m_maxDistance);
+        //     m_distance = Mathf.Clamp(m_distance, minDistance, max);
+        //
+        // So raising the on-foot limit is enough; there is no need to touch the clamp itself.
+        //
+        // m_maxDistance is the field that moves, never m_maxDistanceBoat. The boat value is also
+        // used as the denominator of a separate normalisation further down the same method
+        // (Mathf.Clamp01((m_distance - m_minDistance) / (m_maxDistanceBoat - m_minDistance))), so
+        // editing it would quietly change something else as well.
+        //
+        // Applied from Update rather than once at Awake, so a config reload takes effect without a
+        // restart, and so a camera rebuilt mid-session is caught. The original is captured the
+        // first time this runs and restored when the setting is turned off.
+        private static GameCamera _cameraTracked;
+        private static float _vanillaMaxDistance;
+        private static bool _cameraLimitsLogged;
+
+        private static void ApplyCameraDistance()
+        {
+            GameCamera camera = GameCamera.instance;
+            if (camera == null)
+            {
+                return;
+            }
+            if (!ReferenceEquals(_cameraTracked, camera))
+            {
+                _cameraTracked = camera;
+                _vanillaMaxDistance = camera.m_maxDistance;
+                if (!_cameraLimitsLogged)
+                {
+                    _cameraLimitsLogged = true;
+                    Debug.Log($"Camera zoom limits: on foot {camera.m_maxDistance:0.##}m, "
+                        + $"at the helm {camera.m_maxDistanceBoat:0.##}m");
+                }
+            }
+
+            float wanted = _vanillaMaxDistance;
+            if (MaxCameraDistance.Value > 0f)
+            {
+                wanted = MaxCameraDistance.Value;
+            }
+            else if (MatchBoatCameraZoom.Value)
+            {
+                wanted = Mathf.Max(_vanillaMaxDistance, camera.m_maxDistanceBoat);
+            }
+
+            if (!Mathf.Approximately(camera.m_maxDistance, wanted))
+            {
+                camera.m_maxDistance = wanted;
             }
         }
 
