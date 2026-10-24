@@ -35,6 +35,9 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
         private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
+        private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
+        private static ConfigEntry<float> AreaRepairRadius;
+        private static ConfigEntry<KeyCode> AreaRepairKey;
         private static ConfigEntry<string> UnlearnRecipes;
         private static ConfigEntry<bool> UnlearnRecipesApply;
         private static ConfigEntry<float> JumpBufferSeconds;
@@ -407,6 +410,16 @@ namespace ValheimMod
                 "Comma separated recipe tokens to forget, as they appear in the log line 'Queue unlock msg:$msg_newpiece:$piece_x'. Runs once per session and reports what it would remove; set UnlearnRecipesApply to actually remove them. Clear this when done.");
             UnlearnRecipesApply = Config.Bind("General", "UnlearnRecipesApply", false,
                 "Let UnlearnRecipes actually write to the character. Off means it only reports. Back up the character .fch before turning this on.");
+            AreaRepairRadius = Config.Bind("Build", "AreaRepairRadius", 20f, new ConfigDescription(
+                "Radius in metres repaired in one go when AreaRepairKey is held and the hammer's repair tool is selected. 0 turns it off. "
+                + "Each piece costs its normal stamina and tool durability, and repairing stops early when either runs out.",
+                new AcceptableValueRange<float>(0f, 64f)));
+            AreaRepairKey = Config.Bind("Build", "AreaRepairKey", KeyCode.LeftShift,
+                "Held while clicking with the repair tool to repair everything in range instead of only the piece under the cursor.");
+            FlyToggleHotkey = Config.Bind("Hotkeys", "FlyToggleHotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftShift),
+                "Toggles the same free-flight the console 'fly' command gives, without opening the console. "
+                + "Vanilla reaches this through a cheat command, but the method behind it carries no such check, so this needs neither devcommands nor the console - which also means it does not mark the character as having used cheats. "
+                + "Suspended in a shared session: a player flying is about as conspicuous as it gets.");
             FreeBuildHotkey = Config.Bind("Hotkeys", "FreeBuildHotkey", new KeyboardShortcut(KeyCode.Slash),
                 "Toggles building and crafting without resources, for when you are far from base and need something you cannot carry the materials for. Crafting still needs its station, and a piece you place while this is on drops nothing when you take it back down. Starts off each time the game launches, and is suspended in a shared session since the pieces it leaves behind are part of the world everyone sees.");
             JumpBufferSeconds = Config.Bind("General", "JumpBufferSeconds", 0.3f, new ConfigDescription(
@@ -526,6 +539,11 @@ namespace ValheimMod
             if (HotkeyDown(FreeBuildHotkey))
             {
                 ToggleFreeBuild();
+            }
+
+            if (HotkeyDown(FlyToggleHotkey))
+            {
+                ToggleDebugFlight();
             }
 
             ApplyInventoryRows();
@@ -6762,6 +6780,199 @@ namespace ValheimMod
                     __instance.m_jumpForceForward = __state[1];
                 }
             }
+        }
+
+        // ---------------- Area repair ----------------
+        // Player.Repair only ever touches GetHoveringPiece(), so this runs afterwards and repeats
+        // the same work for everything else in range. Every rule vanilla applies to a single repair
+        // is applied here too, piece by piece, rather than reimplemented loosely:
+        //
+        //   CheckCanRemovePiece    the crafting-station requirement, which is what keeps a dungeon
+        //                          hammer-proof and another player's work theirs
+        //   PrivateArea.CheckAccess ward permission
+        //   HaveStamina/UseStamina  the same per-piece cost GetBuildStamina gives the single case
+        //   durability drain        the same per-piece drain
+        //
+        // A postfix rather than a prefix, so the piece under the cursor is handled by vanilla with
+        // its normal message and effects. WearNTear.Repair refuses twice within a second, so that
+        // piece cannot be charged for again when the sweep reaches it.
+        //
+        // Not suspended in a shared session: this spends real stamina and durability and obeys
+        // ward and station rules, so it is a convenience rather than an advantage - the only thing
+        // it changes is how many clicks the same work takes.
+        // All three are non-public in the shipped assembly despite the publicized reference
+        // showing them public - the access audit caught every one
+        private static readonly FieldInfo WearInstancesField =
+            AccessTools.Field(typeof(WearNTear), "s_allInstances");
+        private static readonly MethodInfo BuildStaminaMethod =
+            AccessTools.Method(typeof(Player), "GetBuildStamina");
+        private static readonly MethodInfo CanRemovePieceMethod =
+            AccessTools.Method(typeof(Player), "CheckCanRemovePiece");
+
+        private static void AreaRepair(Player player, ItemDrop.ItemData toolItem)
+        {
+            float radius = AreaRepairRadius.Value;
+            var instances = WearInstancesField?.GetValue(null) as List<WearNTear>;
+            if (BuildStaminaMethod == null || CanRemovePieceMethod == null)
+            {
+                return;
+            }
+            if (radius <= 0f || toolItem == null || instances == null)
+            {
+                return;
+            }
+
+            Vector3 origin = player.transform.position;
+            float staminaPerPiece = (float)BuildStaminaMethod.Invoke(player, null);
+            float drain = toolItem.m_shared.m_useDurability
+                ? toolItem.m_shared.m_useDurabilityDrain * Game.m_durabilityRate
+                : 0f;
+
+            int repaired = 0;
+            int blocked = 0;
+            bool ranOut = false;
+
+            // Indexed rather than foreach: Repair sends an RPC and a piece could in principle leave
+            // the list while this runs, and the count is re-read each step
+            for (int i = 0; i < instances.Count; i++)
+            {
+                WearNTear wear = instances[i];
+                if (wear == null)
+                {
+                    continue;
+                }
+                Vector3 position = wear.transform.position;
+                if (Vector3.Distance(origin, position) > radius)
+                {
+                    continue;
+                }
+                Piece piece = wear.GetComponent<Piece>();
+                if (piece == null)
+                {
+                    continue;
+                }
+                bool canRemove = CanRemovePieceMethod.Invoke(player, new object[] { piece }) is bool ok && ok;
+                if (!canRemove || !PrivateArea.CheckAccess(position))
+                {
+                    blocked++;
+                    continue;
+                }
+                if (!player.HaveStamina(staminaPerPiece))
+                {
+                    ranOut = true;
+                    break;
+                }
+                if (!wear.Repair())
+                {
+                    continue;   // already at full health, or repaired within the last second
+                }
+
+                player.UseStamina(staminaPerPiece);
+                repaired++;
+                if (drain > 0f)
+                {
+                    toolItem.m_durability -= drain;
+                    if (toolItem.m_durability <= 0f)
+                    {
+                        ranOut = true;
+                        break;
+                    }
+                }
+            }
+
+            // One summary rather than vanilla's per-piece message and effect. A sweep after a raid
+            // can touch dozens of pieces, and that many stacked messages and place effects would
+            // bury everything else on screen.
+            if (repaired > 0)
+            {
+                string tail = ranOut ? " (stopped - out of stamina or durability)" : string.Empty;
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    $"Repaired {repaired} piece(s) within {radius:0}m{tail}");
+            }
+            else if (blocked > 0)
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    $"Nothing repaired - {blocked} piece(s) need a crafting station or are warded");
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), nameof(Player.Repair))]
+        class Player_Repair_AreaPatch
+        {
+            static void Postfix(Player __instance, ItemDrop.ItemData toolItem)
+            {
+                if (__instance == null || !ReferenceEquals(__instance, Player.m_localPlayer)
+                    || AreaRepairRadius.Value <= 0f || !ZInput.GetKey(AreaRepairKey.Value))
+                {
+                    return;
+                }
+                AreaRepair(__instance, toolItem);
+            }
+        }
+
+        // ---------------- Fly toggle ----------------
+        // The console command is nothing but a wrapper:
+        //
+        //     new ConsoleCommand("fly", "fly mode", delegate { Player.m_localPlayer.ToggleDebugFly(); },
+        //         isCheat: true, ...);
+        //
+        // The isCheat flag belongs to the command, not to ToggleDebugFly, which is public and does
+        // the whole job itself - flips m_debugFly, writes it to the player's ZDO so the server and
+        // other clients agree, and posts its own HUD message. So there is nothing to reimplement
+        // and no message to add here.
+        //
+        // Worth knowing: going through the method rather than the command means devcommands never
+        // has to be enabled, and it is enabling devcommands - Terminal setting m_usedCheats - that
+        // marks a character as cheated, not flying itself.
+        //
+        // Vanilla also binds this to Z, but only while m_debugMode is on and cheats are enabled,
+        // so the default LeftShift+F does not collide with it.
+        // Valheim reads the guardian power as a bare button:
+        //
+        //     if (!Hud.InRadial() && ... && (ZInput.GetButtonDown("GP") || ...)) StartGuardianPower();
+        //
+        // It never looks at modifiers, so binding the fly toggle to Shift+F fires the power as well
+        // as flying. This declines the power for the one frame the fly shortcut is down.
+        //
+        // Order does not matter: KeyboardShortcut.IsDown reads Unity's per-frame key state, so it
+        // answers the same whether vanilla's Update runs before or after ours.
+        //
+        // Only suppressed when the shortcut actually carries a modifier. If the fly toggle were
+        // ever bound to a bare key, this would otherwise silently disable the power on that key
+        // rather than merely disambiguating it.
+        [HarmonyPatch(typeof(Player), nameof(Player.StartGuardianPower))]
+        class Player_StartGuardianPower_Patch
+        {
+            static bool Prefix(ref bool __result)
+            {
+                if (FlyToggleHotkey == null)
+                {
+                    return true;
+                }
+                KeyboardShortcut shortcut = FlyToggleHotkey.Value;
+                if (shortcut.MainKey == KeyCode.None || !shortcut.Modifiers.Any() || !shortcut.IsDown())
+                {
+                    return true;
+                }
+                __result = false;
+                return false;
+            }
+        }
+
+        private static void ToggleDebugFlight()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return;
+            }
+            if (IsSharedSession())
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    "Flight is off in a shared session");
+                return;
+            }
+            player.ToggleDebugFly();
         }
 
         // ---------------- Camera zoom distance ----------------
