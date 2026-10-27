@@ -1,3 +1,9 @@
+## Release 1.2.0
+
+- Add a hotkey (= by default) to reload the config file in-game, so ignore list changes take effect without relaunching
+- Sort the ignore list in the config file alphabetically, ignoring the leading #, and remove duplicate entries
+- Hotkeys no longer fire while typing in chat, on signs, in the console, or in the build menu search box
+
 ## Release 1.1.0
 
 - Updated for Valheim 1.0

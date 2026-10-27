@@ -17,12 +17,13 @@ namespace AutoPickupIgnorer
         // Module info
         private const string modGUID = "Pip.AutoPickupIgnorer";
         private const string modName = "Pip's Auto-pickup Ignorer";
-        private const string modVersion = "1.1.0";
+        private const string modVersion = "1.2.0";
         private readonly Harmony harmony = new Harmony(modGUID);
 
         // Config file entries
         private static ConfigEntry<string> AutoPickupIgnoreList;
         private static ConfigEntry<KeyboardShortcut> ToggleBehaviorHotkey;
+        private static ConfigEntry<KeyboardShortcut> ReloadConfigHotkey;
 
         // Module variables
         private static List<string> _ignoreList;
@@ -38,10 +39,59 @@ namespace AutoPickupIgnorer
                     "Comma-separated list of items to ignore auto-pickup. Remove # before item to add to ignore list.");
             ToggleBehaviorHotkey = Config.Bind("General", "BehaviorHotkey", new KeyboardShortcut(KeyCode.Quote),
                     "Hotkey to change pickup behavior between custom ignore, ignore all, and default behavior");
+            ReloadConfigHotkey = Config.Bind("General", "ReloadConfigHotkey", new KeyboardShortcut(KeyCode.Equals),
+                    "Hotkey to re-read this file from disk, so changes to the ignore list take effect without relaunching");
 
-            _ignoreList = AutoPickupIgnoreList.Value.Split(',').Select(i => i.Trim()).Where(i => !i.StartsWith("#")).ToList();
+            // The ignore list is parsed out of the config string, so it has to be rebuilt whenever
+            // Config.Reload swaps in a new value
+            RebuildIgnoreList();
+            Config.ConfigReloaded += (sender, args) => RebuildIgnoreList();
 
             harmony.PatchAll();
+        }
+
+        private static void RebuildIgnoreList()
+        {
+            SortIgnoreList();
+            _ignoreList = AutoPickupIgnoreList.Value.Split(',').Select(i => i.Trim()).Where(i => !i.StartsWith("#")).ToList();
+        }
+
+        private void ReloadModConfig()
+        {
+            try
+            {
+                Config.Reload();
+                Debug.Log($"AutoPickupIgnorer config reloaded from {Config.ConfigFilePath}");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Auto-pickup ignore list reloaded");
+            }
+            catch (Exception ex)
+            {
+                // A malformed edit should report itself rather than take the frame down
+                Debug.LogError($"AutoPickupIgnorer config reload failed, keeping the values already loaded - {ex.Message}");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Auto-pickup ignore list reload FAILED - see log");
+            }
+        }
+
+        /// <summary>
+        /// Rewrites the config's ignore list in alphabetical order so an item is easy to find by eye.
+        /// Sorting ignores the leading # so enabled and commented-out entries interleave by name.
+        /// Duplicates collapse to one entry, keeping the enabled form if either copy is enabled.
+        /// The file is only rewritten when the order or contents actually change.
+        /// </summary>
+        private static void SortIgnoreList()
+        {
+            var sorted = AutoPickupIgnoreList.Value.Split(',')
+                .Select(i => i.Trim())
+                .Where(i => i.TrimStart('#').Length > 0)
+                .GroupBy(i => i.TrimStart('#').Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.FirstOrDefault(i => !i.StartsWith("#")) ?? g.First())
+                .OrderBy(i => i.TrimStart('#').Trim(), StringComparer.OrdinalIgnoreCase);
+            string sortedValue = string.Join(", ", sorted);
+            if (sortedValue != AutoPickupIgnoreList.Value)
+            {
+                // Setting Value saves the config file
+                AutoPickupIgnoreList.Value = sortedValue;
+            }
         }
 
         /// <summary>
@@ -76,6 +126,10 @@ namespace AutoPickupIgnorer
 
         private void Update()
         {
+            if (HotkeyDown(ReloadConfigHotkey))
+            {
+                ReloadModConfig();
+            }
             if (HotkeyDown(ToggleBehaviorHotkey))
             {
                 switch (_currentPickupBehavior)
