@@ -36,6 +36,8 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
         private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
+        private static ConfigEntry<KeyboardShortcut> DestroyItemCombo;
+        private static ConfigEntry<float> DestroyItemConfirmSeconds;
         private static ConfigEntry<float> AreaRepairRadius;
         private static ConfigEntry<KeyCode> AreaRepairKey;
         private static ConfigEntry<string> UnlearnRecipes;
@@ -61,6 +63,10 @@ namespace ValheimMod
         private static ConfigEntry<bool> AutoPinKeepIconFilter;
         private static ConfigEntry<bool> ShowMapCursorCoordinates;
         private static ConfigEntry<string> HudFontName;
+        private static ConfigEntry<bool> ShowMapSeed;
+        private static ConfigEntry<bool> MapSeedClickToCopy;
+        private static ConfigEntry<float> MapSeedPositionX;
+        private static ConfigEntry<float> MapSeedPositionY;
         private static ConfigEntry<float> MapCursorPositionX;
         private static ConfigEntry<float> MapCursorPositionY;
         private static ConfigEntry<int> ResourcePinIcon;
@@ -363,6 +369,14 @@ namespace ValheimMod
                 "Font for the clock, coordinates and map cursor readout, matched against the fonts the game has loaded. AveriaSerifLibre is the body font the game uses for item and effect names; Norsebold is the all-caps display font behind headings. An exact name beats a partial one, so AveriaSerifLibre-Bold selects that variant specifically. Leave empty for Unity's default. If the named font is not found, the log lists every font that is.");
             ShowMapCursorCoordinates = Config.Bind("Map", "ShowMapCursorCoordinates", true,
                 "While the full map is open, show the world coordinates under the mouse cursor. Useful for finding a spot someone else has given you coordinates for on a known seed.");
+            ShowMapSeed = Config.Bind("Map", "ShowMapSeed", true,
+                "Show the world seed in the top right of the map while it is open, mirroring the cursor coordinates in the top left.");
+            MapSeedClickToCopy = Config.Bind("Map", "MapSeedClickToCopy", true,
+                "Clicking the seed copies it to the system clipboard, for pasting into a map generator site. The clickable area is only as wide as the text itself. Turn this off if the click interferes with dragging the map.");
+            MapSeedPositionX = Config.Bind("Map", "MapSeedPositionX", 12f,
+                "Distance in pixels from the right edge of the map panel to the end of the seed text. Measured from the panel rather than the screen, so it stays in the corner of the map on an ultrawide display instead of drifting out into the surrounding HUD.");
+            MapSeedPositionY = Config.Bind("Map", "MapSeedPositionY", 40f,
+                "Distance in pixels from the top edge of the map panel to the seed text. The default clears the biome name vanilla already draws in that corner - raising it much above 40 will overlap it again.");
             MapCursorPositionX = Config.Bind("Map", "MapCursorPositionX", 12f,
                 "Map cursor readout offset in pixels from the left edge of the map panel, not the screen.");
             MapCursorPositionY = Config.Bind("Map", "MapCursorPositionY", 12f,
@@ -410,6 +424,12 @@ namespace ValheimMod
                 "Comma separated recipe tokens to forget, as they appear in the log line 'Queue unlock msg:$msg_newpiece:$piece_x'. Runs once per session and reports what it would remove; set UnlearnRecipesApply to actually remove them. Clear this when done.");
             UnlearnRecipesApply = Config.Bind("General", "UnlearnRecipesApply", false,
                 "Let UnlearnRecipes actually write to the character. Off means it only reports. Back up the character .fch before turning this on.");
+            DestroyItemCombo = Config.Bind("Inventory", "DestroyItemCombo", new KeyboardShortcut(KeyCode.LeftShift, KeyCode.LeftControl),
+                "Held while left-clicking an item in your own inventory to destroy it outright - an Obliterator you carry with you. Every key in the combo has to be down at the moment of the click; set the main key to None to turn this off. Only your own inventory is touched, never a container, and quest items are refused the same way vanilla refuses to let you drop them.");
+            DestroyItemConfirmSeconds = Config.Bind("Inventory", "DestroyItemConfirmSeconds", 3f, new ConfigDescription(
+                "A first combo-click arms the item and names what will be lost; a second one on the same item within this many seconds destroys it. "
+                + "Worth keeping, because vanilla already uses plain Shift+click to split a stack - with no confirmation, one stray Ctrl turns a split into an unrecoverable loss. Set to 0 to destroy on the first click.",
+                new AcceptableValueRange<float>(0f, 30f)));
             AreaRepairRadius = Config.Bind("Build", "AreaRepairRadius", 20f, new ConfigDescription(
                 "Radius in metres repaired in one go when AreaRepairKey is held and the hammer's repair tool is selected. 0 turns it off. "
                 + "Each piece costs its normal stamina and tool durability, and repairing stops early when either runs out.",
@@ -865,6 +885,7 @@ namespace ValheimMod
             }
             DrawHudLine();
             DrawMapCursorCoordinates();
+            DrawMapSeed();
         }
 
         private static Font _hudFont;
@@ -1001,6 +1022,100 @@ namespace ValheimMod
         }
 
         private static readonly Vector3[] _mapCorners = new Vector3[4];
+
+        /// <summary>
+        /// Right-aligned twin of the HUD style, so the seed can be pinned to the right edge of the
+        /// map panel without having to measure the string first.
+        /// </summary>
+        private static GUIStyle _seedStyle;
+
+        private static GUIStyle MapSeedStyle()
+        {
+            GUIStyle baseStyle = HudStyle();
+            if (_seedStyle == null || _seedStyle.fontSize != baseStyle.fontSize || _seedStyle.font != baseStyle.font)
+            {
+                _seedStyle = new GUIStyle(baseStyle)
+                {
+                    alignment = TextAnchor.UpperRight,
+                };
+                _seedStyle.normal.textColor = baseStyle.normal.textColor;
+            }
+            return _seedStyle;
+        }
+
+        private static void DrawMapSeed()
+        {
+            if (!ShowMapSeed.Value || !Minimap.IsOpen())
+            {
+                return;
+            }
+            Minimap map = Minimap.instance;
+            World world = ZNet.World;
+            if (map == null || world == null)
+            {
+                return;
+            }
+            // The seed the player typed, falling back to the number it hashes to for a world that
+            // was created with an empty seed field
+            string seed = !string.IsNullOrEmpty(world.m_seedName)
+                ? world.m_seedName
+                : world.m_seed.ToString();
+
+            // Anchored to the map panel for the same reason as the cursor readout: the panel is a
+            // letterboxed strip on an ultrawide, and a screen-relative label lands outside it
+            if (!TryGetMapScreenRect(map, out Rect panel))
+            {
+                return;
+            }
+            GUIStyle style = MapSeedStyle();
+            var content = new GUIContent($"Seed   {seed}");
+
+            // Sized to the text rather than given a wide rect. As a label the extra width was
+            // harmless, but it becomes the clickable area the moment this is a button, and a
+            // 900px strip reaching back across the map would swallow clicks meant for the map.
+            Vector2 size = style.CalcSize(content);
+            var area = new Rect(
+                panel.xMax - MapSeedPositionX.Value - size.x,
+                panel.y + MapSeedPositionY.Value,
+                size.x,
+                size.y);
+
+            if (!MapSeedClickToCopy.Value)
+            {
+                GUI.Label(area, content, style);
+                return;
+            }
+
+            // A button drawn with the label style, so it looks identical - GUI.skin.label has no
+            // background in any state, which is what makes this read as text rather than a control
+            if (GUI.Button(area, content, style))
+            {
+                CopySeedToClipboard(seed);
+            }
+        }
+
+        /// <summary>
+        /// Unity keeps a bridge to the OS clipboard in GUIUtility.systemCopyBuffer, so this needs
+        /// no platform code and no extra assembly - IMGUI is already referenced for the HUD.
+        ///
+        /// Only the seed itself is copied, not the "Seed" prefix, since the point is to paste it
+        /// straight into a map generator.
+        /// </summary>
+        private static void CopySeedToClipboard(string seed)
+        {
+            try
+            {
+                GUIUtility.systemCopyBuffer = seed;
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, $"Copied seed '{seed}' to the clipboard");
+            }
+            catch (Exception ex)
+            {
+                // Clipboard access can fail outright on some systems; a copy that does not work is
+                // not worth taking the frame down for
+                Debug.LogWarning($"Could not copy the seed to the clipboard - {ex.Message}");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Could not copy the seed - see the log");
+            }
+        }
 
         private static void DrawMapCursorCoordinates()
         {
@@ -6907,6 +7022,131 @@ namespace ValheimMod
                     return;
                 }
                 AreaRepair(__instance, toolItem);
+            }
+        }
+
+        // ---------------- Destroy item from inventory ----------------
+        // InventoryGui.OnSelectedItem is the single funnel every inventory left-click arrives at,
+        // including the gamepad and touch paths, so one prefix covers them all.
+        //
+        // The combo is read from the keyboard here rather than from the Modifier argument the grid
+        // works out, because that argument cannot express this: InventoryGrid.OnLeftDown tests
+        // Shift before Ctrl and stops at the first hit, so Shift+Ctrl+click arrives indistinguishable
+        // from a plain Shift+click - as Modifier.Split. Which is also the reason the confirmation
+        // step below is on by default.
+        //
+        // Scoped to the player's own inventory on purpose. A container is world state that belongs
+        // to whatever the chest is attached to, and silently destroying from one would be a real
+        // side effect in a shared session; your own pack is nobody else's business.
+        private static ItemDrop.ItemData _destroyArmedItem;
+        private static float _destroyArmedAt;
+
+        // Non-public in the shipped assembly even though the publicized reference shows it public,
+        // so it cannot be called directly without bricking the JIT
+        private static readonly MethodInfo UpdateCraftingPanelMethod =
+            AccessTools.Method(typeof(InventoryGui), "UpdateCraftingPanel", new[] { typeof(bool) });
+
+        private static bool DestroyComboHeld()
+        {
+            KeyboardShortcut combo = DestroyItemCombo.Value;
+            if (combo.MainKey == KeyCode.None || !ZInput.GetKey(combo.MainKey))
+            {
+                return false;
+            }
+            foreach (KeyCode modifier in combo.Modifiers)
+            {
+                if (!ZInput.GetKey(modifier))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static string DescribeItem(ItemDrop.ItemData item)
+        {
+            string name = item.m_shared.m_name;
+            if (Localization.instance != null)
+            {
+                name = Localization.instance.Localize(name);
+            }
+            return item.m_stack > 1 ? $"{item.m_stack} {name}" : name;
+        }
+
+        private static void DestroyInventoryItem(InventoryGui gui, Inventory inventory, ItemDrop.ItemData item)
+        {
+            Player player = Player.m_localPlayer;
+
+            // Vanilla blocks quest items from being dropped or moved out of the player's inventory,
+            // and destroying one would be a harsher version of the same thing
+            if (item.m_shared.m_questItem)
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "That item cannot be destroyed");
+                return;
+            }
+
+            float confirmWindow = DestroyItemConfirmSeconds.Value;
+            if (confirmWindow > 0f
+                && (!ReferenceEquals(_destroyArmedItem, item) || Time.unscaledTime - _destroyArmedAt > confirmWindow))
+            {
+                _destroyArmedItem = item;
+                _destroyArmedAt = Time.unscaledTime;
+                _messageHud?.ShowMessage(MessageHud.MessageType.Center,
+                    $"Destroy {DescribeItem(item)}?\nClick again to confirm");
+                return;
+            }
+            _destroyArmedItem = null;
+
+            // Describe it before it is gone, and unequip the way the drop path does so the model
+            // does not stay in hand after the item behind it stops existing
+            string description = DescribeItem(item);
+            int quality = item.m_quality;
+            player.RemoveEquipAction(item);
+            player.UnequipItem(item, triggerEquipEffects: false);
+
+            if (!inventory.RemoveItem(item))
+            {
+                return;
+            }
+
+            // Logged as well as shown, so a stack lost to a mis-click can at least be identified
+            // afterwards from the log rather than guessed at
+            Debug.Log($"[PipMod] Destroyed {description} (quality {quality}) from the inventory");
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, $"Destroyed {description}");
+            gui.m_moveItemEffects.Create(gui.transform.position, Quaternion.identity);
+
+            // The crafting panel does not re-read requirements on its own; vanilla refreshes it by
+            // hand after every inventory move, so this does too
+            UpdateCraftingPanelMethod?.Invoke(gui, new object[] { false });
+        }
+
+        [HarmonyPatch(typeof(InventoryGui), nameof(InventoryGui.OnSelectedItem))]
+        class InventoryGui_OnSelectedItem_DestroyPatch
+        {
+            static bool Prefix(InventoryGui __instance, InventoryGrid grid, ItemDrop.ItemData item,
+                GameObject ___m_dragGo)
+            {
+                if (__instance == null || grid == null || item == null || !DestroyComboHeld())
+                {
+                    return true;
+                }
+                // A drag is in flight, so this click is where it lands - vanilla's business
+                if (___m_dragGo != null)
+                {
+                    return true;
+                }
+                Player player = Player.m_localPlayer;
+                if (player == null || player.IsTeleporting())
+                {
+                    return true;
+                }
+                Inventory inventory = grid.GetInventory();
+                if (inventory == null || inventory != player.GetInventory())
+                {
+                    return true;
+                }
+                DestroyInventoryItem(__instance, inventory, item);
+                return false;
             }
         }
 
