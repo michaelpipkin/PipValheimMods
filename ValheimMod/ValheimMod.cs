@@ -36,6 +36,7 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> HealthFloorToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
         private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
+        private static ConfigEntry<KeyboardShortcut> NoDropsHotkey;
         private static ConfigEntry<KeyboardShortcut> DestroyItemCombo;
         private static ConfigEntry<float> DestroyItemConfirmSeconds;
         private static ConfigEntry<float> AreaRepairRadius;
@@ -60,6 +61,8 @@ namespace ValheimMod
         private static ConfigEntry<string> PinIncludeLocations;
         private static ConfigEntry<bool> AutoPinResources;
         private static ConfigEntry<bool> PinDiagnostics;
+        private static ConfigEntry<bool> SpawnDiagnostics;
+        private static ConfigEntry<float> WardSpawnBlockRadius;
         private static ConfigEntry<bool> AutoPinKeepIconFilter;
         private static ConfigEntry<bool> ShowMapCursorCoordinates;
         private static ConfigEntry<string> HudFontName;
@@ -142,6 +145,7 @@ namespace ValheimMod
         private static ConfigEntry<string> HoeLevelRockNames;
         private static ConfigEntry<string> HoeLevelRockExclude;
         private static ConfigEntry<bool> HoeLevelScrollRadius;
+        private static ConfigEntry<string> ScrollRadiusOps;
         private static ConfigEntry<float> HoeLevelMaxRadiusMultiplier;
         private static ConfigEntry<bool> HoeLevelPerfect;
         private static ConfigEntry<float> HoeLevelMaxDelta;
@@ -248,7 +252,15 @@ namespace ValheimMod
             HidePassivePowerIcons = Config.Bind("Powers", "HidePassivePowerIcons", true,
                 "Keep passively held forsaken powers out of the status effect row. They are always on, so the icons carry no information and just crowd out effects that change. Only affects powers this mod is holding - a power you activate yourself, or one a nearby player grants you, still shows normally.");
             MassPlantSpacing = Config.Bind("Farming", "MassPlantSpacing", 2f, "Spacing between plants, as a multiple of the plant's own grow radius. 2 is the tightest that reliably clears each plant's space check, since the check tests a sphere of that radius against neighbouring colliders. Lower it to pack tighter at the risk of some seeds being rejected.");
-            WorkstationRangeMultiplier = Config.Bind("General", "WorkstationRangeMultiplier", 1f, "Multiplier for how far a workbench, forge or other crafting station reaches for building. 2 doubles the radius. The on-screen coverage circle scales with it. Applies to stations as they load, so change it before entering a world.");
+            WorkstationRangeMultiplier = Config.Bind("General", "WorkstationRangeMultiplier", 1f, "Multiplier for how far a workbench, forge or other crafting station reaches for building. 2 doubles the radius. The on-screen coverage circle and the no-monster-spawn area both scale with it, the latter from the moment the station loads rather than from the first time you build. Applies to stations as they load, so change it before entering a world.");
+            WardSpawnBlockRadius = Config.Bind("General", "WardSpawnBlockRadius", 80f, new ConfigDescription(
+                "Radius in metres of the no-spawn area a ward projects, replacing its authored one - around 20m in vanilla, the same as a workbench. Note that this is not the ward's radius setting: that one governs who may build and what may be damaged, and no spawn system consults it. Suppresses biome spawns and dungeon creature spawners inside the sphere; nests and body piles ignore no-spawn areas entirely and still have to be destroyed. Applies to player-built wards as they load, active or not, so change it before entering a world. 0 leaves the authored radius alone. Local only: the area exists on your client and nobody else's.",
+                new AcceptableValueRange<float>(0f, 200f)));
+            SpawnDiagnostics = Config.Bind("General", "SpawnDiagnostics", true,
+                "Logs a line every time the biome spawn system places a creature, naming the ground point it used, that point's altitude and ocean depth, "
+                + "whether the spawn entry is exempt from crafting-station no-spawn areas, and the distance from that point to the nearest such area. "
+                + "Answers why something appeared inside what looked like full workbench coverage: either the entry is exempt or the point was outside the blanket, and the line says which. "
+                + "One line per creature, not per attempt. Pairs with the spawn-entry table the dump hotkey writes.");
             WorldEffectsSoloOnly = Config.Bind("General", "WorldEffectsSoloOnly", true, "Suspend the settings that change shared world state - CustomResourceRate, CustomStackSizeMultiplier, CustomSmelterOutputRate, CustomProcessingTimeRate and TamingSpeedMultiplier - whenever anyone else is in the world with you. They resume automatically once you are alone again. Settings that only affect you are never suspended.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
@@ -303,6 +315,8 @@ namespace ValheimMod
             HoeLevelOpPrefab = Config.Bind("Hoe", "HoeLevelOpPrefab", "mud_road_v2",
                 "The terrain operation these settings apply to, by prefab name. The hoe's Level ground is mud_road_v2; the name of every operation and what it does is in PipsMod_TerrainOps.tsv, written by the dump hotkey. "
                 + "Named explicitly rather than detected, because Cultivate and Pave smooth the ground too and should be left alone.");
+            ScrollRadiusOps = Config.Bind("Hoe", "ScrollRadiusOps", "mud_road_v2,cultivate_v2,replant_v2",
+                "Which terrain operations the mouse wheel resizes, as comma separated prefab names - mud_road_v2 is the hoe's Level ground, cultivate_v2 the cultivator's Cultivate and replant_v2 its Plant grass. Each one remembers its own size. Press the dump hotkey in a world to write PipsMod_TerrainOps.tsv and see every name; path_v2, paved_road_v2 and raise_v2 work here too if you want them. Only the radius is changed - the perfect levelling and rock clearing stay with the Level ground op named by HoeLevelOpPrefab.");
             HoeLevelScrollRadius = Config.Bind("Hoe", "HoeLevelScrollRadius", true,
                 "Let the mouse wheel resize the hoe's level-ground area while it is selected. The wheel is free in that state - vanilla only uses it to rotate a piece that can rotate, and a terrain operation cannot - so this takes it over and stops it zooming the camera. 1x is the vanilla size and the setting is not remembered between sessions.");
             HoeLevelMaxRadiusMultiplier = Config.Bind("Hoe", "HoeLevelMaxRadiusMultiplier", 2f, new ConfigDescription(
@@ -436,6 +450,8 @@ namespace ValheimMod
                 new AcceptableValueRange<float>(0f, 64f)));
             AreaRepairKey = Config.Bind("Build", "AreaRepairKey", KeyCode.LeftShift,
                 "Held while clicking with the repair tool to repair everything in range instead of only the piece under the cursor.");
+            NoDropsHotkey = Config.Bind("Hotkeys", "NoDropsHotkey", new KeyboardShortcut(KeyCode.Alpha0),
+                "Toggles drops off entirely for trees, rocks, world destructibles and creature kills, for clearing ground without filling your inventory with wood, stone and whatever attacked you while you worked. Overrides CustomResourceRate while it is on. Bosses still drop everything, since their trophies and summoning items are not replaceable. Pieces you built still drop their materials, and container loot, pickables and fishing are unaffected. Starts off each time the game launches, and is suspended in a shared session since the drops would be somebody else's.");
             FlyToggleHotkey = Config.Bind("Hotkeys", "FlyToggleHotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftShift),
                 "Toggles the same free-flight the console 'fly' command gives, without opening the console. "
                 + "Vanilla reaches this through a cheat command, but the method behind it carries no such check, so this needs neither devcommands nor the console - which also means it does not mark the character as having used cheats. "
@@ -566,6 +582,11 @@ namespace ValheimMod
                 ToggleDebugFlight();
             }
 
+            if (HotkeyDown(NoDropsHotkey))
+            {
+                ToggleNoDrops();
+            }
+
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
@@ -578,7 +599,7 @@ namespace ValheimMod
             UpdateWatchedPins();
             UpdatePassiveForsakenPowers();
             UpdatePassiveWisplight();
-            UpdateHoeLevelRadius();
+            UpdateScrollRadius();
             ApplyCameraDistance();
         }
 
@@ -1406,9 +1427,12 @@ namespace ValheimMod
             int nearby = DumpNearbyObjects(dir);
             int terrainOps = DumpTerrainOps(dir);
             int mapPins = DumpMapPins(dir);
+            int spawnEntries = DumpSpawnEntries(dir);
+            int effectAreas = DumpEffectAreas(dir);
 
             Debug.Log($"Dumped {rows.Count - skipped} items ({skipped} filtered out, {eligible.Count} auto-pickup), "
-                + $"{locations} locations, {prefabs} prefabs, {terrainOps} terrain ops, {mapPins} map pins and {nearby} nearby objects to {dir}");
+                + $"{locations} locations, {prefabs} prefabs, {terrainOps} terrain ops, {mapPins} map pins, "
+                + $"{spawnEntries} spawn entries, {effectAreas} effect areas and {nearby} nearby objects to {dir}");
             _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
                 $"Dumped {rows.Count} items, {locations} locations, {prefabs} prefabs, {nearby} nearby to BepInEx/config");
         }
@@ -3333,6 +3357,25 @@ namespace ValheimMod
         //
         // Both fields are scaled so an upgraded station keeps its proportions. Start runs once per
         // placed station, so this cannot compound.
+        //
+        // Scaling the fields is not enough on its own, because nothing refreshes the collider on a
+        // schedule. CustomUpdate only advances m_updateExtensionTimer; the resize happens inside
+        // GetExtensions, which is reached solely from HaveBuildStationInRange (the build HUD and
+        // placement checks, so only with a hammer out), GetLevel/GetExtentionCount from the
+        // crafting panel, and PokeInUse. So a freshly loaded station keeps the radius its prefab
+        // was authored with until the player happens to build or craft.
+        //
+        // In vanilla that is harmless - the authored collider already matches the authored range,
+        // so the refresh is a no-op. Scaling m_rangeBuild is what pulls the two apart, and the
+        // collider is the one that matters beyond building: EffectArea.Type.PlayerBase is what
+        // stops creatures spawning, SpawnSystem tests it every second from ten seconds after a zone
+        // loads, and the test is a live Physics.OverlapSphere against this collider rather than a
+        // comparison with any stored range. Left unsynced, a base relying on the widened radius is
+        // only covered to vanilla size for the first stretch after every arrival.
+        //
+        // So the range is pushed into the collider here as well. Extensions are not attached yet at
+        // Start, which is fine - this is the base range, and GetExtensions adds the per-level part
+        // the first time anything queries the station.
         [HarmonyPatch(typeof(CraftingStation), nameof(CraftingStation.Start))]
         class CraftingStation_Start_Patch
         {
@@ -3343,6 +3386,23 @@ namespace ValheimMod
                 {
                     __instance.m_rangeBuild *= multiplier;
                     __instance.m_extraRangePerLevel *= multiplier;
+
+                    // m_buildRange is deliberately left alone - it is non-public in the shipped
+                    // assembly, and writing it would buy nothing: its only reader is
+                    // GetStationBuildRange, which recomputes it through GetExtensions first.
+                    // The collider is the part that has to be right before then.
+                    float range = __instance.m_rangeBuild;
+
+                    // Same two shapes vanilla handles, and no fallback for anything else: a
+                    // collider type GetExtensions would not resize either is not ours to guess at
+                    if (__instance.m_effectAreaCollider is SphereCollider sphere)
+                    {
+                        sphere.radius = range;
+                    }
+                    else if (__instance.m_effectAreaCollider is CapsuleCollider capsule)
+                    {
+                        capsule.radius = range;
+                    }
                 }
             }
         }
@@ -7025,6 +7085,610 @@ namespace ValheimMod
             }
         }
 
+        // ---------------- Wards as no-spawn areas ----------------
+        // Two different things get called a ward's radius and only one of them matters here.
+        //
+        // PrivateArea.m_radius - the one the hover text and the projected circle show - governs who
+        // may build and what may be damaged. No spawn system reads it; grep SpawnSystem, SpawnArea
+        // and CreatureSpawner for PrivateArea and the result is empty. Scaling it would widen build
+        // protection and nothing else.
+        //
+        // What suppresses a spawn is an EffectArea carrying the PlayerBase flag, on a collider on
+        // the character_trigger layer. That lives on the prefab as Unity asset data, invisible to
+        // the decompiled source, which is why this is written to find out at runtime rather than to
+        // assume: it resizes the area the ward already has, and only builds one if there is none.
+        // The one-shot log line says which happened, so the assumption is never load-bearing.
+        //
+        // The whole blast radius of that flag is three call sites: SpawnSystem.IsSpawnPointGood,
+        // CreatureSpawner (its m_spawnInPlayerBase check) and ItemDrop.IsInsideBase, which keeps
+        // dropped items from timing out indoors. The first two are the point; the third is a small
+        // bonus and no kind of hazard.
+        private static bool _wardAreaReported;
+
+        /// <summary>
+        /// Points an existing PlayerBase effect area at a new radius, or builds one if the prefab
+        /// carries none. Returns a description of what it did, for the one-shot log.
+        /// </summary>
+        private static string SetPlayerBaseRadius(GameObject host, float radius)
+        {
+            var resized = new List<string>();
+            foreach (EffectArea existing in host.GetComponentsInChildren<EffectArea>(includeInactive: true))
+            {
+                if (existing == null || (existing.m_type & EffectArea.Type.PlayerBase) == EffectArea.Type.None)
+                {
+                    continue;
+                }
+                // Not EffectArea.GetRadius(), and not m_collider either. Both read a field that
+                // Awake fills in, and component Awake order within one Instantiate is not ours to
+                // rely on: a child whose Awake has not run yet still has null there, and GetRadius
+                // dereferences it unconditionally in its fallback branch. That threw an NRE per
+                // ward, out through Instantiate and into ZNetScene.CreateObject.
+                Collider collider = existing.GetComponent<Collider>();
+
+                // The same two shapes CraftingStation handles, and no fallback: a collider neither
+                // branch fits is not one to guess the right dimension for.
+                //
+                // Note this scales PlayerBase only even when the area is flagged NoMonsters too.
+                // Those bounds were cached in EffectArea.Awake and are not re-read, so the monster
+                // herding stays at its authored size while the spawn suppression grows. That split
+                // is wanted here - a preserve should stop spawns without shoving tame animals out.
+                if (collider is SphereCollider sphere)
+                {
+                    resized.Add($"{existing.name} sphere {sphere.radius:0.#}m -> {radius:0.#}m");
+                    sphere.radius = radius;
+                }
+                else if (collider is CapsuleCollider capsule)
+                {
+                    resized.Add($"{existing.name} capsule {capsule.radius:0.#}m -> {radius:0.#}m");
+                    capsule.radius = radius;
+                }
+                else
+                {
+                    resized.Add($"{existing.name} has a "
+                        + $"{(collider != null ? collider.GetType().Name : "missing")} collider - left alone");
+                }
+            }
+            // Every match rather than the first: with Awake order unknown and inactive children in
+            // the list, choosing one would be choosing blind, and a prefab carrying two PlayerBase
+            // areas wants both moved anyway.
+            if (resized.Count > 0)
+            {
+                return "resized the prefab's own PlayerBase area - " + string.Join("; ", resized.ToArray());
+            }
+
+            // Nothing there, so build one. Its own child object on its own layer rather than
+            // components on the ward itself: EffectArea claims the collider GetComponent finds and
+            // forces isTrigger on it, which on the ward's body would stop it being solid.
+            var areaObject = new GameObject("PipModNoSpawnArea");
+            areaObject.layer = LayerMask.NameToLayer("character_trigger");
+            areaObject.transform.SetParent(host.transform, worldPositionStays: false);
+            areaObject.transform.localPosition = Vector3.zero;
+            areaObject.transform.localScale = Vector3.one;
+
+            // Collider first: EffectArea.Awake runs the moment the component is added and claims
+            // whatever collider is already on the object
+            SphereCollider added = areaObject.AddComponent<SphereCollider>();
+            added.radius = radius;
+            added.isTrigger = true;
+
+            // PlayerBase alone, NoMonsters deliberately left out, for the reason given above
+            EffectArea area = areaObject.AddComponent<EffectArea>();
+            area.m_type = EffectArea.Type.PlayerBase;
+            return $"found no PlayerBase area on the prefab, so added one at {radius:0.#}m";
+        }
+
+        [HarmonyPatch(typeof(PrivateArea), "Awake")]
+        class PrivateArea_Awake_NoSpawnPatch
+        {
+            static void Postfix(PrivateArea __instance, ZNetView ___m_nview)
+            {
+                float radius = WardSpawnBlockRadius.Value;
+                if (radius <= 0f || __instance == null)
+                {
+                    return;
+                }
+                // The build placement ghost runs Awake with an invalid ZNetView. Without this the
+                // ghost would carry a no-spawn sphere around on the cursor, and EffectArea.Awake
+                // would have registered it in the global area list to boot.
+                if (___m_nview == null || !___m_nview.IsValid())
+                {
+                    return;
+                }
+                // Dvergr and Fuling camps use PrivateArea too, with their own faction. Handing
+                // those an 80m no-spawn bubble would quietly defuse their camps.
+                if (__instance.m_ownerFaction != Character.Faction.Players)
+                {
+                    return;
+                }
+                // Caught rather than allowed to propagate: this runs inside PrivateArea.Awake,
+                // which runs inside Instantiate, which runs inside ZNetScene.CreateObject's loop
+                // over the objects a zone is bringing in. An exception here does not just lose the
+                // ward's area, it unwinds out through that loop.
+                try
+                {
+                    string what = SetPlayerBaseRadius(__instance.gameObject, radius);
+                    if (!_wardAreaReported)
+                    {
+                        _wardAreaReported = true;
+                        Debug.Log($"Ward no-spawn area ({__instance.gameObject.name}): {what}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    // Once, not per ward, or a broken assumption buries the log
+                    if (!_wardAreaReported)
+                    {
+                        _wardAreaReported = true;
+                        Debug.LogError($"Ward no-spawn area failed on {__instance.gameObject.name}: {e}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Every loaded effect area with the PlayerBase flag, nearest first, with the radius each
+        /// one actually ended up with. This is the coverage map: a gap in it is a place something
+        /// can spawn, and the radius column is the only honest way to confirm a scaled station or a
+        /// ward is projecting what it was meant to rather than its authored size.
+        /// </summary>
+        private static int DumpEffectAreas(string dir)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                return 0;
+            }
+            Vector3 origin = player.transform.position;
+            var rows = new List<KeyValuePair<float, string>>();
+            foreach (EffectArea area in EffectArea.GetAllAreas())
+            {
+                if (area == null || (area.m_type & EffectArea.Type.PlayerBase) == EffectArea.Type.None)
+                {
+                    continue;
+                }
+                Transform root = area.transform.root;
+                string name = root != null ? root.name : area.name;
+                Vector3 position = area.transform.position;
+                float radius = area.GetRadius();
+                float distance = Vector3.Distance(origin, position);
+                // The area's own object name as well as its root, because that is what separates an
+                // area the prefab shipped with from one this mod built - PipModNoSpawnArea
+                rows.Add(new KeyValuePair<float, string>(distance,
+                    $"{name}\t{area.name}\t{area.m_type}\t{radius:0.#}\t{position.x:0.#}\t{position.z:0.#}\t{position.y:0.#}"
+                        + $"\t{distance:0.#}\t{distance - radius:0.#}"));
+            }
+            var table = new StringBuilder();
+            table.AppendLine("Root\tAreaObject\tType\tRadius\tX\tZ\tY\tDistanceFromYou\tYourDistanceBeyondEdge");
+            foreach (var row in rows.OrderBy(r => r.Key))
+            {
+                table.AppendLine(row.Value);
+            }
+            string areaPath = Path.Combine(dir, $"PipsMod_EffectAreas{PositionSuffix(origin)}.tsv");
+            File.WriteAllText(areaPath, table.ToString());
+            Debug.Log($"Effect areas -> {Path.GetFileName(areaPath)}");
+            return rows.Count;
+        }
+
+        // ---------------- Spawn diagnostics ----------------
+        // Why a hostile turned up inside what looked like full workbench coverage has exactly two
+        // possible answers, and after the fact they are indistinguishable. SpawnSystem's gate is
+        //
+        //     if (!spawn.m_insidePlayerBase && EffectArea.IsPointInsideArea(spawnPoint, PlayerBase))
+        //         return false;
+        //
+        // so either that entry is exempt by its own flag, or the point it used was genuinely outside
+        // every station's sphere. Nothing else gets past it - the gate is tested on every candidate
+        // point, including each member of a group spawn.
+        //
+        // The point it tests is the GROUND point. GetGroundData snaps spawnPoint.y to a terrain
+        // raycast, and m_groundOffset - the altitude that puts a deathsquito in the air rather than
+        // standing on the dirt - is added afterwards, at the Spawn call. So height never enters into
+        // it: a flyer is judged by the ground, or the seabed, underneath it. Which also means
+        // FindBaseSpawnPoint's 40-80m ring around the player reaches out to sea from anywhere on a
+        // small island, and the seabed out there is under nobody's workbench.
+        //
+        // Logged from Spawn rather than from the gate because the gate runs up to twenty times per
+        // attempt and nearly always refuses; one line per creature that actually appeared is
+        // something a person can read.
+        private static readonly FieldInfo SpawnSystemInstancesField =
+            AccessTools.Field(typeof(SpawnSystem), "m_instances");
+
+        /// <summary>
+        /// Signed distance from a point to the nearest PlayerBase effect area - negative inside,
+        /// positive outside. Names the piece too, because "32m short of coverage" is only actionable
+        /// once you know which workbench to walk over to.
+        /// </summary>
+        private static float NearestPlayerBaseEdge(Vector3 point, out string areaName, out float areaRadius)
+        {
+            areaName = null;
+            areaRadius = 0f;
+            float best = float.MaxValue;
+            foreach (EffectArea area in EffectArea.GetAllAreas())
+            {
+                if (area == null || (area.m_type & EffectArea.Type.PlayerBase) == EffectArea.Type.None)
+                {
+                    continue;
+                }
+                float radius = area.GetRadius();
+                float edge = Vector3.Distance(area.transform.position, point) - radius;
+                if (edge < best)
+                {
+                    best = edge;
+                    Transform root = area.transform.root;
+                    areaName = root != null ? root.name : area.name;
+                    areaRadius = radius;
+                }
+            }
+            return best;
+        }
+
+        [HarmonyPatch(typeof(SpawnSystem), "Spawn")]
+        class SpawnSystem_Spawn_DiagnosticsPatch
+        {
+            static void Postfix(SpawnSystem.SpawnData critter, Vector3 spawnPoint)
+            {
+                // m_nospawn makes Spawn a no-op and a postfix still runs, so reporting a creature
+                // that was never instantiated would be the one way this log could lie
+                if (!SpawnDiagnostics.Value || critter == null || critter.m_prefab == null || SpawnSystem.m_nospawn)
+                {
+                    return;
+                }
+
+                // Re-raycast rather than subtracting m_groundOffset back off: the offset carries a
+                // random component, so the arithmetic would be close but never exactly the point the
+                // gate judged. This is the same call the gate made, at the same XZ.
+                Vector3 ground = spawnPoint;
+                string biome = "unknown";
+                string oceanDepth = "n/a";
+                ZoneSystem zones = ZoneSystem.instance;
+                if (zones != null)
+                {
+                    zones.GetGroundData(ref ground, out Vector3 _, out Heightmap.Biome groundBiome,
+                        out Heightmap.BiomeArea _, out Heightmap hmap);
+                    biome = groundBiome.ToString();
+                    if (hmap != null)
+                    {
+                        oceanDepth = hmap.GetOceanDepth(ground).ToString("0.#");
+                    }
+                }
+
+                EffectArea inside = EffectArea.IsPointInsideArea(ground, EffectArea.Type.PlayerBase);
+                float edge = NearestPlayerBaseEdge(ground, out string nearestName, out float nearestRadius);
+                string coverage = nearestName == null
+                    ? "no player base loaded"
+                    : $"nearest base {nearestName} (radius {nearestRadius:0.#}) "
+                        + (edge >= 0f ? $"{edge:0.#}m beyond its edge" : $"{-edge:0.#}m inside it");
+
+                Player player = Player.m_localPlayer;
+                string fromPlayer = player != null
+                    ? $"{Vector3.Distance(player.transform.position, spawnPoint):0}m from you"
+                    : "no local player";
+
+                // Altitude the way the spawn gate measures it: world y minus the 30m water line, so
+                // a negative number means the ground point it used is under water
+                Debug.Log($"Spawn {critter.m_prefab.name} at X {spawnPoint.x:0} Z {spawnPoint.z:0}"
+                    + $" | ground y {ground.y:0.#}, altitude {ground.y - 30f:0.#}, ocean depth {oceanDepth}, biome {biome}"
+                    + $" | exempt from player base: {critter.m_insidePlayerBase}"
+                    + $" | player base at that point: {(inside != null ? "YES" : "no")}"
+                    + $" | {coverage}"
+                    + $" | ground offset {critter.m_groundOffset:0.#}+{critter.m_groundOffsetRandom:0.#}"
+                    + $" | {fromPlayer}");
+            }
+        }
+
+        /// <summary>
+        /// Every spawn entry the zone the player is standing in can draw from. These live in Unity
+        /// asset data, not in the managed assemblies, so there is no way to read them short of asking
+        /// the running game - and they are where the answer to "why that creature and not the others"
+        /// is written: which entries are exempt from player bases, and which have a minimum altitude
+        /// low enough to use an offshore seabed as their ground point.
+        /// </summary>
+        /// <summary>
+        /// Stamps a dump filename with the position it was taken from. Both of these dumps only
+        /// see what is loaded, so surveying a large base means several presses from different
+        /// spots - and a fixed filename makes each press destroy the last one's evidence.
+        /// </summary>
+        private static string PositionSuffix(Vector3 position)
+        {
+            return $"_X{Mathf.RoundToInt(position.x)}_Z{Mathf.RoundToInt(position.z)}";
+        }
+
+        private static int DumpSpawnEntries(string dir)
+        {
+            Player player = Player.m_localPlayer;
+            var instances = SpawnSystemInstancesField?.GetValue(null) as List<SpawnSystem>;
+            if (player == null || instances == null)
+            {
+                return 0;
+            }
+
+            SpawnSystem nearest = null;
+            float bestDistance = float.MaxValue;
+            foreach (SpawnSystem system in instances)
+            {
+                if (system == null)
+                {
+                    continue;
+                }
+                float distance = Vector3.Distance(system.transform.position, player.transform.position);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    nearest = system;
+                }
+            }
+            if (nearest == null)
+            {
+                return 0;
+            }
+
+            // The zone's own heightmap, which is what HaveBiome is asked about before an entry is
+            // even considered. Reached through FindHeightmap because SpawnSystem.m_heightmap is
+            // non-public in the shipped assembly.
+            Heightmap here = Heightmap.FindHeightmap(nearest.transform.position);
+
+            var table = new StringBuilder();
+            table.AppendLine("Source\tName\tPrefab\tBiome\tBiomeHere\tEnabled\tChance\tInterval\tMaxSpawned"
+                + "\tNight\tDay\tExemptFromPlayerBase\tCanSpawnCloseToPlayer\tMinAlt\tMaxAlt\tMinTilt\tMaxTilt"
+                + "\tGroundOffset\tGroundOffsetRandom\tMinOceanDepth\tMaxOceanDepth\tInForest\tOutsideForest"
+                + "\tInLava\tOutsideLava\tRadiusMin\tRadiusMax\tSpawnDistance\tGroupMin\tGroupMax\tHunt"
+                + "\tMinLevel\tMaxLevel\tRequiredKey\tRequiredEvent\tRequiredEnvironments");
+
+            int count = 0;
+            foreach (SpawnSystemList list in nearest.m_spawnLists)
+            {
+                if (list != null)
+                {
+                    count += AppendSpawnRows(table, list.name, list.m_spawners, here);
+                }
+            }
+            if (here != null)
+            {
+                foreach (AltBiome alt in here.m_cornerAltBiomes)
+                {
+                    if (alt != null && alt.m_spawn.Count > 0)
+                    {
+                        count += AppendSpawnRows(table, "alt:" + alt.m_name, alt.m_spawn, here);
+                    }
+                }
+            }
+            // Event spawners only exist while an event is running, so this is usually empty - and
+            // when it is not, that is itself the answer to where something came from
+            var eventSpawners = RandEventSystem.instance?.GetCurrentSpawners();
+            if (eventSpawners != null)
+            {
+                count += AppendSpawnRows(table, "event", eventSpawners, here);
+            }
+
+            string spawnPath = Path.Combine(dir,
+                $"PipsMod_SpawnEntries{PositionSuffix(player.transform.position)}.tsv");
+            File.WriteAllText(spawnPath, table.ToString());
+            Debug.Log($"Spawn entries -> {Path.GetFileName(spawnPath)}");
+            return count;
+        }
+
+        private static int AppendSpawnRows(StringBuilder table, string source,
+            List<SpawnSystem.SpawnData> spawners, Heightmap here)
+        {
+            int count = 0;
+            foreach (SpawnSystem.SpawnData spawn in spawners)
+            {
+                if (spawn == null || spawn.m_prefab == null)
+                {
+                    continue;
+                }
+                table.AppendLine($"{source}\t{spawn.m_name}\t{spawn.m_prefab.name}\t{spawn.m_biome}"
+                    + $"\t{(here != null ? here.HaveBiome(spawn.m_biome).ToString() : "unknown")}"
+                    + $"\t{spawn.m_enabled && !spawn.m_devDisabled}\t{spawn.m_spawnChance:0.#}\t{spawn.m_spawnInterval:0.#}\t{spawn.m_maxSpawned}"
+                    + $"\t{spawn.m_spawnAtNight}\t{spawn.m_spawnAtDay}\t{spawn.m_insidePlayerBase}\t{spawn.m_canSpawnCloseToPlayer}"
+                    + $"\t{spawn.m_minAltitude:0.#}\t{spawn.m_maxAltitude:0.#}\t{spawn.m_minTilt:0.#}\t{spawn.m_maxTilt:0.#}"
+                    + $"\t{spawn.m_groundOffset:0.#}\t{spawn.m_groundOffsetRandom:0.#}\t{spawn.m_minOceanDepth:0.#}\t{spawn.m_maxOceanDepth:0.#}"
+                    + $"\t{spawn.m_inForest}\t{spawn.m_outsideForest}\t{spawn.m_inLava}\t{spawn.m_outsideLava}"
+                    + $"\t{spawn.m_spawnRadiusMin:0.#}\t{spawn.m_spawnRadiusMax:0.#}\t{spawn.m_spawnDistance:0.#}"
+                    + $"\t{spawn.m_groupSizeMin}\t{spawn.m_groupSizeMax}\t{spawn.m_huntPlayer}"
+                    + $"\t{spawn.m_minLevel}\t{spawn.m_maxLevel}\t{spawn.m_requiredGlobalKey}\t{spawn.m_requiredPersistentEvent}"
+                    + $"\t{string.Join(",", spawn.m_requiredEnvironments.ToArray())}");
+                count++;
+            }
+            return count;
+        }
+
+        // ---------------- No-drops toggle ----------------
+        // Not done by setting Game.m_resourceRate to 0, which looks like the obvious lever and is
+        // not one: every path that reads it floors the result at one item -
+        //
+        //     amount = (int)Mathf.Clamp(Mathf.Round(amount * m_resourceRate), 1f, maxStack);
+        //
+        // so a rate of zero still drops one of everything. The drops have to be suppressed where
+        // they are generated instead.
+        //
+        // DropTable.GetDropList is the single funnel for every destruction drop in the game, but it
+        // is emphatically not only that: Container fills a chest from a drop table, and LootSpawner
+        // stamps its ZDO with the spawn time whether or not anything came out - so a blanket patch
+        // there would quietly empty an unopened crypt chest and burn a loot spawner's timer with
+        // nothing to show for it. Permanently, in both cases.
+        //
+        // So the destruction call sites arm it and the rest do not, the same "identify the owner one
+        // level up" shape the perfect-levelling patch uses for SmoothTerrain. A depth counter rather
+        // than a bool, because one destruction can cascade into another and a bool would be cleared
+        // by the inner finalizer while the outer call was still running.
+        //
+        // Suspended in a shared session, and this one matters: these RPCs run on whoever owns the
+        // object's ZDO, which can be this client while somebody else is swinging the axe. Their wood.
+        private static bool _noDropsEnabled;
+        private static int _destructionDropDepth;
+
+        private static bool NoDropsActive => _noDropsEnabled && !IsSharedSession();
+
+        private static void ToggleNoDrops()
+        {
+            _noDropsEnabled = !_noDropsEnabled;
+            string message;
+            if (!_noDropsEnabled)
+            {
+                message = "Drops ON";
+            }
+            else if (IsSharedSession())
+            {
+                // Toggling something on and having it silently do nothing is worth a word
+                message = "No drops ON - but suspended while anyone else is in the world";
+            }
+            else
+            {
+                message = "No drops ON - trees, rocks, destructibles and kills leave nothing behind";
+            }
+            Debug.Log(message);
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
+        }
+
+        [HarmonyPatch(typeof(DropTable), nameof(DropTable.GetDropList), new[] { typeof(int) })]
+        class DropTable_GetDropList_NoDropsPatch
+        {
+            // The parameterless overload delegates to this one, so patching it covers both
+            static void Postfix(List<GameObject> __result)
+            {
+                if (_destructionDropDepth > 0 && NoDropsActive)
+                {
+                    __result?.Clear();
+                }
+            }
+        }
+
+        // Trees: the canopy drops here, and the trunk it leaves behind drops its wood from
+        // TreeLog.Destroy, so both are needed to make a felled tree leave nothing.
+        [HarmonyPatch(typeof(TreeBase), nameof(TreeBase.RPC_Damage))]
+        class TreeBase_RPC_Damage_NoDropsPatch
+        {
+            static void Prefix() => _destructionDropDepth++;
+
+            // Finalizers throughout: an exception midway through a destruction must not leave the
+            // counter raised, which would suppress every unrelated drop for the rest of the session
+            static void Finalizer() => _destructionDropDepth--;
+        }
+
+        [HarmonyPatch(typeof(TreeLog), nameof(TreeLog.Destroy))]
+        class TreeLog_Destroy_NoDropsPatch
+        {
+            static void Prefix() => _destructionDropDepth++;
+
+            static void Finalizer() => _destructionDropDepth--;
+        }
+
+        [HarmonyPatch(typeof(MineRock), nameof(MineRock.RPC_Hit))]
+        class MineRock_RPC_Hit_NoDropsPatch
+        {
+            static void Prefix() => _destructionDropDepth++;
+
+            static void Finalizer() => _destructionDropDepth--;
+        }
+
+        [HarmonyPatch(typeof(MineRock5), nameof(MineRock5.DamageArea))]
+        class MineRock5_DamageArea_NoDropsPatch
+        {
+            static void Prefix() => _destructionDropDepth++;
+
+            static void Finalizer() => _destructionDropDepth--;
+        }
+
+        // Creatures do not use a DropTable at all - CharacterDrop keeps its own list - so they need
+        // separate hooks, and there are two of them because a creature's loot takes one of two
+        // routes depending on whether it leaves a corpse:
+        //
+        //     Character.OnDeath -> m_deathEffects -> Ragdoll.Setup -> SaveLootList   (has a ragdoll)
+        //     Character.OnDeath -> m_onDeath      -> CharacterDrop.OnDeath           (does not)
+        //
+        // and they are mutually exclusive by design: Character.OnDeath calls
+        // SetDropsEnabled(false) on the CharacterDrop as soon as it hands a ragdoll the loot, so
+        // the m_onDeath path that runs moments later finds m_dropsEnabled already false. Patching
+        // only CharacterDrop.OnDeath therefore covers just the minority of creatures that vanish
+        // without a corpse - which is exactly the "destructibles work, mobs do not" split.
+        //
+        // The ragdoll route also explains why the loot is not where the kill was: SaveLootList
+        // writes the rolled drops into the ragdoll's own ZDO, and SpawnLoot pays them out later,
+        // wherever the body came to rest. Suppressing at SaveLootList means nothing is written in
+        // the first place, so there is nothing for SpawnLoot to find.
+        //
+        // Both hooks sit ahead of GenerateDropList rather than filtering what it returns. That
+        // matters: it also advances the pseudo-random counter that gives low-chance drops their
+        // bad-luck protection, keyed per prefab in s_pseudoCounter. Letting it run and discarding
+        // the result would spend accumulated pity on a kill that dropped nothing. It also means the
+        // first-trophy guarantee, which postfixes GenerateDropList, does not fire for a suppressed
+        // kill instead of marking a trophy granted while the drop is thrown away.
+        private static bool _noDropsCreatureLogged;
+
+        private static bool CreatureDropsSuppressed(CharacterDrop drop, string route)
+        {
+            if (!NoDropsActive || drop == null)
+            {
+                return false;
+            }
+            // RequireComponent(typeof(Character)) puts the character on the same object, and asking
+            // for it this way avoids CharacterDrop.m_character - non-public in the shipped assembly,
+            // and not assigned until Start has run
+            Character character = drop.GetComponent<Character>();
+
+            // The one exception. A boss trophy is a one-per-kill item needed to summon the next
+            // boss, and the altar offerings are not farmable - losing those to a toggle left on is
+            // a different order of mistake from losing a stack of wood.
+            if (character != null && character.IsBoss())
+            {
+                return false;
+            }
+            // Once per session, naming the route that actually fired. The first attempt at this
+            // hooked the path that almost never runs, and a silent miss looks identical to a
+            // feature that is working.
+            if (!_noDropsCreatureLogged)
+            {
+                _noDropsCreatureLogged = true;
+                Debug.Log($"No drops: suppressed creature loot via {route} "
+                    + $"({(character != null ? character.name : "unknown")})");
+            }
+            return true;
+        }
+
+        [HarmonyPatch(typeof(Ragdoll), "SaveLootList")]
+        class Ragdoll_SaveLootList_NoDropsPatch
+        {
+            static bool Prefix(CharacterDrop characterDrop)
+            {
+                return !CreatureDropsSuppressed(characterDrop, "Ragdoll.SaveLootList");
+            }
+        }
+
+        [HarmonyPatch(typeof(CharacterDrop), nameof(CharacterDrop.OnDeath))]
+        class CharacterDrop_OnDeath_NoDropsPatch
+        {
+            static bool Prefix(CharacterDrop __instance)
+            {
+                return !CreatureDropsSuppressed(__instance, "CharacterDrop.OnDeath");
+            }
+        }
+
+        [HarmonyPatch(typeof(DropOnDestroyed), nameof(DropOnDestroyed.OnDestroyed))]
+        class DropOnDestroyed_OnDestroyed_NoDropsPatch
+        {
+            static void Prefix(DropOnDestroyed __instance, out bool __state)
+            {
+                // This component sits on player-built pieces as well as on world destructibles -
+                // DropOnDestroyed.Awake hooks WearNTear.m_onDestroyed as readily as Destructible's.
+                // A raid eating the materials out of your own walls is not what this toggle is for,
+                // so anything carrying a Piece keeps its drops.
+                __state = __instance != null && __instance.GetComponent<Piece>() == null;
+                if (__state)
+                {
+                    _destructionDropDepth++;
+                }
+            }
+
+            static void Finalizer(bool __state)
+            {
+                if (__state)
+                {
+                    _destructionDropDepth--;
+                }
+            }
+        }
+
         // ---------------- Destroy item from inventory ----------------
         // InventoryGui.OnSelectedItem is the single funnel every inventory left-click arrives at,
         // including the gamepad and touch paths, so one prefix covers them all.
@@ -7348,10 +8012,45 @@ namespace ValheimMod
         private static readonly FieldInfo PlacementGhostField =
             AccessTools.Field(typeof(Player), "m_placementGhost");
 
-        private static TerrainOp.Settings _hoeLevelSettings;
-        private static float _hoeLevelBaseRadius;
-        private static float _hoeLevelBasePaintRadius;
-        private static float _hoeLevelMultiplier = 1f;
+        /// <summary>
+        /// One of these per operation the wheel can resize, remembered for the session so switching
+        /// from Cultivate back to Level ground finds the size it was left at.
+        ///
+        /// Every radius is captured, not just the one that happens to matter for a given op, and
+        /// all of them are scaled together. Which radius does the work differs per operation -
+        /// Level ground works through smoothing, Cultivate and Plant grass through painting - and
+        /// scaling a radius whose flag is off costs nothing, since Settings.GetRadius only ever
+        /// looks at the enabled ones.
+        /// </summary>
+        private class ScrollableOp
+        {
+            public string Label;
+            public TerrainOp.Settings Settings;
+            public float BaseLevel;
+            public float BaseRaise;
+            public float BaseSmooth;
+            public float BasePaint;
+            public float Multiplier = 1f;
+
+            public void ApplyScale(float scale)
+            {
+                Settings.m_levelRadius = BaseLevel * scale;
+                Settings.m_raiseRadius = BaseRaise * scale;
+                Settings.m_smoothRadius = BaseSmooth * scale;
+                Settings.m_paintRadius = BasePaint * scale;
+            }
+        }
+
+        private static readonly Dictionary<string, ScrollableOp> _scrollableOps =
+            new Dictionary<string, ScrollableOp>(StringComparer.OrdinalIgnoreCase);
+        private static ScrollableOp _activeScrollOp;
+
+        // Separate from the active op on purpose. This one identifies the levelling operation for
+        // the perfect-flatten patch, and only ever holds the op named by HoeLevelOpPrefab - if it
+        // were simply "whatever is selected", cultivating would flatten the ground it smoothed.
+        // Sticky once found, because the operation is applied a frame or two after the click and
+        // the selection may already have moved on.
+        private static TerrainOp.Settings _perfectLevelSettings;
 
         // Raw wheel movement for the frame, captured by the patch below. Stored per frame rather
         // than accumulated because GameCamera alone calls the getter several times a frame.
@@ -7464,14 +8163,15 @@ namespace ValheimMod
         }
 
         /// <summary>
-        /// Resolves the selected levelling op. For TerrainOp the prefab's own Settings must be
+        /// Resolves the selected resizable op. For TerrainOp the prefab's own Settings must be
         /// edited, because the op serialises as a prefab hash and the receiver looks the settings
         /// back up - the ghost's copy is never consulted. TerrainModifier needs none of that: it is
         /// applied from the placed instance, so its radius is scaled per instance in Awake instead.
         /// </summary>
-        private static bool ResolveSelectedLevelOp(Player player, out bool isTerrainOp)
+        private static bool ResolveSelectedScrollOp(Player player, out bool isTerrainOp)
         {
             isTerrainOp = false;
+            _activeScrollOp = null;
             var ghost = PlacementGhostField?.GetValue(player) as GameObject;
             if (ghost == null)
             {
@@ -7497,8 +8197,7 @@ namespace ValheimMod
             // Not m_level. Every TerrainOp in the game has m_level false - the dump confirmed it
             // across all 28 - and the hoe levels through the smoothing pass instead. So the op is
             // identified by name.
-            if (op == null || op.m_settings == null
-                || !string.Equals(prefabName, HoeLevelOpPrefab.Value, StringComparison.OrdinalIgnoreCase))
+            if (op == null || op.m_settings == null || !IsScrollRadiusOp(prefabName))
             {
                 return false;
             }
@@ -7511,17 +8210,66 @@ namespace ValheimMod
                     + "return its prefab, so the radius cannot be changed for it.");
                 return false;
             }
-            if (!ReferenceEquals(_hoeLevelSettings, prefab.m_settings))
+            if (!_scrollableOps.TryGetValue(prefabName, out ScrollableOp state)
+                || !ReferenceEquals(state.Settings, prefab.m_settings))
             {
-                _hoeLevelSettings = prefab.m_settings;
-                // The smoothing radius is the working radius for this op, and the paint radius is
-                // scaled with it so the dirt patch keeps matching the ground that moved. Captured
-                // before anything is scaled so these stay the vanilla sizes.
-                _hoeLevelBaseRadius = prefab.m_settings.m_smoothRadius;
-                _hoeLevelBasePaintRadius = prefab.m_settings.m_paintRadius;
+                // Captured before anything is scaled, so these stay the vanilla sizes and a
+                // multiplier can never compound against a value this code already changed
+                state = new ScrollableOp
+                {
+                    Label = DescribePiece(),
+                    Settings = prefab.m_settings,
+                    BaseLevel = prefab.m_settings.m_levelRadius,
+                    BaseRaise = prefab.m_settings.m_raiseRadius,
+                    BaseSmooth = prefab.m_settings.m_smoothRadius,
+                    BasePaint = prefab.m_settings.m_paintRadius,
+                };
+                _scrollableOps[prefabName] = state;
+                Debug.Log($"Scroll radius armed for '{prefabName}' ({state.Label}): "
+                    + $"level={state.BaseLevel:0.##} raise={state.BaseRaise:0.##} "
+                    + $"smooth={state.BaseSmooth:0.##} paint={state.BasePaint:0.##}");
+            }
+            _activeScrollOp = state;
+
+            if (string.Equals(prefabName, HoeLevelOpPrefab.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                _perfectLevelSettings = prefab.m_settings;
             }
             isTerrainOp = true;
             return true;
+        }
+
+        private static bool IsScrollRadiusOp(string prefabName)
+        {
+            string list = ScrollRadiusOps.Value;
+            if (string.IsNullOrEmpty(prefabName) || string.IsNullOrWhiteSpace(list))
+            {
+                return false;
+            }
+            foreach (string entry in list.Split(','))
+            {
+                if (string.Equals(entry.Trim(), prefabName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Puts every op back to its authored size except the one passed in, so a size scrolled
+        /// onto Cultivate cannot leak into Level ground - or into an operation placed by something
+        /// other than the player, since these are the shared prefab settings.
+        /// </summary>
+        private static void RestoreScrollOps(ScrollableOp except)
+        {
+            foreach (ScrollableOp op in _scrollableOps.Values)
+            {
+                if (op.Settings != null && !ReferenceEquals(op, except))
+                {
+                    op.ApplyScale(1f);
+                }
+            }
         }
 
         private const float HoeRadiusSettleSeconds = 0.5f;
@@ -7529,7 +8277,7 @@ namespace ValheimMod
         private static bool _hoeRadiusMessagePending;
         private static bool _hoeWatcherAnnounced;
 
-        private static void UpdateHoeLevelRadius()
+        private static void UpdateScrollRadius()
         {
             Player player = Player.m_localPlayer;
             // One line, once, the first time this runs with a player in the world. Without it,
@@ -7542,17 +8290,13 @@ namespace ValheimMod
                     + $"ghostField={(PlacementGhostField != null ? "ok" : "MISSING")})");
             }
             bool active = player != null && HoeLevelScrollRadius.Value && !IsTypingText()
-                && ResolveSelectedLevelOp(player, out bool isTerrainOp);
+                && ResolveSelectedScrollOp(player, out bool isTerrainOp);
             if (!active)
             {
-                // Hand the wheel straight back, and restore any radius we scaled so a scaled value
-                // cannot leak into an operation placed some other way
+                // Hand the wheel straight back, and restore every radius we scaled so a scaled
+                // value cannot leak into an operation placed some other way
                 _hoeCaptureScroll = false;
-                if (_hoeLevelSettings != null && _hoeLevelBaseRadius > 0f)
-                {
-                    _hoeLevelSettings.m_smoothRadius = _hoeLevelBaseRadius;
-                    _hoeLevelSettings.m_paintRadius = _hoeLevelBasePaintRadius;
-                }
+                RestoreScrollOps(null);
                 return;
             }
 
@@ -7565,10 +8309,10 @@ namespace ValheimMod
             if (Mathf.Abs(scroll) > 0.001f)
             {
                 float max = Mathf.Max(1f, HoeLevelMaxRadiusMultiplier.Value);
-                float clamped = Mathf.Clamp(_hoeLevelMultiplier + (scroll > 0f ? 0.25f : -0.25f), 1f, max);
-                if (!Mathf.Approximately(clamped, _hoeLevelMultiplier))
+                float clamped = Mathf.Clamp(_activeScrollOp.Multiplier + (scroll > 0f ? 0.25f : -0.25f), 1f, max);
+                if (!Mathf.Approximately(clamped, _activeScrollOp.Multiplier))
                 {
-                    _hoeLevelMultiplier = clamped;
+                    _activeScrollOp.Multiplier = clamped;
                     // Only note that it changed. MessageHud holds each message for a minimum time
                     // and queues the rest, so one per notch meant spinning the wheel bought several
                     // seconds of backlog before the player could see where they had ended up.
@@ -7582,18 +8326,21 @@ namespace ValheimMod
             if (_hoeRadiusMessagePending && Time.realtimeSinceStartup >= _hoeRadiusSettledAt)
             {
                 _hoeRadiusMessagePending = false;
+                // The op's own radius, read back after scaling rather than computed here: which of
+                // the four radii is the working one is the op's business, and GetRadius answers it
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
-                    $"Level ground {_hoeLevelMultiplier:0.##}x ({_hoeLevelBaseRadius * _hoeLevelMultiplier:0.#}m)");
+                    $"{_activeScrollOp.Label} {_activeScrollOp.Multiplier:0.##}x "
+                    + $"({_activeScrollOp.Settings.GetRadius():0.#}m)");
             }
 
             // Only the TerrainOp path needs the prefab edited here; TerrainModifier is scaled per
             // instance in its own Awake. Suspended in a shared session either way, since the other
             // side resolves its own settings and the terrain would disagree.
-            if (_hoeLevelSettings != null && _hoeLevelBaseRadius > 0f)
+            if (_activeScrollOp.Settings != null)
             {
-                float scale = IsSharedSession() ? 1f : _hoeLevelMultiplier;
-                _hoeLevelSettings.m_smoothRadius = _hoeLevelBaseRadius * scale;
-                _hoeLevelSettings.m_paintRadius = _hoeLevelBasePaintRadius * scale;
+                float scale = IsSharedSession() ? 1f : _activeScrollOp.Multiplier;
+                _activeScrollOp.ApplyScale(scale);
+                RestoreScrollOps(_activeScrollOp);
                 UpdateGhostVisualScale(scale);
             }
         }
@@ -7687,7 +8434,7 @@ namespace ValheimMod
         {
             static void Prefix(TerrainOp.Settings modifier)
             {
-                _inHoeLevelOp = modifier != null && ReferenceEquals(modifier, _hoeLevelSettings);
+                _inHoeLevelOp = modifier != null && ReferenceEquals(modifier, _perfectLevelSettings);
             }
 
             // A finalizer, not a postfix: terrain work throwing partway through must not leave the
