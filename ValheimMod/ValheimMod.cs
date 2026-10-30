@@ -37,6 +37,7 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
         private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> NoDropsHotkey;
+        private static ConfigEntry<KeyboardShortcut> PetFoodHotkey;
         private static ConfigEntry<KeyboardShortcut> DestroyItemCombo;
         private static ConfigEntry<float> DestroyItemConfirmSeconds;
         private static ConfigEntry<float> AreaRepairRadius;
@@ -159,10 +160,13 @@ namespace ValheimMod
         private static ConfigEntry<bool> NegateEquipmentMovementPenalty;
         private static ConfigEntry<string> FavoriteFoodList;
         private static ConfigEntry<string> FavoriteAmmoList;
+        private static ConfigEntry<string> PetFoodList;
+        private static ConfigEntry<int> PetFoodCount;
 
         // Module variables
         private static List<string> _favoriteFoods;
         private static List<string> _favoriteAmmo;
+        private static List<string> _petFoods;
         private static MessageHud _messageHud;
 
         // Inventory row management is a shared resource: other mods patch Player.SetInventorySize
@@ -450,6 +454,8 @@ namespace ValheimMod
                 new AcceptableValueRange<float>(0f, 64f)));
             AreaRepairKey = Config.Bind("Build", "AreaRepairKey", KeyCode.LeftShift,
                 "Held while clicking with the repair tool to repair everything in range instead of only the piece under the cursor.");
+            PetFoodHotkey = Config.Bind("Hotkeys", "PetFoodHotkey", new KeyboardShortcut(KeyCode.Alpha9),
+                "Tops your inventory up to PetFoodCount of each PetFoods entry, for feeding tamed animals one food at a time. Each animal eats only some of these, so this stocks all of them and leaves the choosing to you - drop the right one near the right animal. Tops up rather than adds, so holding the key down or pressing it twice cannot flood the inventory.");
             NoDropsHotkey = Config.Bind("Hotkeys", "NoDropsHotkey", new KeyboardShortcut(KeyCode.Alpha0),
                 "Toggles drops off entirely for trees, rocks, world destructibles and creature kills, for clearing ground without filling your inventory with wood, stone and whatever attacked you while you worked. Overrides CustomResourceRate while it is on. Bosses still drop everything, since their trophies and summoning items are not replaceable. Pieces you built still drop their materials, and container loot, pickables and fishing are unaffected. Starts off each time the game launches, and is suspended in a shared session since the drops would be somebody else's.");
             FlyToggleHotkey = Config.Bind("Hotkeys", "FlyToggleHotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftShift),
@@ -476,6 +482,10 @@ namespace ValheimMod
 
             FavoriteFoodList = Config.Bind("Inventory", "FavoriteFoods", "MooseKebab,SealSoup,SmokedMooseMeat,Pancakes,OatmealLingonberryJam,OatMilk,OvenPancake,MeatballsMashedPoteitr,FishSoup", "Comma-separated list of foods to spawn");
             FavoriteAmmoList = Config.Bind("Inventory", "FavoriteAmmo", "ArrowCarapace,BoltCarapace", "Comma-separated list of ammo to replenish when repairing gear");
+            PetFoodList = Config.Bind("Inventory", "PetFoods", "Blueberries,DeerMeat,Cloudberry,Fiddleheadfern,Lingonberry",
+                "Comma-separated list of items the pet food hotkey drops on the ground in front of you. Names are prefab names, as the dump hotkey's item list spells them.");
+            PetFoodCount = Config.Bind("Inventory", "PetFoodCount", 50, new ConfigDescription(
+                "How many of each PetFoods entry to hold. The hotkey tops up to this number rather than adding to it, so pressing it with 30 left adds 20.", new AcceptableValueRange<int>(1, 500)));
 
             // After every Bind, since this reads the entries. Config.Reload swaps each ConfigEntry
             // value in place, but a cache parsed out of one of those strings has to be rebuilt to
@@ -585,6 +595,11 @@ namespace ValheimMod
             if (HotkeyDown(NoDropsHotkey))
             {
                 ToggleNoDrops();
+            }
+
+            if (HotkeyDown(PetFoodHotkey))
+            {
+                SpawnPetFood();
             }
 
             ApplyInventoryRows();
@@ -6057,6 +6072,103 @@ namespace ValheimMod
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
             _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
+            _petFoods = PetFoodList.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+        }
+
+        /// <summary>
+        /// Tops the inventory up to a target count of each pet food. Separate from the repair
+        /// hotkey's favourite foods, which are what the player eats: these are the raw items the
+        /// tamed animals eat, and each species accepts only some of them, so the point is to carry
+        /// the whole set and drop the right one by hand.
+        /// </summary>
+        private static void SpawnPetFood()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null || ZNetScene.instance == null)
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Pet food needs a loaded world");
+                return;
+            }
+
+            var inventory = (Inventory)m_inventoryField.GetValue(player);
+            int target = PetFoodCount.Value;
+            var added = new List<string>();
+            var missing = new List<string>();
+            var noRoom = new List<string>();
+
+            foreach (string name in _petFoods)
+            {
+                GameObject prefab = ZNetScene.instance.GetPrefab(name);
+                ItemDrop template = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+                if (template == null)
+                {
+                    missing.Add(name);
+                    continue;
+                }
+
+                // CountItems matches on the shared display token, not the prefab name, and spans
+                // every stack of it already carried
+                ItemDrop.ItemData.SharedData shared = template.m_itemData.m_shared;
+                int before = inventory.CountItems(shared.m_name);
+                int wanted = target - before;
+                if (wanted <= 0)
+                {
+                    continue;
+                }
+
+                // AddItem clamps its amount to a single stack, so a target above the item's own cap
+                // has to go in a stack at a time. DeerMeat caps at 20 where the berries cap at 50,
+                // which makes the same target cost a different number of slots per food. Read live,
+                // so a stack size multiplier is accounted for.
+                int cap = Mathf.Max(1, shared.m_maxStackSize);
+                int placed = 0;
+                while (placed < wanted)
+                {
+                    int chunk = Mathf.Min(wanted - placed, cap);
+                    if (!inventory.AddItem(prefab, chunk))
+                    {
+                        break;
+                    }
+                    placed += chunk;
+                }
+
+                // Re-count rather than trusting the loop. A failed AddItem still keeps whatever it
+                // managed to push into part-filled stacks before it ran out of slots, so its false
+                // does not mean nothing landed - only the inventory knows what actually arrived.
+                int gained = inventory.CountItems(shared.m_name) - before;
+                if (gained > 0)
+                {
+                    added.Add($"{name} +{gained}");
+                }
+                if (gained < wanted)
+                {
+                    noRoom.Add(name);
+                }
+            }
+
+            string message;
+            if (added.Count > 0)
+            {
+                message = "Pet food: " + string.Join(", ", added.ToArray());
+            }
+            else if (missing.Count == 0 && noRoom.Count == 0)
+            {
+                message = $"Pet food: already carrying {target} of each";
+            }
+            else
+            {
+                message = "Pet food: added nothing";
+            }
+            if (noRoom.Count > 0)
+            {
+                message += " - no room for all of " + string.Join(", ", noRoom.ToArray());
+            }
+            if (missing.Count > 0)
+            {
+                message += " - no prefab named " + string.Join(", ", missing.ToArray());
+            }
+            Debug.Log(message);
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
         }
 
         private static void ToggleHealthFloor()
