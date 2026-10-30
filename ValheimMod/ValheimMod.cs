@@ -492,6 +492,13 @@ namespace ValheimMod
             // match, so the same routine runs again on reload.
             RebuildDerivedConfig();
             Config.ConfigReloaded += (sender, args) => RebuildDerivedConfig();
+            // ConfigReloaded alone only covers our own reload hotkey. A config manager UI never
+            // reloads the file - it assigns ConfigEntry.Value, which raises SettingChanged and
+            // nothing else - so without this the string-derived caches would silently keep their
+            // startup contents while the config screen showed the new value. Unconditional rather
+            // than filtered to the five entries that feed a cache: the whole routine is a handful
+            // of string splits, and a filter is one more place to forget a future entry.
+            Config.SettingChanged += (sender, args) => RebuildDerivedConfig();
 
             Game.isModded = true;
 
