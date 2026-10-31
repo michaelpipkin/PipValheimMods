@@ -38,6 +38,7 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> NoDropsHotkey;
         private static ConfigEntry<KeyboardShortcut> PetFoodHotkey;
+        private static ConfigEntry<KeyboardShortcut> PinCleanupHotkey;
         private static ConfigEntry<KeyboardShortcut> DestroyItemCombo;
         private static ConfigEntry<float> DestroyItemConfirmSeconds;
         private static ConfigEntry<float> AreaRepairRadius;
@@ -62,6 +63,8 @@ namespace ValheimMod
         private static ConfigEntry<string> PinIncludeLocations;
         private static ConfigEntry<bool> AutoPinResources;
         private static ConfigEntry<bool> PinDiagnostics;
+        private static ConfigEntry<bool> PinCleanupApply;
+        private static ConfigEntry<string> PinCleanupSupersedes;
         private static ConfigEntry<bool> SpawnDiagnostics;
         private static ConfigEntry<float> WardSpawnBlockRadius;
         private static ConfigEntry<bool> AutoPinKeepIconFilter;
@@ -167,6 +170,8 @@ namespace ValheimMod
         private static List<string> _favoriteFoods;
         private static List<string> _favoriteAmmo;
         private static List<string> _petFoods;
+        private static Dictionary<string, string> _pinSupersedes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static MessageHud _messageHud;
 
         // Inventory row management is a shared resource: other mods patch Player.SetInventorySize
@@ -378,6 +383,12 @@ namespace ValheimMod
                 "Never pin anything whose location, generator or prefab name contains one of these comma separated fragments, case insensitive. "
                 + "The Ashlands are full of ruins that qualify as dungeons structurally but hold nothing worth walking back to, and they bury the useful pins. "
                 + "Checked before everything else, so an excluded name cannot be brought back by a rule elsewhere.");
+            PinCleanupApply = Config.Bind("Map", "PinCleanupApply", false,
+                "Let the pin cleanup hotkey actually delete the pins it finds, instead of only listing them. Pins live in the character profile, so back up the .fch file before turning this on.");
+            PinCleanupSupersedes = Config.Bind("Map", "PinCleanupSupersedes",
+                "The Hole=Winding Tunnels,Wood Village=Draugr Village,Meadows Village=Draugr Village,Wood Farm=Meadows Farm"
+                + ",Aesir Passage=$hud_pin_dnboss,Hildir Plains Fortress=$hud_pin_hildir3",
+                "Comma separated loser=winner pairs for the pin cleanup hotkey. A pin named on the left is removed only when one named on the right is already within DungeonPinMergeRadius of it, so a lone pin is never touched. Mostly names earlier versions of the mod produced for places it now names differently. The winner can also be one of the game's own pins, written as the raw token it stores - that covers a place the game pins itself under a name this mod took from a location's discover label, which is the one case the automatic check cannot recognise as ours.");
             PinIncludeLocations = Config.Bind("Map", "PinIncludeLocations", "CharredFortress,Mistlands_Excavation,Mistlands_Harbour,Mistlands_Lighthouse"
                 + ",Mistlands_GuardTower1_new,Mistlands_GuardTower2_new,Mistlands_GuardTower3_new",
                 "Also pin surface locations whose name contains one of these comma separated fragments, even though they have no interior and no dungeon generator. "
@@ -454,6 +465,8 @@ namespace ValheimMod
                 new AcceptableValueRange<float>(0f, 64f)));
             AreaRepairKey = Config.Bind("Build", "AreaRepairKey", KeyCode.LeftShift,
                 "Held while clicking with the repair tool to repair everything in range instead of only the piece under the cursor.");
+            PinCleanupHotkey = Config.Bind("Hotkeys", "PinCleanupHotkey", new KeyboardShortcut(KeyCode.Comma),
+                "Finds auto-pins that a better pin for the same place has superseded and writes them to a file in the BepInEx folder, next to LogOutput.log. Reports only until PinCleanupApply is on. Never removes a pin that has no replacement sitting next to it, and never removes one of the game's own.");
             PetFoodHotkey = Config.Bind("Hotkeys", "PetFoodHotkey", new KeyboardShortcut(KeyCode.Alpha9),
                 "Tops your inventory up to PetFoodCount of each PetFoods entry, for feeding tamed animals one food at a time. Each animal eats only some of these, so this stocks all of them and leaves the choosing to you - drop the right one near the right animal. Tops up rather than adds, so holding the key down or pressing it twice cannot flood the inventory.");
             NoDropsHotkey = Config.Bind("Hotkeys", "NoDropsHotkey", new KeyboardShortcut(KeyCode.Alpha0),
@@ -607,6 +620,11 @@ namespace ValheimMod
             if (HotkeyDown(PetFoodHotkey))
             {
                 SpawnPetFood();
+            }
+
+            if (HotkeyDown(PinCleanupHotkey))
+            {
+                CleanupDuplicatePins();
             }
 
             ApplyInventoryRows();
@@ -4319,6 +4337,23 @@ namespace ValheimMod
         }
 
         /// <summary>
+        /// The name of the dungeon generator a location carries, for naming the location the same
+        /// way the generator hook would.
+        ///
+        /// Deliberately the generator object's own name rather than transform.root.name, which is
+        /// what PinDungeon uses. The two are the same object for the generator the dungeon hook
+        /// sees, because that one is the root of its own interior; here the generator is a child of
+        /// the location prefab, so the root would be the location and the lookup would find
+        /// nothing. Whether the child is authored as "DG_Hole" is prefab data the decompiled source
+        /// cannot answer, so the pin log reports which step named each pin and settles it.
+        /// </summary>
+        private static string LocationGeneratorName(Location location)
+        {
+            DungeonGenerator generator = location != null ? location.m_generator : null;
+            return generator != null ? StripClone(generator.gameObject.name) : null;
+        }
+
+        /// <summary>
         /// The names a dungeon can be keyed by, most specific first. The generator prefab is shared
         /// between dungeon types - DG_Cave backs both Troll Caves and Frost Caves - so it is no use
         /// on its own for either naming or overriding. The surface location prefab (TrollCave,
@@ -4506,6 +4541,33 @@ namespace ValheimMod
                 reason += "; named from " + how;
                 return byGenerator;
             }
+            // Last resort before guessing: run the location table's fragments over the generator
+            // name too. Generators are named after the location family they build - DG_Cave is the
+            // exception, not the rule - so DG_MeadowsVillage carries the same MeadowsVillage
+            // fragment the location table is already keyed on.
+            //
+            // This is what makes the two hooks agree on a settlement. Whichever of them resolved a
+            // Location wins the key, because DungeonLocationKey prefers it, and the two keys can
+            // disagree: the generator hook never found a Location and keyed on DG_MeadowsVillage,
+            // matching the fragment and reading "Draugr Village", while the location hook keyed on
+            // WoodVillage1, which the table has never heard of, and prettified it to "Wood
+            // Village". Same place, same generator, two pins. Reaching the generator name from
+            // both sides closes that without a table entry per settlement prefab.
+            //
+            // After GeneratorBiomeName deliberately: DungeonGeneratorNames is the purpose-built
+            // generator table and knows about biome ties, so it should not lose to a substring.
+            // Skipped when the key already is the generator name, since the loop above covered it.
+            if (!string.IsNullOrEmpty(generatorName) && !string.Equals(generatorName, key, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (KeyValuePair<string, string> entry in DungeonDefaultNames)
+                {
+                    if (generatorName.IndexOf(entry.Key, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        reason += $"; named from generator fragment {entry.Key}";
+                        return entry.Value;
+                    }
+                }
+            }
             string pretty = Prettify(key);
             if (!string.IsNullOrEmpty(pretty))
             {
@@ -4561,7 +4623,7 @@ namespace ValheimMod
             string locationName = StripClone(location?.gameObject.name) ?? "none";
             AddOrQueuePin(position, type, label,
                 $"location {locationName}, generator {generatorName ?? "none"}, from {reason}",
-                DungeonPinMergeRadius.Value);
+                DungeonPinMergeRadius.Value, blockOnVanillaPin: true);
         }
 
         // Two entry points, because they cover different dungeons.
@@ -5089,12 +5151,14 @@ namespace ValheimMod
             public string Label;
             public string Detail;
             public float MergeRadius;
+            public bool BlockOnVanillaPin;
         }
 
         private static readonly List<PendingPin> _pendingPins = new List<PendingPin>();
         private const int MaxPendingPins = 128;
 
-        private static bool AddOrQueuePin(Vector3 position, Minimap.PinType type, string label, string detail, float mergeRadius)
+        private static bool AddOrQueuePin(Vector3 position, Minimap.PinType type, string label, string detail,
+            float mergeRadius, bool blockOnVanillaPin = false)
         {
             Minimap map = Minimap.instance;
             if (map == null)
@@ -5109,11 +5173,13 @@ namespace ValheimMod
                         Label = label,
                         Detail = detail,
                         MergeRadius = mergeRadius,
+                        BlockOnVanillaPin = blockOnVanillaPin,
                     });
                 }
                 return false;
             }
-            if (FindBlockingPin(map, position, Mathf.Max(0f, mergeRadius), label, out string blocker, out float blockerDistance))
+            if (FindBlockingPin(map, position, Mathf.Max(0f, mergeRadius), label, blockOnVanillaPin,
+                out string blocker, out float blockerDistance))
             {
                 if (PinDiagnostics.Value)
                 {
@@ -5161,7 +5227,7 @@ namespace ValheimMod
         /// both. Unsaved pins are skipped to match vanilla, which treats them as transient.
         /// </summary>
         private static bool FindBlockingPin(Minimap map, Vector3 position, float radius, string label,
-            out string blocker, out float blockerDistance)
+            bool blockOnVanillaPin, out string blocker, out float blockerDistance)
         {
             blocker = null;
             blockerDistance = 0f;
@@ -5175,7 +5241,24 @@ namespace ValheimMod
             }
             foreach (Minimap.PinData pin in pins)
             {
-                if (pin == null || !pin.m_save || !string.Equals(pin.m_name, label, StringComparison.OrdinalIgnoreCase))
+                if (pin == null || !pin.m_save)
+                {
+                    continue;
+                }
+                bool sameLabel = string.Equals(pin.m_name, label, StringComparison.OrdinalIgnoreCase);
+                // The game stores its own pins as raw localization tokens and resolves them when it
+                // draws, so a leading '$' marks a pin Valheim placed itself - Hildir's three quest
+                // sites when you ask her about her things, a boss entrance once you read its
+                // Vegvisir. Nothing here ever stores a token: a label that fails to localize is
+                // dropped in favour of the prefab name, so this cannot match one of our own.
+                //
+                // Those pins name the same place in a different language to ours, which is exactly
+                // what the label comparison is blind to. Dungeon pins only - a resource pin is held
+                // to the label match, because a boss entrance sitting near a copper deposit must
+                // not swallow the copper.
+                bool vanillaPin = blockOnVanillaPin
+                    && !string.IsNullOrEmpty(pin.m_name) && pin.m_name[0] == '$';
+                if (!sameLabel && !vanillaPin)
                 {
                     continue;
                 }
@@ -5187,6 +5270,205 @@ namespace ValheimMod
                 }
             }
             return blocker != null;
+        }
+
+        private struct SupersededPin
+        {
+            public Minimap.PinData Pin;
+            public string Reason;
+            public string KeptName;
+            public Vector3 KeptPosition;
+            public float Distance;
+        }
+
+        /// <summary>
+        /// Every label this mod is capable of having written onto a pin.
+        ///
+        /// Needed because the cleanup has to tell a pin the mod made from one the player typed, and
+        /// a PinData records neither. The two naming tables cover the pins named from a table; the
+        /// prettified location prefab names cover the rest, which is where the stale ones came from
+        /// - "Hildir cave" and "Mistlands Dvergr Boss Entrance" are Prettify output, not table
+        /// entries. Resource pin labels are deliberately left out: those name a deposit, not a
+        /// place, and nothing should delete a copper pin for sitting near something else.
+        ///
+        /// Not exact. A hand-made pin that happens to match one of these reads as ours, which is
+        /// why nothing is deleted on this test alone - a co-located winner is always required.
+        /// </summary>
+        private static HashSet<string> ModProducibleNames()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string value in DungeonDefaultNames.Values)
+            {
+                names.Add(value);
+            }
+            foreach (string value in DungeonGeneratorNames.Values)
+            {
+                names.Add(value);
+            }
+            var zoneLocations = ZoneSystem.instance?.m_locations;
+            if (zoneLocations != null)
+            {
+                foreach (ZoneSystem.ZoneLocation loc in zoneLocations)
+                {
+                    if (loc == null)
+                    {
+                        continue;
+                    }
+                    string prefabName = !string.IsNullOrEmpty(loc.m_prefabName) ? loc.m_prefabName : loc.m_name;
+                    if (string.IsNullOrEmpty(prefabName))
+                    {
+                        continue;
+                    }
+                    string pretty = Prettify(prefabName);
+                    if (!string.IsNullOrEmpty(pretty))
+                    {
+                        names.Add(pretty);
+                    }
+                }
+            }
+            return names;
+        }
+
+        /// <summary>
+        /// The nearest saved pin to <paramref name="subject"/> within the radius that passes
+        /// <paramref name="wanted"/>. Itself excluded by reference, not by name, so two pins of the
+        /// same name at the same spot can still stand in for one another.
+        /// </summary>
+        private static Minimap.PinData NearestPinMatching(List<Minimap.PinData> pins,
+            Minimap.PinData subject, float radius, Func<Minimap.PinData, bool> wanted)
+        {
+            Minimap.PinData best = null;
+            float bestDistance = 0f;
+            foreach (Minimap.PinData pin in pins)
+            {
+                if (pin == null || ReferenceEquals(pin, subject) || !pin.m_save || !wanted(pin))
+                {
+                    continue;
+                }
+                float distance = Utils.DistanceXZ(subject.m_pos, pin.m_pos);
+                if (distance < radius && (best == null || distance < bestDistance))
+                {
+                    best = pin;
+                    bestDistance = distance;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Lists the pins that a better pin for the same place has superseded, and deletes them
+        /// when PinCleanupApply is on.
+        ///
+        /// Two ways a pin is superseded. One, its name is on the left of a PinCleanupSupersedes
+        /// pair and the name on the right is already sitting beside it - the duplicates earlier
+        /// versions of the mod left behind, before the two pin hooks were made to agree on a name.
+        /// Two, it is a name this mod produces and the game has pinned the same place itself, which
+        /// is Hildir's quest sites and the boss entrances a Vegvisir reveals.
+        ///
+        /// Both rules require a surviving pin within DungeonPinMergeRadius, so this can only ever
+        /// thin a cluster, never empty one. The game's own pins are never candidates for deletion.
+        /// Unsaved pins are skipped on both sides: vanilla treats them as transient, and one cannot
+        /// be relied on to still be there as the replacement.
+        /// </summary>
+        private static void CleanupDuplicatePins()
+        {
+            Minimap map = Minimap.instance;
+            if (map == null)
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Pin cleanup needs a loaded world");
+                return;
+            }
+            if (!(PinsField?.GetValue(map) is List<Minimap.PinData> pins))
+            {
+                Debug.LogWarning("Pin cleanup: could not read Minimap.m_pins, so nothing was examined");
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Pin cleanup: could not read the pin list");
+                return;
+            }
+
+            float radius = Mathf.Max(0f, DungeonPinMergeRadius.Value);
+            HashSet<string> modNames = ModProducibleNames();
+            var superseded = new List<SupersededPin>();
+
+            foreach (Minimap.PinData pin in pins)
+            {
+                if (pin == null || !pin.m_save || string.IsNullOrEmpty(pin.m_name))
+                {
+                    continue;
+                }
+                // The game stores its own pins as unlocalized tokens. Those are never ours to
+                // remove - they are the thing being kept.
+                if (pin.m_name[0] == '$')
+                {
+                    continue;
+                }
+
+                if (_pinSupersedes.TryGetValue(pin.m_name, out string winner))
+                {
+                    Minimap.PinData keeper = NearestPinMatching(pins, pin, radius,
+                        other => string.Equals(other.m_name, winner, StringComparison.OrdinalIgnoreCase));
+                    if (keeper != null)
+                    {
+                        superseded.Add(new SupersededPin
+                        {
+                            Pin = pin,
+                            Reason = "superseded by " + winner,
+                            KeptName = keeper.m_name,
+                            KeptPosition = keeper.m_pos,
+                            Distance = Utils.DistanceXZ(pin.m_pos, keeper.m_pos),
+                        });
+                        continue;
+                    }
+                }
+
+                if (modNames.Contains(pin.m_name))
+                {
+                    Minimap.PinData keeper = NearestPinMatching(pins, pin, radius,
+                        other => !string.IsNullOrEmpty(other.m_name) && other.m_name[0] == '$');
+                    if (keeper != null)
+                    {
+                        superseded.Add(new SupersededPin
+                        {
+                            Pin = pin,
+                            Reason = "the game pins this place itself",
+                            KeptName = keeper.m_name,
+                            KeptPosition = keeper.m_pos,
+                            Distance = Utils.DistanceXZ(pin.m_pos, keeper.m_pos),
+                        });
+                    }
+                }
+            }
+
+            bool apply = PinCleanupApply.Value;
+            var table = new StringBuilder();
+            table.AppendLine("Action\tName\tType\tX\tZ\tReason\tKeptPin\tKeptX\tKeptZ\tDistance");
+            foreach (SupersededPin entry in superseded)
+            {
+                table.AppendLine($"{(apply ? "removed" : "would remove")}\t{entry.Pin.m_name}\t{entry.Pin.m_type}\t"
+                    + $"{entry.Pin.m_pos.x:0}\t{entry.Pin.m_pos.z:0}\t{entry.Reason}\t{entry.KeptName}\t"
+                    + $"{entry.KeptPosition.x:0}\t{entry.KeptPosition.z:0}\t{entry.Distance:0.#}");
+            }
+            string path = Path.Combine(DumpOutputDirectory, "PipsMod_PinCleanup.tsv");
+            File.WriteAllText(path, table.ToString());
+
+            if (apply)
+            {
+                // Collected first and removed afterwards: RemovePin mutates the list this walked,
+                // and it is also what tears down the pin's UI marker, so the map redraws itself.
+                foreach (SupersededPin entry in superseded)
+                {
+                    map.RemovePin(entry.Pin);
+                }
+                if (superseded.Count > 0)
+                {
+                    map.SaveMapData();
+                }
+            }
+
+            string verb = apply ? "removed" : "found";
+            string message = $"Pin cleanup {verb} {superseded.Count} superseded pins"
+                + (apply ? string.Empty : " - PinCleanupApply is off, nothing was deleted");
+            Debug.Log($"{message}; listed in {Path.GetFileName(path)}");
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
         }
 
         /// <summary>
@@ -5293,7 +5575,8 @@ namespace ValheimMod
             int added = 0;
             foreach (PendingPin pin in queued)
             {
-                if (AddOrQueuePin(pin.Position, pin.Type, pin.Label, pin.Detail + ", queued during load", pin.MergeRadius))
+                if (AddOrQueuePin(pin.Position, pin.Type, pin.Label, pin.Detail + ", queued during load",
+                    pin.MergeRadius, pin.BlockOnVanillaPin))
                 {
                     added++;
                 }
@@ -5562,7 +5845,19 @@ namespace ValheimMod
                 {
                     return;
                 }
-                PinAt(__instance.transform.position, __instance, null);
+                // Passing the location's own generator is what stops a dungeon being pinned twice
+                // under two names. The generator hook sees "location none" - the generator it runs
+                // on sits in the interior above y 3000, where GetLocation finds nothing - so the
+                // two hooks could never recognise each other, and a label they disagreed on sailed
+                // past the duplicate check. TheHole01 was the case that showed it: the generator
+                // named it "Winding Tunnels" from DG_Hole while this hook, with no generator to
+                // consult, fell all the way through to prettifying the prefab name as "The Hole".
+                //
+                // This only changes the fallback. DungeonLocationKey still prefers the location
+                // name, so config overrides, DungeonDefaultNames and the per-type icon all keep
+                // resolving on TheHole01 exactly as before - a crypt still reads its own table
+                // entry rather than its generator's.
+                PinAt(__instance.transform.position, __instance, LocationGeneratorName(__instance));
             }
         }
 
@@ -6080,6 +6375,25 @@ namespace ValheimMod
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
             _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
             _petFoods = PetFoodList.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            var supersedes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string pair in (PinCleanupSupersedes.Value ?? string.Empty).Split(','))
+            {
+                int split = pair.IndexOf('=');
+                if (split <= 0)
+                {
+                    continue;
+                }
+                string loser = pair.Substring(0, split).Trim();
+                string winner = pair.Substring(split + 1).Trim();
+                // A pair that supersedes a name with itself would delete every pin of that name
+                // the moment two sat near each other
+                if (loser.Length > 0 && winner.Length > 0
+                    && !string.Equals(loser, winner, StringComparison.OrdinalIgnoreCase))
+                {
+                    supersedes[loser] = winner;
+                }
+            }
+            _pinSupersedes = supersedes;
         }
 
         /// <summary>
