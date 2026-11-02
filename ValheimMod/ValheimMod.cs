@@ -29,6 +29,8 @@ namespace ValheimMod
         private static ConfigEntry<bool> PassiveForsakenPowers;
         private static ConfigEntry<bool> HidePassivePowerIcons;
         private static ConfigEntry<bool> LogConsoleOutput;
+        private static ConfigEntry<bool> VerboseLogging;
+        private static ConfigEntry<bool> LogFailures;
         private static ConfigEntry<string> SuppressLogMessages;
         private static ConfigEntry<KeyboardShortcut> StatBucketRepairHotkey;
         private static ConfigEntry<KeyboardShortcut> AchievementProgressHotkey;
@@ -258,6 +260,10 @@ namespace ValheimMod
                 "Comma separated fragments. Any log line from the game containing one is dropped before it is written. Meant for vanilla messages that repeat endlessly and say nothing actionable - the default is Iron Gate's own prefab-authoring warning, which fires several times a second and is addressed to them, not to you. Clear it to let everything through.");
             LogConsoleOutput = Config.Bind("General", "LogConsoleOutput", true,
                 "Mirror in-game console output to the BepInEx log. The console keeps only a few lines and cannot be scrolled, so commands with long output - 'achievements' in particular - are unreadable in game without this.");
+            LogFailures = Config.Bind("General", "LogFailures", true,
+                "Log it when something this mod tried to do did not work - a prefab it could not find, a field the game has renamed, a patch that threw. On by default and worth leaving on: these lines are rare, and they are what turns \"a setting stopped working\" into a one-line answer after a Valheim update. Here only so that every line this mod writes has a switch; turning it off makes failures silent, not absent.");
+            VerboseLogging = Config.Bind("General", "VerboseLogging", false,
+                "Log what this mod is doing as it does it: which settings it applied at startup, and the one-off events it handles during play. Off by default because writing to the log is not free - a burst of lines while a zone streams in is enough to stutter the frame - and because none of it is actionable when things are working. Failures are always logged whatever this is set to, as is anything a hotkey produces. Turn it on when a feature is not behaving and the log should say why.");
             HidePassivePowerIcons = Config.Bind("Powers", "HidePassivePowerIcons", true,
                 "Keep passively held forsaken powers out of the status effect row. They are always on, so the icons carry no information and just crowd out effects that change. Only affects powers this mod is holding - a power you activate yourself, or one a nearby player grants you, still shows normally.");
             MassPlantSpacing = Config.Bind("Farming", "MassPlantSpacing", 2f, "Spacing between plants, as a multiple of the plant's own grow radius. 2 is the tightest that reliably clears each plant's space check, since the check tests a sphere of that radius against neighbouring colliders. Lower it to pack tighter at the risk of some seeds being rejected.");
@@ -265,7 +271,7 @@ namespace ValheimMod
             WardSpawnBlockRadius = Config.Bind("General", "WardSpawnBlockRadius", 80f, new ConfigDescription(
                 "Radius in metres of the no-spawn area a ward projects, replacing its authored one - around 20m in vanilla, the same as a workbench. Note that this is not the ward's radius setting: that one governs who may build and what may be damaged, and no spawn system consults it. Suppresses biome spawns and dungeon creature spawners inside the sphere; nests and body piles ignore no-spawn areas entirely and still have to be destroyed. Applies to player-built wards as they load, active or not, so change it before entering a world. 0 leaves the authored radius alone. Local only: the area exists on your client and nobody else's.",
                 new AcceptableValueRange<float>(0f, 200f)));
-            SpawnDiagnostics = Config.Bind("General", "SpawnDiagnostics", true,
+            SpawnDiagnostics = Config.Bind("General", "SpawnDiagnostics", false,
                 "Logs a line every time the biome spawn system places a creature, naming the ground point it used, that point's altitude and ocean depth, "
                 + "whether the spawn entry is exempt from crafting-station no-spawn areas, and the distance from that point to the nearest such area. "
                 + "Answers why something appeared inside what looked like full workbench coverage: either the entry is exempt or the point was outside the blanket, and the line says which. "
@@ -685,14 +691,14 @@ namespace ValheimMod
             GameObject prefab = odb.GetItemPrefab(itemName);
             if (prefab == null)
             {
-                Debug.LogWarning($"PlayerLightSourceItem: no item prefab named '{itemName}'");
+                LogWarn($"PlayerLightSourceItem: no item prefab named '{itemName}'");
                 return;
             }
             // Prefabs and their attach nodes are inactive, so inactive children must be included
             Light source = prefab.GetComponentInChildren<Light>(includeInactive: true);
             if (source == null)
             {
-                Debug.LogWarning($"PlayerLightSourceItem: '{itemName}' has no Light in its prefab");
+                LogWarn($"PlayerLightSourceItem: '{itemName}' has no Light in its prefab");
                 return;
             }
             _playerLightSourceRange = source.range;
@@ -720,7 +726,7 @@ namespace ValheimMod
                     break;
                 }
             }
-            Debug.Log($"Personal light from '{itemName}': type={_playerLightType}, range={_playerLightSourceRange}, intensity={_playerLightSourceIntensity}");
+            LogInfo($"Personal light from '{itemName}': type={_playerLightType}, range={_playerLightSourceRange}, intensity={_playerLightSourceIntensity}");
         }
 
         private static void DestroyPlayerLight()
@@ -839,7 +845,7 @@ namespace ValheimMod
                 _forceFieldEndRangeProperty = AccessTools.Property(field.GetType(), "endRange");
                 if (_forceFieldEndRangeProperty == null)
                 {
-                    Debug.LogWarning("Wisplight: could not find endRange on the force field");
+                    LogWarn("Wisplight: could not find endRange on the force field");
                     return;
                 }
             }
@@ -857,7 +863,7 @@ namespace ValheimMod
             if (_wisplightLoggedMultiplier != multiplier)
             {
                 _wisplightLoggedMultiplier = multiplier;
-                Debug.Log($"Wisplight demisting range set to {multiplier:0.##}x");
+                LogInfo($"Wisplight demisting range set to {multiplier:0.##}x");
             }
         }
 
@@ -912,7 +918,7 @@ namespace ValheimMod
             if (HideWisplightWisp.Value && !_wisplightHideReported)
             {
                 _wisplightHideReported = true;
-                Debug.Log($"Wisplight hidden on '{ball.name}': {renderers.Length} renderer(s), "
+                LogInfo($"Wisplight hidden on '{ball.name}': {renderers.Length} renderer(s), "
                     + $"{lights.Length} light(s) disabled");
             }
         }
@@ -983,7 +989,7 @@ namespace ValheimMod
                 if (font != null && string.Equals(font.name, wanted, StringComparison.OrdinalIgnoreCase))
                 {
                     _hudFont = font;
-                    Debug.Log($"HUD font: using '{font.name}' (exact match)");
+                    LogInfo($"HUD font: using '{font.name}' (exact match)");
                     return _hudFont;
                 }
             }
@@ -992,7 +998,7 @@ namespace ValheimMod
                 if (font != null && font.name.IndexOf(wanted, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     _hudFont = font;
-                    Debug.Log($"HUD font: using '{font.name}' for '{wanted}' (partial match)");
+                    LogInfo($"HUD font: using '{font.name}' for '{wanted}' (partial match)");
                     return _hudFont;
                 }
             }
@@ -1001,7 +1007,7 @@ namespace ValheimMod
                 // Only on a miss, so the name can be corrected without a separate diagnostic
                 _hudFontReported = true;
                 var names = fonts.Where(f => f != null).Select(f => f.name).Distinct().OrderBy(n => n).ToArray();
-                Debug.LogWarning($"HUD font '{wanted}' not found, using the default. Loaded fonts: "
+                LogWarn($"HUD font '{wanted}' not found, using the default. Loaded fonts: "
                     + (names.Length > 0 ? string.Join(", ", names) : "none"));
             }
             return null;
@@ -1173,7 +1179,7 @@ namespace ValheimMod
             {
                 // Clipboard access can fail outright on some systems; a copy that does not work is
                 // not worth taking the frame down for
-                Debug.LogWarning($"Could not copy the seed to the clipboard - {ex.Message}");
+                LogWarn($"Could not copy the seed to the clipboard - {ex.Message}");
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Could not copy the seed - see the log");
             }
         }
@@ -1335,7 +1341,7 @@ namespace ValheimMod
                 if (Chainloader.PluginInfos.ContainsKey(ExtraSlotsGuid))
                 {
                     _inventoryRowsDisabled = true;
-                    Debug.LogWarning($"CustomInventoryRows is {rows}, but Extra Slots is installed and manages inventory rows itself. Standing down to avoid fighting it. Set CustomInventoryRows to 0 and use 'Amount of extra inventory rows' under [Extra slots] in shudnal.ExtraSlots.cfg instead.");
+                    LogWarn($"CustomInventoryRows is {rows}, but Extra Slots is installed and manages inventory rows itself. Standing down to avoid fighting it. Set CustomInventoryRows to 0 and use 'Amount of extra inventory rows' under [Extra slots] in shudnal.ExtraSlots.cfg instead.");
                     return;
                 }
             }
@@ -1352,12 +1358,12 @@ namespace ValheimMod
             if (_inventoryRowAttempts >= MaxInventoryRowAttempts)
             {
                 _inventoryRowsDisabled = true;
-                Debug.LogWarning($"Giving up on CustomInventoryRows: asked for {rows} rows {MaxInventoryRowAttempts} times and the height keeps changing back, so another mod is managing inventory size. Set CustomInventoryRows to 0 and use that mod's own setting.");
+                LogWarn($"Giving up on CustomInventoryRows: asked for {rows} rows {MaxInventoryRowAttempts} times and the height keeps changing back, so another mod is managing inventory size. Set CustomInventoryRows to 0 and use that mod's own setting.");
                 return;
             }
             _inventoryRowAttempts++;
             player.SetInventorySize(rows);
-            Debug.Log($"Inventory size set to {rows} rows ({inventory.GetWidth() * rows} slots)");
+            LogInfo($"Inventory size set to {rows} rows ({inventory.GetWidth() * rows} slots)");
         }
 
         /// <summary>
@@ -1451,7 +1457,7 @@ namespace ValheimMod
             {
                 if (r.Variants > r.IconCount)
                 {
-                    Debug.LogWarning($"Variant/icon mismatch: {r.PrefabName} ({r.DisplayName}) declares {r.Variants} variants but has {r.IconCount} icons - opening its variant picker will throw");
+                    LogWarn($"Variant/icon mismatch: {r.PrefabName} ({r.DisplayName}) declares {r.Variants} variants but has {r.IconCount} icons - opening its variant picker will throw");
                 }
             }
 
@@ -1726,9 +1732,8 @@ namespace ValheimMod
         {
             static void Postfix(ref float ___m_maxCarryWeight)
             {
-                Debug.Log($"Setting base maximum carry weight.");
                 ___m_maxCarryWeight = (float)CustomMaxCarryWeight.Value;
-                Debug.Log($"Base max carry weight: {___m_maxCarryWeight}");
+                LogInfo($"Base max carry weight: {___m_maxCarryWeight}");
             }
         }
 
@@ -1780,6 +1785,52 @@ namespace ValheimMod
         /// placeholder and the Start button stops responding, with nothing in the log pointing at
         /// the mod. Degrading instead costs one broken feature rather than the whole game.
         /// </summary>
+        /// <summary>
+        /// A line that is only worth writing when something is being investigated.
+        ///
+        /// The distinction this draws is not importance, it is cost. Unity's logger is synchronous
+        /// and these calls sit in Awake patches and zone-load paths, so a burst of them lands inside
+        /// one frame. Failures stay on Debug.LogWarning/LogError and are never silenced: a line
+        /// nobody reads costs a frame, but a failure nobody is told about costs an evening.
+        ///
+        /// Callers keep their interpolated strings, which are built whether or not the line is
+        /// written. That is deliberate - it keeps each call site a one-liner - and affordable only
+        /// because everything routed here is either a startup one-shot or already deduplicated to
+        /// once per session. Anything genuinely per-frame or per-spawn is gated with an if instead,
+        /// so it does not even build the string.
+        /// </summary>
+        private static void LogInfo(string message)
+        {
+            if (VerboseLogging != null && VerboseLogging.Value)
+            {
+                Debug.Log(message);
+            }
+        }
+
+        /// <summary>
+        /// Something did not work. Separate from LogInfo because the two answer different
+        /// questions - "what is this mod doing" versus "what did it fail to do" - and because this
+        /// one defaults to on.
+        ///
+        /// Both tolerate a null entry so that a failure during Bind itself still reaches the log,
+        /// which is exactly when one is most likely and least affordable to lose.
+        /// </summary>
+        private static void LogWarn(string message)
+        {
+            if (LogFailures == null || LogFailures.Value)
+            {
+                Debug.LogWarning(message);
+            }
+        }
+
+        private static void LogFail(string message)
+        {
+            if (LogFailures == null || LogFailures.Value)
+            {
+                Debug.LogError(message);
+            }
+        }
+
         private static void GuardLoadPath(string what, Action body)
         {
             try
@@ -1788,7 +1839,7 @@ namespace ValheimMod
             }
             catch (Exception ex)
             {
-                Debug.LogError($"PipsMod: {what} failed, continuing without it - {ex}");
+                LogFail($"PipsMod: {what} failed, continuing without it - {ex}");
             }
         }
 
@@ -1822,7 +1873,7 @@ namespace ValheimMod
                 int icons = shared.m_icons != null ? shared.m_icons.Length : 0;
                 if (shared.m_variants > icons)
                 {
-                    Debug.Log($"Clamped {prefab.name} variants {shared.m_variants} -> {icons} to match its icon count");
+                    LogInfo($"Clamped {prefab.name} variants {shared.m_variants} -> {icons} to match its icon count");
                     shared.m_variants = icons;
                 }
             }
@@ -1874,7 +1925,7 @@ namespace ValheimMod
             }
             if (changed > 0)
             {
-                Debug.Log($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
+                LogInfo($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
             }
         }
 
@@ -1936,7 +1987,7 @@ namespace ValheimMod
             }
             if (changed > 0)
             {
-                Debug.Log($"Upgrade success chance set to {(configured > 0f ? configured.ToString("0.##") : "vanilla")} on {changed} upgrader item(s)");
+                LogInfo($"Upgrade success chance set to {(configured > 0f ? configured.ToString("0.##") : "vanilla")} on {changed} upgrader item(s)");
             }
         }
 
@@ -2744,7 +2795,7 @@ namespace ValheimMod
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"Station fill stopped early: {ex.Message}");
+                LogWarn($"Station fill stopped early: {ex.Message}");
             }
             finally
             {
@@ -3715,7 +3766,7 @@ namespace ValheimMod
             if (planted > 0)
             {
                 float dayLength = EnvMan.instance != null ? EnvMan.instance.m_dayLengthSec : 1200f;
-                Debug.Log($"{piece.gameObject.name} grow time: {plant.m_growTime:0}-{plant.m_growTimeMax:0}s "
+                LogInfo($"{piece.gameObject.name} grow time: {plant.m_growTime:0}-{plant.m_growTimeMax:0}s "
                         + $"({plant.m_growTime / dayLength:0.0}-{plant.m_growTimeMax / dayLength:0.0} in-game days)");
             }
         }
@@ -3856,7 +3907,7 @@ namespace ValheimMod
                 {
                     return true;
                 }
-                Debug.Log("Death penalty negated: inventory kept, no tombstone created");
+                LogInfo("Death penalty negated: inventory kept, no tombstone created");
                 return false;
             }
         }
@@ -3874,7 +3925,7 @@ namespace ValheimMod
                 {
                     return true;
                 }
-                Debug.Log("Death penalty negated: skill levels kept");
+                LogInfo("Death penalty negated: skill levels kept");
                 return false;
             }
         }
@@ -3894,7 +3945,7 @@ namespace ValheimMod
                 {
                     return true;
                 }
-                Debug.Log("Death penalty negated: skill reset suppressed");
+                LogInfo("Death penalty negated: skill reset suppressed");
                 return false;
             }
         }
@@ -4677,7 +4728,7 @@ namespace ValheimMod
             if (!(KnownRecipesField.GetValue(player) is HashSet<string> known))
             {
                 _unlearnDone = true;
-                Debug.LogWarning("Unlearn: could not read the known recipe list");
+                LogWarn("Unlearn: could not read the known recipe list");
                 return;
             }
             _unlearnDone = true;
@@ -5100,7 +5151,10 @@ namespace ValheimMod
                     {
                         if (_reportedExclusions.Add(name))
                         {
-                            Debug.Log($"Pin skipped: '{name}' matches exclusion '{fragment}' (PinExcludeNames)");
+                            if (PinDiagnostics.Value)
+                            {
+                                Debug.Log($"Pin skipped: '{name}' matches exclusion '{fragment}' (PinExcludeNames)");
+                            }
                         }
                         return true;
                     }
@@ -5193,7 +5247,7 @@ namespace ValheimMod
             {
                 // Reflection into AddPin failed, which is a mod problem rather than a map one, so
                 // this is reported whether or not diagnostics are on
-                Debug.LogWarning($"Pin failed: '{label}' at X {position.x:0} Z {position.z:0} - "
+                LogWarn($"Pin failed: '{label}' at X {position.x:0} Z {position.z:0} - "
                     + $"could not call Minimap.AddPin ({detail})");
                 return false;
             }
@@ -5201,13 +5255,20 @@ namespace ValheimMod
             // that is added but not drawn has been reported twice now, and the filter for its type
             // is the first thing worth ruling out. UpdatePins skips any pin whose type is hidden,
             // and AutoPinKeepIconFilter deliberately leaves a hidden type hidden.
-            bool[] shownTypes = VisibleIconTypesField?.GetValue(map) as bool[];
-            int typeIndex = (int)type;
-            string iconShown = shownTypes != null && typeIndex >= 0 && typeIndex < shownTypes.Length
-                ? shownTypes[typeIndex].ToString()
-                : "unknown";
-            Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} "
-                + $"(iconShown={iconShown}; {detail})");
+            //
+            // The whole block is inside the gate, reflection lookup included, because none of it is
+            // needed for anything but the line. Pins arrive in bursts - every resource node in a
+            // zone registers as that zone streams in - so this was the densest writer in the mod.
+            if (PinDiagnostics.Value)
+            {
+                bool[] shownTypes = VisibleIconTypesField?.GetValue(map) as bool[];
+                int typeIndex = (int)type;
+                string iconShown = shownTypes != null && typeIndex >= 0 && typeIndex < shownTypes.Length
+                    ? shownTypes[typeIndex].ToString()
+                    : "unknown";
+                Debug.Log($"Pin added: '{label}' as {type} at X {position.x:0} Z {position.z:0} "
+                    + $"(iconShown={iconShown}; {detail})");
+            }
             WatchPinMarker(added, label);
             return true;
         }
@@ -5380,7 +5441,7 @@ namespace ValheimMod
             }
             if (!(PinsField?.GetValue(map) is List<Minimap.PinData> pins))
             {
-                Debug.LogWarning("Pin cleanup: could not read Minimap.m_pins, so nothing was examined");
+                LogWarn("Pin cleanup: could not read Minimap.m_pins, so nothing was examined");
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "Pin cleanup: could not read the pin list");
                 return;
             }
@@ -5526,7 +5587,7 @@ namespace ValheimMod
                 Minimap.PinData pin = watched.Pin;
                 if (pin == null)
                 {
-                    Debug.LogWarning($"Pin marker check: '{watched.Label}' - the PinData itself is gone");
+                    LogWarn($"Pin marker check: '{watched.Label}' - the PinData itself is gone");
                     continue;
                 }
                 bool inList = false;
@@ -5550,7 +5611,7 @@ namespace ValheimMod
 
                 if (suspicious)
                 {
-                    Debug.LogWarning($"Pin marker missing: '{watched.Label}' is {distance:0}m away and in the "
+                    LogWarn($"Pin marker missing: '{watched.Label}' is {distance:0}m away and in the "
                         + $"pin list, but UpdatePins built no marker for it (mapMode="
                         + $"{(map != null ? map.m_mode.ToString() : "no map")}). This is the case where a pin "
                         + "exists but never appears until the world is reloaded.");
@@ -5581,7 +5642,7 @@ namespace ValheimMod
                     added++;
                 }
             }
-            Debug.Log($"Flushed {queued.Count} pin(s) queued before the minimap existed, {added} added");
+            LogInfo($"Flushed {queued.Count} pin(s) queued before the minimap existed, {added} added");
         }
 
         // ---------------- Resource node pins ----------------
@@ -5978,7 +6039,7 @@ namespace ValheimMod
                         continue;
                     }
                     __result.Add(new KeyValuePair<GameObject, int>(prefab, 1));
-                    Debug.Log($"First trophy guaranteed: {prefab.name}");
+                    LogInfo($"First trophy guaranteed: {prefab.name}");
                 }
             }
         }
@@ -6080,7 +6141,7 @@ namespace ValheimMod
                 {
                     return true;
                 }
-                Debug.LogWarning("PipsMod: BepInEx.Logging.Logger.InternalLogEvent not found - "
+                LogWarn("PipsMod: BepInEx.Logging.Logger.InternalLogEvent not found - "
                     + "SuppressLogMessages will still filter the game's own messages, but not Unity's.");
                 return false;
             }
@@ -6363,6 +6424,31 @@ namespace ValheimMod
         }
 
         /// <summary>
+        /// Forgets which notices have already been given, so the ones that only speak once a
+        /// session speak again.
+        ///
+        /// Without this, turning diagnostics on mid-session is close to useless: every line these
+        /// paths had to offer was spent in the first minutes, while the switch was off, and the
+        /// latch does not care that nobody was reading. Re-armed on any config change rather than
+        /// on VerboseLogging alone - the per-feature switches have the same problem, the cost is a
+        /// handful of cleared sets, and a condition here is one more thing to get wrong.
+        ///
+        /// Deliberately not hooked to anything but config: re-arming per frame would restore the
+        /// per-swing spam these latches exist to prevent.
+        /// </summary>
+        private static void ResetOnceOnlyReports()
+        {
+            _reportedExclusions.Clear();
+            _reportedLocations.Clear();
+            _clearedRockNames.Clear();
+            _reportedTerrainOps.Clear();
+            _reportedGhosts.Clear();
+            _wardAreaReported = false;
+            _noDropsCreatureLogged = false;
+            _passiveWisplightAdds = 0;
+        }
+
+        /// <summary>
         /// Re-derives everything parsed out of a config string into a cache. Called from Awake and
         /// again whenever the config is reloaded, so a hotkey reload leaves no stale cache behind.
         /// The per-call parsers used by the dungeon pin overrides are not here: they already
@@ -6370,6 +6456,7 @@ namespace ValheimMod
         /// </summary>
         private static void RebuildDerivedConfig()
         {
+            ResetOnceOnlyReports();
             _smelterPriority = SmelterInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _cookingPriority = CookingStationInputPriority.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
@@ -6531,7 +6618,7 @@ namespace ValheimMod
             catch (Exception ex)
             {
                 // A malformed edit should report itself rather than take the frame down
-                Debug.LogError($"PipsMod config reload failed, keeping the values already loaded - {ex.Message}");
+                LogFail($"PipsMod config reload failed, keeping the values already loaded - {ex.Message}");
                 _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, "PipsMod config reload FAILED - see log");
             }
         }
@@ -6542,7 +6629,7 @@ namespace ValheimMod
             PlayerProfile profile = game != null ? game.GetPlayerProfile() : null;
             if (profile == null || profile.m_playerStats == null)
             {
-                Debug.LogWarning("Stat bucket repair needs a loaded world - no player profile available");
+                LogWarn("Stat bucket repair needs a loaded world - no player profile available");
                 return;
             }
             bool apply = StatBucketRepairApply.Value;
@@ -6697,7 +6784,7 @@ namespace ValheimMod
             _statRegressionSuppressed[stat] = 0;
             _statRegressionDay[stat] = day;
             string tail = suppressed > 0 ? $" ({suppressed} more since the last report)" : string.Empty;
-            Debug.Log($"Blocked stat regression on day {day}: {stat} would have been set to "
+            LogInfo($"Blocked stat regression on day {day}: {stat} would have been set to "
                 + $"{amount:0.##}, keeping {best:0.##}{tail}");
         }
 
@@ -6810,7 +6897,7 @@ namespace ValheimMod
                 });
             }
             _bossPowers = found;
-            Debug.Log($"Discovered {found.Count} boss stone power(s): " +
+            LogInfo($"Discovered {found.Count} boss stone power(s): " +
                 string.Join(", ", found.Select(b => $"{b.StoneName} -> {b.PowerName}").ToArray()));
         }
 
@@ -7034,6 +7121,7 @@ namespace ValheimMod
             }
 
             var destroyed = new List<string>();
+            var unreported = new List<string>();
             var reported = new List<KeyValuePair<float, string>>();
 
             foreach (RockCandidate candidate in byOwner.Values)
@@ -7115,15 +7203,23 @@ namespace ValheimMod
                 }
 
                 destroyed.Add(name);
-                _clearedRockNames.Add(name);
+                if (_clearedRockNames.Add(name))
+                {
+                    unreported.Add(name);
+                }
             }
 
-            if (destroyed.Count > 0)
+            if (unreported.Count > 0)
             {
                 // Named rather than counted, because a wrong fragment in the config shows up here as
-                // something unexpected being broken, and that is worth noticing immediately
-                Debug.Log($"Hoe cleared {destroyed.Count} object(s) while levelling: "
-                    + string.Join(", ", destroyed.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray()));
+                // something unexpected being broken, and that is worth noticing immediately.
+                //
+                // Only kinds not cleared before this session, because levelling is a held key: the
+                // unfiltered version wrote a line per swing, naming the same boulder every time.
+                // A wrong fragment still announces itself the first time it costs something.
+                LogInfo($"Hoe cleared {destroyed.Count} object(s) while levelling, "
+                    + "not cleared before this session: "
+                    + string.Join(", ", unreported.Distinct().OrderBy(x => x, StringComparer.Ordinal).ToArray()));
             }
             else if (verbose)
             {
@@ -7160,7 +7256,7 @@ namespace ValheimMod
                 // to a rock-clearing report that only printed on success.
                 if (_reportedTerrainOps.Add(prefabName))
                 {
-                    Debug.Log($"Terrain op placed: '{prefabName}' radius={__instance.GetRadius():0.##} "
+                    LogInfo($"Terrain op placed: '{prefabName}' radius={__instance.GetRadius():0.##} "
                         + $"(wantedOp={wanted}, clearsRocks={HoeLevelClearsRocks.Value}, "
                         + $"shared={IsSharedSession()}, ghostFlag={TerrainOp.m_forceDisableTerrainOps})");
                 }
@@ -7643,7 +7739,7 @@ namespace ValheimMod
                     if (!_wardAreaReported)
                     {
                         _wardAreaReported = true;
-                        Debug.Log($"Ward no-spawn area ({__instance.gameObject.name}): {what}");
+                        LogInfo($"Ward no-spawn area ({__instance.gameObject.name}): {what}");
                     }
                 }
                 catch (Exception e)
@@ -7652,7 +7748,7 @@ namespace ValheimMod
                     if (!_wardAreaReported)
                     {
                         _wardAreaReported = true;
-                        Debug.LogError($"Ward no-spawn area failed on {__instance.gameObject.name}: {e}");
+                        LogFail($"Ward no-spawn area failed on {__instance.gameObject.name}: {e}");
                     }
                 }
             }
@@ -8073,7 +8169,7 @@ namespace ValheimMod
             if (!_noDropsCreatureLogged)
             {
                 _noDropsCreatureLogged = true;
-                Debug.Log($"No drops: suppressed creature loot via {route} "
+                LogInfo($"No drops: suppressed creature loot via {route} "
                     + $"({(character != null ? character.name : "unknown")})");
             }
             return true;
@@ -8346,7 +8442,7 @@ namespace ValheimMod
                 if (!_cameraLimitsLogged)
                 {
                     _cameraLimitsLogged = true;
-                    Debug.Log($"Camera zoom limits: on foot {camera.m_maxDistance:0.##}m, "
+                    LogInfo($"Camera zoom limits: on foot {camera.m_maxDistance:0.##}m, "
                         + $"at the helm {camera.m_maxDistanceBoat:0.##}m");
                 }
             }
@@ -8577,20 +8673,20 @@ namespace ValheimMod
             if (op != null && op.m_settings != null)
             {
                 var set = op.m_settings;
-                Debug.Log($"Terrain ghost '{name}' ({DescribePiece()}) components: {DescribeComponents()}");
-                Debug.Log($"Terrain ghost '{name}' ({DescribePiece()}): TerrainOp, level={set.m_level} radius={set.m_levelRadius:0.##} "
+                LogInfo($"Terrain ghost '{name}' ({DescribePiece()}) components: {DescribeComponents()}");
+                LogInfo($"Terrain ghost '{name}' ({DescribePiece()}): TerrainOp, level={set.m_level} radius={set.m_levelRadius:0.##} "
                     + $"square={set.m_square} offset={set.m_levelOffset:0.##} smooth={set.m_smooth} "
                     + $"smoothRadius={set.m_smoothRadius:0.##} smoothPower={set.m_smoothPower:0.##}");
             }
             else if (mod != null)
             {
-                Debug.Log($"Terrain ghost '{name}': TerrainModifier, level={mod.m_level} radius={mod.m_levelRadius:0.##} "
+                LogInfo($"Terrain ghost '{name}': TerrainModifier, level={mod.m_level} radius={mod.m_levelRadius:0.##} "
                     + $"square={mod.m_square} offset={mod.m_levelOffset:0.##} smooth={mod.m_smooth} "
                     + $"smoothRadius={mod.m_smoothRadius:0.##} smoothPower={mod.m_smoothPower:0.##}");
             }
             else
             {
-                Debug.Log($"Terrain ghost '{name}': neither TerrainOp nor TerrainModifier. "
+                LogInfo($"Terrain ghost '{name}': neither TerrainOp nor TerrainModifier. "
                     + $"Components: {DescribeComponents()}");
             }
         }
@@ -8639,7 +8735,7 @@ namespace ValheimMod
             if (odb == null || !odb.TryGetTerrainOp(prefabName.GetStableHashCode(), out TerrainOp prefab)
                 || prefab == null || prefab.m_settings == null)
             {
-                Debug.LogWarning($"Hoe level radius: '{prefabName}' is a TerrainOp but ObjectDB could not "
+                LogWarn($"Hoe level radius: '{prefabName}' is a TerrainOp but ObjectDB could not "
                     + "return its prefab, so the radius cannot be changed for it.");
                 return false;
             }
@@ -8658,7 +8754,7 @@ namespace ValheimMod
                     BasePaint = prefab.m_settings.m_paintRadius,
                 };
                 _scrollableOps[prefabName] = state;
-                Debug.Log($"Scroll radius armed for '{prefabName}' ({state.Label}): "
+                LogInfo($"Scroll radius armed for '{prefabName}' ({state.Label}): "
                     + $"level={state.BaseLevel:0.##} raise={state.BaseRaise:0.##} "
                     + $"smooth={state.BaseSmooth:0.##} paint={state.BasePaint:0.##}");
             }
@@ -8719,7 +8815,7 @@ namespace ValheimMod
             if (player != null && !_hoeWatcherAnnounced)
             {
                 _hoeWatcherAnnounced = true;
-                Debug.Log($"Hoe level watcher active (scrollRadius={HoeLevelScrollRadius.Value}, "
+                LogInfo($"Hoe level watcher active (scrollRadius={HoeLevelScrollRadius.Value}, "
                     + $"ghostField={(PlacementGhostField != null ? "ok" : "MISSING")})");
             }
             bool active = player != null && HoeLevelScrollRadius.Value && !IsTypingText()
@@ -8825,7 +8921,7 @@ namespace ValheimMod
                     _ghostParticlesReported = true;
                     ParticleSystem first = _ghostParticleBases[0].Key;
                     var main = first.main;
-                    Debug.Log($"Hoe level rings: {_ghostParticleBases.Count} particle system(s), "
+                    LogInfo($"Hoe level rings: {_ghostParticleBases.Count} particle system(s), "
                         + $"startSize={main.startSizeMultiplier:0.##} startSpeed={main.startSpeedMultiplier:0.##} "
                         + $"lifetime={main.startLifetimeMultiplier:0.##} "
                         + $"simulationSpace={main.simulationSpace} scalingMode={main.scalingMode}");
@@ -8987,14 +9083,14 @@ namespace ValheimMod
             var shared = drop != null && drop.m_itemData != null ? drop.m_itemData.m_shared : null;
             if (shared == null)
             {
-                Debug.LogWarning("PassiveWisplight: could not find the Demister item in ObjectDB");
+                LogWarn("PassiveWisplight: could not find the Demister item in ObjectDB");
                 return;
             }
             _wisplightCraftStat = shared.m_name;
             StatusEffect equipEffect = shared.m_equipStatusEffect;
             if (equipEffect == null)
             {
-                Debug.LogWarning("PassiveWisplight: the Wisplight has no equip status effect");
+                LogWarn("PassiveWisplight: the Wisplight has no equip status effect");
                 return;
             }
             _wisplightEffectHash = equipEffect.NameHash();
@@ -9071,11 +9167,11 @@ namespace ValheimMod
                         _passiveWisplightAdds++;
                         if (_passiveWisplightAdds == 1)
                         {
-                            Debug.Log("Wisplight held passively - the Mistlands mist clears with nothing equipped");
+                            LogInfo("Wisplight held passively - the Mistlands mist clears with nothing equipped");
                         }
                         else if (_passiveWisplightAdds == 5)
                         {
-                            Debug.LogWarning("PassiveWisplight: the effect has been added 5 times, so something is "
+                            LogWarn("PassiveWisplight: the effect has been added 5 times, so something is "
                                 + "dropping it between sweeps rather than it persisting - SEMan.GetStatusEffect is "
                                 + "not finding what AddStatusEffect created.");
                         }
@@ -9220,7 +9316,7 @@ namespace ValheimMod
                     .ToArray();
                 if (locked.Length > 0)
                 {
-                    Debug.LogWarning($"Forsaken powers not yet unlocked on this character: {string.Join(", ", locked)}. "
+                    LogWarn($"Forsaken powers not yet unlocked on this character: {string.Join(", ", locked)}. "
                         + "Select each once at its boss stone - mounting the trophy alone does not register it.");
                 }
             }
@@ -9241,7 +9337,7 @@ namespace ValheimMod
                         active = seman.AddStatusEffect(boss.PowerHash, false, 0, 0f, -1);
                         if (active != null)
                         {
-                            Debug.Log($"Forsaken power {boss.PowerName} held passively ({boss.StoneName})");
+                            LogInfo($"Forsaken power {boss.PowerName} held passively ({boss.StoneName})");
                         }
                     }
                     if (active != null)
@@ -9319,7 +9415,7 @@ namespace ValheimMod
             {
                 _featherCapeMaxFallSpeed = stats.m_maxMaxFallSpeed;
                 _featherCapeFallDamageModifier = stats.m_fallDamageModifier;
-                Debug.Log($"Feather Cape slow fall: maxFallSpeed={_featherCapeMaxFallSpeed}, fallDamageModifier={_featherCapeFallDamageModifier}");
+                LogInfo($"Feather Cape slow fall: maxFallSpeed={_featherCapeMaxFallSpeed}, fallDamageModifier={_featherCapeFallDamageModifier}");
             }
         }
 
