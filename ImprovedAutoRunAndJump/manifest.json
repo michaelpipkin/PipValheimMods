@@ -1,0 +1,9 @@
+{
+  "name": "ImprovedAutoRunAndJump",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/michaelpipkin/PipValheimMods/tree/main/ImprovedAutoRunAndJump",
+  "description": "Auto-run that survives jumping, strafing and crouching, a sprint toggle that stays on, and a jump buffer.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2350"
+  ]
+}
