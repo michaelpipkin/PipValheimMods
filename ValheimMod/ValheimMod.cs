@@ -39,6 +39,7 @@ namespace ValheimMod
         private static ConfigEntry<KeyboardShortcut> FreeBuildHotkey;
         private static ConfigEntry<KeyboardShortcut> FlyToggleHotkey;
         private static ConfigEntry<KeyboardShortcut> NoDropsHotkey;
+        private static ConfigEntry<KeyboardShortcut> RemoveDropsHotkey;
         private static ConfigEntry<KeyboardShortcut> PetFoodHotkey;
         private static ConfigEntry<KeyboardShortcut> PinCleanupHotkey;
         private static ConfigEntry<KeyboardShortcut> DestroyItemCombo;
@@ -475,6 +476,8 @@ namespace ValheimMod
                 "Tops your inventory up to PetFoodCount of each PetFoods entry, for feeding tamed animals one food at a time. Each animal eats only some of these, so this stocks all of them and leaves the choosing to you - drop the right one near the right animal. Tops up rather than adds, so holding the key down or pressing it twice cannot flood the inventory.");
             NoDropsHotkey = Config.Bind("Hotkeys", "NoDropsHotkey", new KeyboardShortcut(KeyCode.Alpha0),
                 "Toggles drops off entirely for trees, rocks, world destructibles and creature kills, for clearing ground without filling your inventory with wood, stone and whatever attacked you while you worked. Overrides CustomResourceRate while it is on. Bosses still drop everything, since their trophies and summoning items are not replaceable. Pieces you built still drop their materials, and container loot, pickables and fishing are unaffected. Starts off each time the game launches, and is suspended in a shared session since the drops would be somebody else's.");
+            RemoveDropsHotkey = Config.Bind("Hotkeys", "RemoveDropsHotkey", new KeyboardShortcut(KeyCode.Backspace),
+                "Destroys every item lying on the ground in the loaded area, for clearing up after a fight or a felled forest without walking back over all of it. Same job as the console's removedrops, but without devcommands - which also means it does not mark the character as having used cheats. There is no confirmation and no radius: anything you dropped on purpose and have not picked back up goes with the rest. Fish still in the water and items that are part of a placed piece are left alone. Suspended in a shared session, since the loot would be somebody else's.");
             FlyToggleHotkey = Config.Bind("Hotkeys", "FlyToggleHotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftShift),
                 "Toggles the same free-flight the console 'fly' command gives, without opening the console. "
                 + "Vanilla reaches this through a cheat command, but the method behind it carries no such check, so this needs neither devcommands nor the console - which also means it does not mark the character as having used cheats. "
@@ -615,6 +618,11 @@ namespace ValheimMod
             if (HotkeyDown(NoDropsHotkey))
             {
                 ToggleNoDrops();
+            }
+
+            if (HotkeyDown(RemoveDropsHotkey))
+            {
+                RemoveItemDrops();
             }
 
             if (HotkeyDown(PetFoodHotkey))
@@ -8289,6 +8297,78 @@ namespace ValheimMod
                 return;
             }
             player.ToggleDebugFly();
+        }
+
+        // ---------------- Remove item drops ----------------
+        // Reached in vanilla by typing devcommands and then removedrops. Neither step is actually
+        // needed. The command is declared
+        //
+        //     new ConsoleCommand("removedrops", "remove all item-drops in area", delegate { ... },
+        //         isCheat: false, isNetwork: false, onlyServer: false, isSecret: false,
+        //         allowInDevBuild: false, hideBehindDevCommands: true);
+        //
+        // so it is not a cheat at all - it is merely hidden until devcommands is on - and its
+        // delegate touches nothing but public members. Reimplementing the body gets the same result
+        // without devcommands, which matters because it is enabling devcommands that sets
+        // Terminal.m_usedCheats and marks the character as having cheated, permanently, in the save
+        // file. Going through the console would brand the character for a command that is not even
+        // flagged as a cheat. Same reasoning as the fly toggle above.
+        //
+        // The body is vanilla's, and its filters are worth knowing rather than guessing at:
+        //   - The ItemDrop sweep is everything in the loaded zones, not a radius. The
+        //     command's "in area" is really "whatever is streamed in and owned by this client".
+        //   - A Fish is skipped while it is still in the water, so this does not empty a lake.
+        //   - IsPiece() skips drops that belong to a placed piece.
+        //   - IsOwner() is what keeps it honest: ZNetView.Destroy only acts on an object whose ZDO
+        //     this client owns, so it cannot reach into a zone somebody else is holding.
+        //
+        // Suspended in a shared session even so. IsOwner is not enough on its own, because ZDO
+        // ownership migrates to whoever is nearest - in a shared world this client can easily own
+        // the loot somebody else dropped a moment ago, which is exactly the kind of unexplained
+        // side effect WorldEffectsSoloOnly exists to prevent.
+        //
+        // Backspace is free in vanilla - it appears in assembly_utils only in ZInput's KeyCode-to-Key
+        // translation table, never as a binding - but it is the one key where firing while a text
+        // field has focus would be worst. HotkeyDown covers that for every hotkey, so there is
+        // nothing extra to do here.
+        private static void RemoveItemDrops()
+        {
+            if (Player.m_localPlayer == null)
+            {
+                return;
+            }
+            if (IsSharedSession())
+            {
+                _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft,
+                    "Removing drops is off in a shared session");
+                return;
+            }
+
+            int removed = 0;
+            foreach (ItemDrop drop in UnityEngine.Object.FindObjectsByType<ItemDrop>(FindObjectsSortMode.None))
+            {
+                if (drop == null || drop.IsPiece())
+                {
+                    continue;
+                }
+                Fish fish = drop.gameObject.GetComponent<Fish>();
+                if (fish != null && !fish.IsOutOfWater())
+                {
+                    continue;
+                }
+                ZNetView view = drop.GetComponent<ZNetView>();
+                if (view == null || !view.IsValid() || !view.IsOwner())
+                {
+                    continue;
+                }
+                view.Destroy();
+                removed++;
+            }
+
+            // Vanilla's own wording, so the result reads the same as the command's
+            string message = "Removed item drops: " + removed;
+            LogInfo(message);
+            _messageHud?.ShowMessage(MessageHud.MessageType.TopLeft, message);
         }
 
         // ---------------- Camera zoom distance ----------------
