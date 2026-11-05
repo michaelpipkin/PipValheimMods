@@ -145,6 +145,8 @@ namespace ValheimMod
         private static ConfigEntry<float> SneakSpeedPenalty;
         private static ConfigEntry<float> RunSpeedSkillBonus;
         private static ConfigEntry<float> JumpPowerSkillBonus;
+        private static ConfigEntry<float> CrossbowReloadAtMaxSkill;
+        private static ConfigEntry<bool> CrossbowReloadWhileRunning;
         private static ConfigEntry<string> HoeLevelOpPrefab;
         private static ConfigEntry<bool> HoeLevelClearsRocks;
         private static ConfigEntry<string> HoeLevelRockNames;
@@ -316,6 +318,11 @@ namespace ValheimMod
                 "Extra jump power at jump skill 100, as a fraction. Vanilla is 0.4. This is the same number vanilla applies to both the upward and the forward part of a jump, so raising it increases distance as well as height. "
                 + "Stamina cost does not change, and a tired jump is still weakened afterwards.",
                 new AcceptableValueRange<float>(0f, 5f)));
+            CrossbowReloadAtMaxSkill = Config.Bind("Crossbow", "CrossbowReloadAtMaxSkill", 0.1f, new ConfigDescription(
+                "Fraction of its listed reload time a crossbow takes at crossbows skill 100. Vanilla is 0.5, so a fully trained shooter reloads twice as fast as an untrained one; 0.25 makes that four times as fast. Skill 0 is unchanged whatever this is set to - only the bonus for having trained the skill is rescaled, and it still scales linearly in between. Does not touch the reload stamina or eitr drain. Suspended in a shared session, as the run and jump skill bonuses are.",
+                new AcceptableValueRange<float>(0.1f, 1f)));
+            CrossbowReloadWhileRunning = Config.Bind("Crossbow", "CrossbowReloadWhileRunning", true,
+                "Let a crossbow finish reloading while you are running. Vanilla throws the reload away on every frame you run, so it can only ever complete at a walk or standing still, and it is silent about it - the reload simply never finishes. Jumping, dodging and attacking still cancel a reload, exactly as they do in vanilla; this changes running only. Not suspended in a shared session: the reload takes the same time either way, so there is nothing here anyone else could notice.");
             MatchBoatCameraZoom = Config.Bind("Camera", "MatchBoatCameraZoom", true,
                 "Allow the same zoom-out distance on foot that the game already allows at a ship's helm. Vanilla keeps two separate limits and picks between them by whether you are steering, so on foot you are held closer in for no reason that affects anything. "
                 + "Purely a local camera setting - nothing about it is sent anywhere or seen by anyone else. Ignored when MaxCameraDistance is set.");
@@ -6336,6 +6343,8 @@ namespace ValheimMod
             _reportedGhosts.Clear();
             _wardAreaReported = false;
             _noDropsCreatureLogged = false;
+            _reloadKeptRunningLogged = false;
+            _reloadSlowdownLogged = false;
             _passiveWisplightAdds = 0;
         }
 
@@ -7373,6 +7382,174 @@ namespace ValheimMod
                 {
                     __instance.m_jumpForce = __state[0];
                     __instance.m_jumpForceForward = __state[1];
+                }
+            }
+        }
+
+        // ---------------- Crossbow reload ----------------
+        // Two unrelated mechanisms, both reached from the one place a reload is set up.
+        //
+        // Skill scaling lives in ItemDrop.ItemData.GetWeaponLoadingTime:
+        //
+        //     return Mathf.Lerp(m_reloadTime, m_reloadTime * 0.5f, skillFactor);
+        //
+        // so skill 100 halves the reload and that 0.5 is the whole of the bonus. The method has
+        // exactly one caller in the game - Player.QueueReloadAction, which stores the result in
+        // MinorActionData.m_duration - so a postfix here reaches the reload duration and nothing
+        // else. Nothing in the HUD reads it; the progress bar is driven from m_duration.
+        //
+        // Rescaled rather than reimplemented, the same way the run and jump bonuses above are: the
+        // result is multiplied by the ratio between the wanted curve and vanilla's, so whatever
+        // Iron Gate adds to that expression later survives. The denominator is 1 - 0.5 * f with f
+        // clamped to 0..1, so it ranges from 1.0 down to 0.5 and cannot be zero.
+        //
+        // Gated on the Crossbows skill rather than on m_requiresReload alone, so a future reloading
+        // weapon with its own skill does not silently inherit a crossbow setting.
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetWeaponLoadingTime))]
+        class ItemData_GetWeaponLoadingTime_Patch
+        {
+            static void Postfix(ItemDrop.ItemData __instance, ref float __result)
+            {
+                if (CrossbowReloadAtMaxSkill == null
+                    || Mathf.Approximately(CrossbowReloadAtMaxSkill.Value, 0.5f))
+                {
+                    return;
+                }
+                ItemDrop.ItemData.SharedData shared = __instance?.m_shared;
+                if (shared == null || shared.m_attack == null || !shared.m_attack.m_requiresReload
+                    || shared.m_skillType != Skills.SkillType.Crossbows)
+                {
+                    return;
+                }
+                // Carries the local-player check, the shared-session suspension and the clamp
+                float skillFactor = LocalPlayerSkillFactor(Player.m_localPlayer, Skills.SkillType.Crossbows);
+                if (skillFactor < 0f)
+                {
+                    return;
+                }
+                float wanted = 1f - (1f - CrossbowReloadAtMaxSkill.Value) * skillFactor;
+                float vanilla = 1f - 0.5f * skillFactor;
+                __result *= wanted / vanilla;
+            }
+        }
+
+        // The running constraint is not a check anywhere near the reload. Player.CheckRun ends with
+        //
+        //     if (HaveStamina()) { ...; ClearActionQueue(); return true; }
+        //
+        // and ClearActionQueue is m_actionQueue.Clear() - so every frame you run, the whole minor
+        // action queue is thrown away. UpdateWeaponLoading notices the weapon is still unloaded and
+        // queues the reload again, CheckRun discards it on the next frame, and the reload never
+        // accumulates enough time to finish. Nothing reports this, which is why it presents as a
+        // crossbow that simply will not reload rather than as a reload being cancelled.
+        //
+        // ClearActionQueue has four callers - CheckRun, OnJump, UpdateDodge and Humanoid.StartAttack
+        // - and only the first is wanted here. Jumping, dodging and attacking cancelling a reload is
+        // deliberate and stays. So the prefix only acts while execution is inside CheckRun, marked
+        // by the patch below, and the marker is set and cleared unconditionally so the pair cannot
+        // come apart if a config value changes mid-frame.
+        //
+        // Both methods are protected in the shipped assembly despite the decompile showing them
+        // public - the publicized libs/ copies are what make them look public. Harmony patches
+        // non-public methods through reflection, and m_actionQueue is reached by ___ injection
+        // rather than directly, so neither is a publicized-access risk.
+        private static Player _runCheckPlayer;
+        private static bool _reloadKeptRunningLogged;
+        private static bool _reloadSlowdownLogged;
+
+        [HarmonyPatch(typeof(Player), "CheckRun")]
+        class Player_CheckRun_ReloadScopePatch
+        {
+            static void Prefix(Player __instance)
+            {
+                _runCheckPlayer = ReferenceEquals(__instance, Player.m_localPlayer) ? __instance : null;
+            }
+
+            static void Finalizer()
+            {
+                _runCheckPlayer = null;
+            }
+        }
+
+        [HarmonyPatch(typeof(Player), "ClearActionQueue")]
+        class Player_ClearActionQueue_KeepReloadPatch
+        {
+            static bool Prefix(Player __instance, List<Player.MinorActionData> ___m_actionQueue)
+            {
+                if (CrossbowReloadWhileRunning == null || !CrossbowReloadWhileRunning.Value
+                    || !ReferenceEquals(__instance, _runCheckPlayer))
+                {
+                    return true;
+                }
+                if (___m_actionQueue == null || ___m_actionQueue.Count == 0)
+                {
+                    return true;   // nothing to keep, so let vanilla's Clear run
+                }
+                // Keep reloads, drop the rest. With no reload queued this empties the list, which
+                // is what vanilla's Clear would have done anyway.
+                bool keptAny = false;
+                for (int i = ___m_actionQueue.Count - 1; i >= 0; i--)
+                {
+                    Player.MinorActionData action = ___m_actionQueue[i];
+                    if (action != null && action.m_type == Player.MinorActionData.ActionType.Reload)
+                    {
+                        keptAny = true;
+                    }
+                    else
+                    {
+                        ___m_actionQueue.RemoveAt(i);
+                    }
+                }
+                if (keptAny && !_reloadKeptRunningLogged)
+                {
+                    _reloadKeptRunningLogged = true;
+                    LogInfo("Crossbow reload kept alive through running");
+                }
+                return false;
+            }
+        }
+
+        // Surviving the queue is only half of it. Character's ground movement reads
+        //
+        //     if ((m_walk || InMinorActionSlowdown()) && !flag) { speed = m_walkSpeed; ... }
+        //
+        // so a minor action can drag you down to walking speed for its duration - which would make
+        // "reloads while running" mean "reloads, and walks while doing it". Whether that applies
+        // depends on which animator tag the reload state carries: InMinorActionSlowdown is true for
+        // "minoraction" but not "minoraction_fast", and that is an animator asset property, not
+        // anything readable from the assembly. So this covers it, and says so once under
+        // VerboseLogging - if that line never appears, the reload animation is tagged fast and this
+        // patch was never needed.
+        //
+        // Only the queue head is tested, so equipping and unequipping still slow you down as they
+        // always have. The swim path also consults this method (speed = 0 during a minor action),
+        // which is moot: weapons cannot be used while swimming, so no reload can be queued there.
+        [HarmonyPatch(typeof(Player), nameof(Player.InMinorActionSlowdown))]
+        class Player_InMinorActionSlowdown_ReloadPatch
+        {
+            static void Postfix(Player __instance, ref bool __result,
+                List<Player.MinorActionData> ___m_actionQueue)
+            {
+                if (!__result || CrossbowReloadWhileRunning == null
+                    || !CrossbowReloadWhileRunning.Value
+                    || !ReferenceEquals(__instance, Player.m_localPlayer))
+                {
+                    return;
+                }
+                if (___m_actionQueue == null || ___m_actionQueue.Count == 0)
+                {
+                    return;
+                }
+                Player.MinorActionData head = ___m_actionQueue[0];
+                if (head == null || head.m_type != Player.MinorActionData.ActionType.Reload)
+                {
+                    return;
+                }
+                __result = false;
+                if (!_reloadSlowdownLogged)
+                {
+                    _reloadSlowdownLogged = true;
+                    LogInfo("Crossbow reload was being slowed to walking pace - suppressed");
                 }
             }
         }
