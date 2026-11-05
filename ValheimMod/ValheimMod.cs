@@ -9,6 +9,7 @@ using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ValheimMod
 {
@@ -147,6 +148,8 @@ namespace ValheimMod
         private static ConfigEntry<float> JumpPowerSkillBonus;
         private static ConfigEntry<float> CrossbowReloadAtMaxSkill;
         private static ConfigEntry<bool> CrossbowReloadWhileRunning;
+        private static ConfigEntry<bool> NoFoodDecay;
+        private static ConfigEntry<bool> DismissFoodOnRightClick;
         private static ConfigEntry<string> HoeLevelOpPrefab;
         private static ConfigEntry<bool> HoeLevelClearsRocks;
         private static ConfigEntry<string> HoeLevelRockNames;
@@ -323,6 +326,10 @@ namespace ValheimMod
                 new AcceptableValueRange<float>(0.1f, 1f)));
             CrossbowReloadWhileRunning = Config.Bind("Crossbow", "CrossbowReloadWhileRunning", true,
                 "Let a crossbow finish reloading while you are running. Vanilla throws the reload away on every frame you run, so it can only ever complete at a walk or standing still, and it is silent about it - the reload simply never finishes. Jumping, dodging and attacking still cancel a reload, exactly as they do in vanilla; this changes running only. Not suspended in a shared session: the reload takes the same time either way, so there is nothing here anyone else could notice.");
+            NoFoodDecay = Config.Bind("Food", "NoFoodDecay", true,
+                "Stop food wearing off. Each food stays at its full duration and keeps the whole of the health, stamina and eitr it gave, instead of fading along a curve and expiring. Worth knowing how this interacts with eating: vanilla decides whether a new food may be eaten from how depleted the current ones are - CanEat only admits a fourth once one of the three has fallen below half its burn time - so with nothing ever depleting, three active foods would mean never eating again. DismissFoodOnRightClick is what makes that workable, and turning this on with that off leaves a pukeberry as the only way to free a slot. Affects you alone and is not suspended in a shared session; nobody else can see your food timers.");
+            DismissFoodOnRightClick = Config.Bind("Food", "DismissFoodOnRightClick", true,
+                "Right-click one of the three food icons by the health bar to give that food up, freeing the slot so something else can be eaten. Only works while the cursor is free - with the inventory, map or menu open - because during play the game locks the cursor and right-click is the block button. Health, stamina and eitr drop to match immediately, and if your current health is above the new maximum it is clamped, exactly as it would be when a food runs out on its own. There is no confirmation step.");
             MatchBoatCameraZoom = Config.Bind("Camera", "MatchBoatCameraZoom", true,
                 "Allow the same zoom-out distance on foot that the game already allows at a ship's helm. Vanilla keeps two separate limits and picks between them by whether you are steering, so on foot you are held closer in for no reason that affects anything. "
                 + "Purely a local camera setting - nothing about it is sent anywhere or seen by anyone else. Ignored when MaxCameraDistance is set.");
@@ -642,6 +649,7 @@ namespace ValheimMod
                 CleanupDuplicatePins();
             }
 
+            UpdateFoodDismissClick();
             ApplyInventoryRows();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
@@ -7552,6 +7560,183 @@ namespace ValheimMod
                     LogInfo("Crossbow reload was being slowed to walking pace - suppressed");
                 }
             }
+        }
+
+        // ---------------- Food decay ----------------
+        // Player.UpdateFood is the whole of the decay, and num below is always 1:
+        //
+        //     food.m_time -= num;
+        //     float f = Mathf.Clamp01(food.m_time / food.m_item.m_shared.m_foodBurnTime);
+        //     f = Mathf.Pow(f, 0.3f);
+        //     food.m_health = food.m_item.m_shared.m_food * f;   // and stamina, and eitr
+        //     if (food.m_time <= 0f) { Message("$msg_food_done"); m_foods.Remove(food); }
+        //
+        // So m_time drives everything - the curve, the three values and the expiry - and pinning it
+        // at the full burn time freezes all of them without touching the maths.
+        //
+        // The prefix tops each food up to burnTime + 1 so that vanilla's own -1 lands exactly on
+        // burnTime and f comes out at exactly 1. Nothing is reimplemented: SetMaxHealth is still fed
+        // from vanilla's own calculation, just with an input that never falls. The postfix then
+        // clamps back down to burnTime, because Hud.UpdateFood reads m_time directly and would
+        // otherwise show a second over the food's real duration on every frame that ran no tick.
+        //
+        // m_time is what gets written to the save, so this is reversible: turn the setting off and
+        // the foods simply resume decaying from full.
+        //
+        // The catch, which is why the setting is off by default. Player.CanEat gates a new food on
+        // Food.CanEatAgain(), which is
+        //
+        //     return m_time < m_item.m_shared.m_foodBurnTime / 2f;
+        //
+        // and that can never be true once m_time is pinned. With three foods active, CanEat falls
+        // through to "$msg_isfull" every time and GetMostDepletedFood returns null, so neither the
+        // eat path nor the replace-the-most-depleted path can run. Three foods would become
+        // permanent until something emptied the list - in vanilla only a pukeberry, which clears
+        // all three. The right-click dismissal below is what makes this setting usable, which is
+        // why the two ship together rather than one being a convenience on top of the other.
+        private static bool NoFoodDecayActive(Player player)
+        {
+            return NoFoodDecay != null && NoFoodDecay.Value
+                && ReferenceEquals(player, Player.m_localPlayer);
+        }
+
+        private static float FoodBurnTime(Player.Food food)
+        {
+            ItemDrop.ItemData.SharedData shared = food?.m_item?.m_shared;
+            return shared == null ? 0f : shared.m_foodBurnTime;
+        }
+
+        [HarmonyPatch(typeof(Player), "UpdateFood")]
+        class Player_UpdateFood_NoDecayPatch
+        {
+            static void Prefix(Player __instance, List<Player.Food> ___m_foods)
+            {
+                if (___m_foods == null || !NoFoodDecayActive(__instance))
+                {
+                    return;
+                }
+                foreach (Player.Food food in ___m_foods)
+                {
+                    float burn = FoodBurnTime(food);
+                    if (burn > 0f)
+                    {
+                        food.m_time = burn + 1f;
+                    }
+                }
+            }
+
+            static void Postfix(Player __instance, List<Player.Food> ___m_foods)
+            {
+                if (___m_foods == null || !NoFoodDecayActive(__instance))
+                {
+                    return;
+                }
+                foreach (Player.Food food in ___m_foods)
+                {
+                    float burn = FoodBurnTime(food);
+                    if (burn > 0f && food.m_time > burn)
+                    {
+                        food.m_time = burn;
+                    }
+                }
+            }
+        }
+
+        // Dismissing one food. Hud.m_foodIcons is a public Image[] that Hud.UpdateFood fills in the
+        // same order as Player.GetFoods(), so icon i and food i are the same food and no lookup by
+        // name is needed.
+        //
+        // The hit test is done here rather than through an IPointerClickHandler component on the
+        // icons. That would mean attaching a MonoBehaviour to the game's own HUD objects and
+        // depending on the canvas having a GraphicRaycaster and the icons being raycast targets -
+        // three things to be wrong about, none of them visible from the assembly. Asking
+        // RectTransformUtility whether the pointer is inside the icon's rect needs none of them.
+        // The canvas camera is passed only for a non-overlay canvas, which is what that method
+        // wants: Screen Space - Overlay takes null.
+        //
+        // Gating on the cursor being free is load bearing, not politeness. GameCamera.UpdateMouseCapture
+        // locks the cursor during play, and right-click is the block button - without this check,
+        // raising your shield would dismiss a food whenever the stale pointer position happened to
+        // sit over the bar.
+        private static readonly MethodInfo UpdateFoodMethod = AccessTools.Method(
+            typeof(Player), "UpdateFood", new[] { typeof(float), typeof(bool) });
+
+        private static void UpdateFoodDismissClick()
+        {
+            if (DismissFoodOnRightClick == null || !DismissFoodOnRightClick.Value
+                || !ZInput.GetMouseButtonDown(1) || ZCursor.LockState != CursorLockMode.None)
+            {
+                return;
+            }
+            Player player = Player.m_localPlayer;
+            Hud hud = Hud.instance;
+            if (player == null || hud == null || hud.m_foodIcons == null)
+            {
+                return;
+            }
+            List<Player.Food> foods = player.GetFoods();
+            if (foods == null || foods.Count == 0)
+            {
+                return;
+            }
+
+            Vector2 pointer = Input.mousePosition;
+            int slots = Mathf.Min(hud.m_foodIcons.Length, foods.Count);
+            for (int i = 0; i < slots; i++)
+            {
+                Image icon = hud.m_foodIcons[i];
+                if (icon == null || !icon.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+                Canvas canvas = icon.canvas;
+                Camera camera = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    ? canvas.worldCamera
+                    : null;
+                if (!RectTransformUtility.RectangleContainsScreenPoint(icon.rectTransform, pointer, camera))
+                {
+                    continue;
+                }
+                DismissFood(player, i);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Drops one food and brings the maximums back in line. Removing the entry is the whole of
+        /// the change; UpdateFood with forceUpdate recomputes the totals and calls SetMaxHealth,
+        /// SetMaxStamina and SetMaxEitr, which is the same path a food expiring takes, so the
+        /// health clamp and the bar flash come out right without reproducing any of it.
+        /// </summary>
+        private static void DismissFood(Player player, int index)
+        {
+            List<Player.Food> foods = player?.GetFoods();
+            if (foods == null || index < 0 || index >= foods.Count)
+            {
+                return;
+            }
+            Player.Food food = foods[index];
+            string token = food?.m_item?.m_shared?.m_name;
+            foods.RemoveAt(index);
+
+            // UpdateFood is protected in the shipped assembly, so it is reached by reflection
+            // rather than called directly - a direct call would compile against the publicized
+            // libs/ copy and then throw when the method was JIT'd.
+            if (UpdateFoodMethod != null)
+            {
+                UpdateFoodMethod.Invoke(player, new object[] { 0f, true });
+            }
+            else
+            {
+                LogWarn("PipsMod: Player.UpdateFood not found - food dismissed, but the maximums "
+                    + "will not settle until the next food tick.");
+            }
+
+            string label = string.IsNullOrEmpty(token)
+                ? "food"
+                : Localization.instance != null ? Localization.instance.Localize(token) : token;
+            _messageHud?.ShowMessage(MessageHud.MessageType.Center, $"Gave up {label}");
+            LogInfo($"Dismissed food slot {index}: {token}");
         }
 
         // ---------------- Area repair ----------------
