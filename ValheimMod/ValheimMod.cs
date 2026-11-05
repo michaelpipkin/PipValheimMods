@@ -150,6 +150,7 @@ namespace ValheimMod
         private static ConfigEntry<bool> CrossbowReloadWhileRunning;
         private static ConfigEntry<bool> NoFoodDecay;
         private static ConfigEntry<bool> DismissFoodOnRightClick;
+        private static ConfigEntry<float> AutoPickupRangeMultiplier;
         private static ConfigEntry<string> HoeLevelOpPrefab;
         private static ConfigEntry<bool> HoeLevelClearsRocks;
         private static ConfigEntry<string> HoeLevelRockNames;
@@ -330,6 +331,9 @@ namespace ValheimMod
                 "Stop food wearing off. Each food stays at its full duration and keeps the whole of the health, stamina and eitr it gave, instead of fading along a curve and expiring. Worth knowing how this interacts with eating: vanilla decides whether a new food may be eaten from how depleted the current ones are - CanEat only admits a fourth once one of the three has fallen below half its burn time - so with nothing ever depleting, three active foods would mean never eating again. DismissFoodOnRightClick is what makes that workable, and turning this on with that off leaves a pukeberry as the only way to free a slot. Affects you alone and is not suspended in a shared session; nobody else can see your food timers.");
             DismissFoodOnRightClick = Config.Bind("Food", "DismissFoodOnRightClick", true,
                 "Right-click one of the three food icons by the health bar to give that food up, freeing the slot so something else can be eaten. Only works while the cursor is free - with the inventory, map or menu open - because during play the game locks the cursor and right-click is the block button. Health, stamina and eitr drop to match immediately, and if your current health is above the new maximum it is clamped, exactly as it would be when a food runs out on its own. There is no confirmation step.");
+            AutoPickupRangeMultiplier = Config.Bind("Inventory", "AutoPickupRangeMultiplier", 1f, new ConfigDescription(
+                "Multiplier on the radius items are picked up from without touching them. 1 is vanilla, which is 2 metres; 2 doubles it to 4. Items inside the radius are dragged toward you at 15 metres per second, so a large value has things flying in from a surprising distance rather than quietly appearing. The game checks at most 100 item colliders per tick, so somewhere thoroughly littered may take an extra tick or two to clear - nothing is lost, it just arrives later. Suspended in a shared session, where a wide radius would collect loot somebody else dropped.",
+                new AcceptableValueRange<float>(0.5f, 10f)));
             MatchBoatCameraZoom = Config.Bind("Camera", "MatchBoatCameraZoom", true,
                 "Allow the same zoom-out distance on foot that the game already allows at a ship's helm. Vanilla keeps two separate limits and picks between them by whether you are steering, so on foot you are held closer in for no reason that affects anything. "
                 + "Purely a local camera setting - nothing about it is sent anywhere or seen by anyone else. Ignored when MaxCameraDistance is set.");
@@ -651,6 +655,7 @@ namespace ValheimMod
 
             UpdateFoodDismissClick();
             ApplyInventoryRows();
+            ApplyAutoPickupRange();
             UpdatePlayerLight();
             UpdateMassPlantPreview();
             ApplyResourceRate();
@@ -7737,6 +7742,55 @@ namespace ValheimMod
                 : Localization.instance != null ? Localization.instance.Localize(token) : token;
             _messageHud?.ShowMessage(MessageHud.MessageType.Center, $"Gave up {label}");
             LogInfo($"Dismissed food slot {index}: {token}");
+        }
+
+        // ---------------- Auto-pickup range ----------------
+        // Player.m_autoPickupRange is a public field defaulting to 2, read in exactly two places,
+        // both inside Player.AutoPickup: the OverlapSphereNonAlloc that gathers candidates, and the
+        // distance recheck that drops anything the sphere over-reported.
+        //
+        // Written here from the frame pump rather than scaled inside a prefix on AutoPickup, and
+        // that is the whole point rather than a style choice. AutoPickupIgnorer does not extend
+        // AutoPickup, it replaces it - its prefix returns false and reimplements the loop, reading
+        // __instance.m_autoPickupRange at the same two points. A prefix of ours would only reach
+        // that reimplementation if Harmony happened to order us first, which is not something to
+        // rely on between two separately installed plugins. A field that is simply correct whenever
+        // anyone reads it needs no ordering at all, and works the same whether AutoPickupIgnorer is
+        // installed or not.
+        //
+        // The base is captured per Player instance the first time we see one, before we have
+        // written to it, so changing the multiplier mid-game recomputes from the prefab value
+        // instead of compounding. The field is not serialised - it comes off the prefab each time
+        // a Player spawns - so nothing here outlives the session.
+        private static Player _pickupRangePlayer;
+        private static float _pickupRangeBase;
+
+        private static void ApplyAutoPickupRange()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+            {
+                _pickupRangePlayer = null;
+                return;
+            }
+            if (!ReferenceEquals(player, _pickupRangePlayer))
+            {
+                _pickupRangePlayer = player;
+                _pickupRangeBase = player.m_autoPickupRange;
+                LogInfo($"Auto-pickup base range is {_pickupRangeBase}m");
+            }
+            if (AutoPickupRangeMultiplier == null)
+            {
+                return;
+            }
+            // Shared sessions get vanilla's radius, not a disabled feature, so the field is still
+            // written and goes straight back to normal when everyone else leaves
+            float multiplier = IsSharedSession() ? 1f : AutoPickupRangeMultiplier.Value;
+            float wanted = _pickupRangeBase * multiplier;
+            if (!Mathf.Approximately(player.m_autoPickupRange, wanted))
+            {
+                player.m_autoPickupRange = wanted;
+            }
         }
 
         // ---------------- Area repair ----------------
