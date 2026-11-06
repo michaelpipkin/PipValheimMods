@@ -1,0 +1,9 @@
+{
+  "name": "ImprovedMapIcons",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/michaelpipkin/PipValheimMods/tree/main/ImprovedMapIcons",
+  "description": "Adds the missing show/hide toggle for quest pins, and starts every session with the map icons you actually want.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2350"
+  ]
+}

@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AutoPickupIgnorer", "AutoPi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAutoRunAndJump", "ImprovedAutoRunAndJump\ImprovedAutoRunAndJump.csproj", "{7B1C4E2A-9D64-4F18-B3A7-6E0C52D81F93}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedMapIcons", "ImprovedMapIcons\ImprovedMapIcons.csproj", "{5534247D-7816-40B8-96FA-9FD18D7DC0AF}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{1049A3C8-1A50-462E-BFE5-3DCF569874F2}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
@@ -33,6 +35,10 @@ Global
 		{7B1C4E2A-9D64-4F18-B3A7-6E0C52D81F93}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7B1C4E2A-9D64-4F18-B3A7-6E0C52D81F93}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7B1C4E2A-9D64-4F18-B3A7-6E0C52D81F93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5534247D-7816-40B8-96FA-9FD18D7DC0AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5534247D-7816-40B8-96FA-9FD18D7DC0AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5534247D-7816-40B8-96FA-9FD18D7DC0AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5534247D-7816-40B8-96FA-9FD18D7DC0AF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
