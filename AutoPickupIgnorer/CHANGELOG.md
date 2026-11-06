@@ -1,4 +1,4 @@
-﻿## Release 1.2.1
+## Release 1.2.1
 
 - Added an item list covering every item in the game, pairing the name shown in game with the prefab name the config file wants
 - The README links to that list in place of the external site it used to point at
