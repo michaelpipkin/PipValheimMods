@@ -11,9 +11,6 @@
 *.sln.docstates
 decompiled_libraries
 logs
-# Junction to the live Thunderstore profile's config folder, for opening the .cfg files
-# from the Explorer. Anchored so it cannot swallow a config folder inside a mod project.
-/config/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
