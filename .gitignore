@@ -10,7 +10,9 @@
 *.userosscache
 *.sln.docstates
 decompiled_libraries
-logs
+# Link to the live Thunderstore profile's BepInEx folder - logs, config and plugins.
+# Anchored, so it cannot match anything of that name inside a mod project.
+/BepInEx/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
