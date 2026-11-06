@@ -17,7 +17,7 @@ namespace AutoPickupIgnorer
         // Module info
         private const string modGUID = "Pip.AutoPickupIgnorer";
         private const string modName = "Pip's Auto-pickup Ignorer";
-        private const string modVersion = "1.2.0";
+        private const string modVersion = "1.2.1";
         private readonly Harmony harmony = new Harmony(modGUID);
 
         // Config file entries

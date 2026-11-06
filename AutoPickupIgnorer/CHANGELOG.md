@@ -1,3 +1,8 @@
+﻿## Release 1.2.1
+
+- Added an item list covering every item in the game, pairing the name shown in game with the prefab name the config file wants
+- The README links to that list in place of the external site it used to point at
+
 ## Release 1.2.0
 
 - Add a hotkey (= by default) to reload the config file in-game, so ignore list changes take effect without relaunching

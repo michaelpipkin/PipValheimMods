@@ -14,9 +14,11 @@ and simply include a comma-separated list of the items you want to ignore.
 The automatically generated list of items in the config file is not exhaustive, especially as new items are added to the game,
 and you may need to add items manually. Simply add new items to the list without a leading #, and they will be ignored.
 
-Many of the items in the game do not have straightforward names. I recommend consulting the item
-list [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html) to look up some of the less obviously-named items.
-Item names used in the config file are from the Item column on that page.
+The config file wants an item's prefab name, which is often not what the game calls it on screen -
+Abyssal Razor is `KnifeChitin`, and Acorns is `Acorn`. The
+[item list](https://github.com/michaelpipkin/PipValheimMods/blob/main/AutoPickupIgnorer/ItemList.md)
+has every item in the game with both names side by side, sorted by the name you see in game.
+It is read straight out of Valheim, and updated when the game adds items.
 
 The item list is kept in alphabetical order (ignoring the leading #) so it's easy to check whether an item is already there.
 New items can be added anywhere in the list, and will be sorted into place the next time the config is loaded.
