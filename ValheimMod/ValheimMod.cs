@@ -227,6 +227,12 @@ namespace ValheimMod
         {
             CustomResourceRate = Config.Bind("General", "CustomResourceRate", 1f, "Multiplier for resource drops (wood, ore, food, monster parts). 1 leaves the world's own Resources setting alone. Equipment and other types the game marks as non-scaling are unaffected, and a single drop still can't exceed one stack.");
             CustomStackSizeMultiplier = Config.Bind("General", "CustomStackSizeMultiplier", 1f, "Multiplier for the max stack size of every stackable item. 1 leaves vanilla stack sizes alone. Items that don't stack in vanilla (equipment) are unaffected. Warning: stacks larger than vanilla get written into your save, so lowering this later can clamp or lose the excess.");
+            StackSizeByType = Config.Bind("General", "StackSizeByType", "",
+                "Per-type stack multipliers, overriding CustomStackSizeMultiplier for the types named. Comma separated Type:Multiplier pairs - Material:10, Ammo:2, Consumable:2 - and anything not named here keeps using CustomStackSizeMultiplier. "
+                + "Lets the things worth hoarding stack deep without carrying a thousand of every arrow. The type names are the ones in the ItemType column of the item dump: "
+                + "Material, Consumable, Ammo, AmmoNonEquipable, Trophy, Fish, Misc, Torch, Tool, Utility, Trinket, Bow, Shield, Helmet, Chest, Legs, Shoulder, Hands, OneHandedWeapon, TwoHandedWeapon, TwoHandedWeaponLeft, Customization, Attach_Atgeir, None. "
+                + "WARNING, read before lowering anything: the game clamps any oversized stack to the current maximum when an inventory loads, and the excess is destroyed, not dropped. Chests load the same way, so there is nowhere safe to put it first. "
+                + "Going from Ammo:10 to Ammo:2 turns a stack of 1000 arrows into 200 and deletes the other 800. Empty this stack out yourself before lowering the number. Every trim is logged with the item and the amount lost.");
             CustomInventoryRows = Config.Bind("General", "CustomInventoryRows", 0,
                 new ConfigDescription("Number of rows in the player inventory (8 slots per row). Vanilla starts at 4 and the game itself allows up to 9, which Haldor sells. 0 leaves it alone. Affects only your own inventory, never containers. Warning: lowering this drops any items in the removed slots on the ground. Ignored when Extra Slots is installed - use its own 'Amount of extra inventory rows' setting instead.",
                     new AcceptableValueRange<int>(0, 9)));
@@ -283,12 +289,6 @@ namespace ValheimMod
                 + "whether the spawn entry is exempt from crafting-station no-spawn areas, and the distance from that point to the nearest such area. "
                 + "Answers why something appeared inside what looked like full workbench coverage: either the entry is exempt or the point was outside the blanket, and the line says which. "
                 + "One line per creature, not per attempt. Pairs with the spawn-entry table the dump hotkey writes.");
-            StackSizeByType = Config.Bind("General", "StackSizeByType", "",
-                "Per-type stack multipliers, overriding CustomStackSizeMultiplier for the types named. Comma separated Type:Multiplier pairs - Material:10, Ammo:2, Consumable:2 - and anything not named here keeps using CustomStackSizeMultiplier. "
-                + "Lets the things worth hoarding stack deep without carrying a thousand of every arrow. The type names are the ones in the ItemType column of the item dump: "
-                + "Material, Consumable, Ammo, AmmoNonEquipable, Trophy, Fish, Misc, Torch, Tool, Utility, Trinket, Bow, Shield, Helmet, Chest, Legs, Shoulder, Hands, OneHandedWeapon, TwoHandedWeapon, TwoHandedWeaponLeft, Customization, Attach_Atgeir, None. "
-                + "WARNING, read before lowering anything: the game clamps any oversized stack to the current maximum when an inventory loads, and the excess is destroyed, not dropped. Chests load the same way, so there is nowhere safe to put it first. "
-                + "Going from Ammo:10 to Ammo:2 turns a stack of 1000 arrows into 200 and deletes the other 800. Empty this stack out yourself before lowering the number. Every trim is logged with the item and the amount lost.");
             WorldEffectsSoloOnly = Config.Bind("General", "WorldEffectsSoloOnly", true, "Suspend the settings that change shared world state - CustomResourceRate, CustomStackSizeMultiplier, CustomSmelterOutputRate, CustomProcessingTimeRate and TamingSpeedMultiplier - whenever anyone else is in the world with you. They resume automatically once you are alone again. Settings that only affect you are never suspended.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
