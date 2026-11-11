@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -89,6 +90,7 @@ namespace ValheimMod
         // Config values
         private static ConfigEntry<float> CustomResourceRate;
         private static ConfigEntry<float> CustomStackSizeMultiplier;
+        private static ConfigEntry<string> StackSizeByType;
         private static ConfigEntry<float> CustomSmelterOutputRate;
         private static ConfigEntry<float> CustomFermenterOutputRate;
         private static ConfigEntry<float> CustomCookingOutputRate;
@@ -281,6 +283,12 @@ namespace ValheimMod
                 + "whether the spawn entry is exempt from crafting-station no-spawn areas, and the distance from that point to the nearest such area. "
                 + "Answers why something appeared inside what looked like full workbench coverage: either the entry is exempt or the point was outside the blanket, and the line says which. "
                 + "One line per creature, not per attempt. Pairs with the spawn-entry table the dump hotkey writes.");
+            StackSizeByType = Config.Bind("General", "StackSizeByType", "",
+                "Per-type stack multipliers, overriding CustomStackSizeMultiplier for the types named. Comma separated Type:Multiplier pairs - Material:10, Ammo:2, Consumable:2 - and anything not named here keeps using CustomStackSizeMultiplier. "
+                + "Lets the things worth hoarding stack deep without carrying a thousand of every arrow. The type names are the ones in the ItemType column of the item dump: "
+                + "Material, Consumable, Ammo, AmmoNonEquipable, Trophy, Fish, Misc, Torch, Tool, Utility, Trinket, Bow, Shield, Helmet, Chest, Legs, Shoulder, Hands, OneHandedWeapon, TwoHandedWeapon, TwoHandedWeaponLeft, Customization, Attach_Atgeir, None. "
+                + "WARNING, read before lowering anything: the game clamps any oversized stack to the current maximum when an inventory loads, and the excess is destroyed, not dropped. Chests load the same way, so there is nowhere safe to put it first. "
+                + "Going from Ammo:10 to Ammo:2 turns a stack of 1000 arrows into 200 and deletes the other 800. Empty this stack out yourself before lowering the number. Every trim is logged with the item and the amount lost.");
             WorldEffectsSoloOnly = Config.Bind("General", "WorldEffectsSoloOnly", true, "Suspend the settings that change shared world state - CustomResourceRate, CustomStackSizeMultiplier, CustomSmelterOutputRate, CustomProcessingTimeRate and TamingSpeedMultiplier - whenever anyone else is in the world with you. They resume automatically once you are alone again. Settings that only affect you are never suspended.");
             TamingSpeedMultiplier = Config.Bind("General", "TamingSpeedMultiplier", 1f, "How much faster animals tame. 2 is twice as fast, 10 is ten times. Applies to every tameable creature; the animal must still be fed and calm for progress to happen at all.");
             AlwaysSlowFall = Config.Bind("General", "AlwaysSlowFall", false, "Apply the Feather Cape's slow-fall effect permanently, whatever cape you are wearing.");
@@ -1912,8 +1920,8 @@ namespace ValheimMod
             {
                 return;
             }
-            float multiplier = SoloOnlyRate(CustomStackSizeMultiplier);
-            _appliedStackMultiplier = multiplier;
+            float fallback = SoloOnlyRate(CustomStackSizeMultiplier);
+            _appliedStackSignature = StackSizeSignature();
             int changed = 0;
             foreach (var prefab in odb.m_items)
             {
@@ -1937,7 +1945,7 @@ namespace ValheimMod
                 {
                     continue;
                 }
-                int target = Mathf.Max(1, Mathf.RoundToInt(baseSize * multiplier));
+                int target = Mathf.Max(1, Mathf.RoundToInt(baseSize * StackMultiplierFor(shared, fallback)));
                 if (shared.m_maxStackSize != target)
                 {
                     shared.m_maxStackSize = target;
@@ -1946,7 +1954,141 @@ namespace ValheimMod
             }
             if (changed > 0)
             {
-                LogInfo($"Stack size multiplier {multiplier:0.##} applied to {changed} item(s)");
+                LogInfo($"Stack sizes recalculated for {changed} item(s); default {fallback:0.##}"
+                    + (_stackSizeByType.Count > 0
+                        ? ", by type " + string.Join(", ", _stackSizeByType
+                            .Select(e => $"{e.Key}:{e.Value:0.##}").ToArray())
+                        : string.Empty));
+            }
+        }
+
+        private static Dictionary<ItemDrop.ItemData.ItemType, float> _stackSizeByType =
+            new Dictionary<ItemDrop.ItemData.ItemType, float>();
+
+        /// <summary>
+        /// The multiplier for one item: its type's entry if it has one, otherwise the blanket
+        /// setting. A shared session forces a listed type back to 1, the same suspension
+        /// SoloOnlyRate has already applied to the fallback by the time it arrives here.
+        /// </summary>
+        private static float StackMultiplierFor(ItemDrop.ItemData.SharedData shared, float fallback)
+        {
+            if (shared != null && _stackSizeByType.TryGetValue(shared.m_itemType, out float typed))
+            {
+                return IsSharedSession() ? 1f : typed;
+            }
+            return fallback;
+        }
+
+        /// <summary>
+        /// What the stack sizes should currently be, as one comparable string. The setting used to
+        /// be a single float, so one float was enough to notice a change; a table is not, and
+        /// without this a config reload that only touched StackSizeByType would be ignored.
+        /// </summary>
+        private static string StackSizeSignature()
+        {
+            bool shared = IsSharedSession();
+            return SoloOnlyRate(CustomStackSizeMultiplier).ToString("R", CultureInfo.InvariantCulture)
+                + "|" + string.Join(",", _stackSizeByType
+                    .OrderBy(e => (int)e.Key)
+                    .Select(e => $"{(int)e.Key}:{(shared ? 1f : e.Value).ToString("R", CultureInfo.InvariantCulture)}")
+                    .ToArray());
+        }
+
+        /// <summary>
+        /// Reads the Type:Multiplier pairs. Invariant parsing throughout, because a config file is
+        /// shared between machines and "2.5" must not become 25 on a locale that writes decimals
+        /// with a comma - which is also why the pair separator could not be a comma on its own.
+        /// </summary>
+        private static Dictionary<ItemDrop.ItemData.ItemType, float> ParseStackSizeByType(string raw)
+        {
+            var map = new Dictionary<ItemDrop.ItemData.ItemType, float>();
+            foreach (string pair in (raw ?? string.Empty).Split(','))
+            {
+                string entry = pair.Trim();
+                if (entry.Length == 0)
+                {
+                    continue;
+                }
+                int split = entry.IndexOf(':');
+                if (split <= 0 || split == entry.Length - 1)
+                {
+                    LogWarn($"StackSizeByType: '{entry}' is not a Type:Multiplier pair, ignoring it");
+                    continue;
+                }
+                string name = entry.Substring(0, split).Trim();
+                string value = entry.Substring(split + 1).Trim();
+                ItemDrop.ItemData.ItemType type;
+                try
+                {
+                    type = (ItemDrop.ItemData.ItemType)Enum.Parse(
+                        typeof(ItemDrop.ItemData.ItemType), name, true);
+                }
+                catch (ArgumentException)
+                {
+                    LogWarn($"StackSizeByType: '{name}' is not an ItemType, ignoring it");
+                    continue;
+                }
+                if (!float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture,
+                        out float multiplier) || multiplier <= 0f)
+                {
+                    LogWarn($"StackSizeByType: '{value}' is not a multiplier above zero, ignoring {name}");
+                    continue;
+                }
+                map[type] = multiplier;
+            }
+            return map;
+        }
+
+        // ---------------- Reporting a trimmed stack ----------------
+        // Lowering a stack size is destructive and the game says nothing about it. Inventory.AddItem
+        // ends its load path with
+        //
+        //     component.m_itemData.m_stack = Mathf.Min(stack, m_shared.m_maxStackSize);
+        //
+        // and that is the whole of it - no split into further stacks, no drop on the ground, no
+        // message. A stack of 1000 arrows loaded against a maximum of 100 becomes 100 and the other
+        // 900 stop existing. Containers load through the same method, so moving things into a chest
+        // first does not help.
+        //
+        // This only watches. Changing the clamp would mean reimplementing the overflow across every
+        // inventory in the world, and a half-working version of that loses items in a less
+        // predictable way than the honest clamp does. So the trade is: the loss still happens, but
+        // it is never silent, and the log says exactly what went.
+        //
+        // Reached only through the save/load path - picking an item up goes through other overloads
+        // that split properly - so this does not fire in ordinary play.
+        [HarmonyPatch]
+        class Inventory_AddItem_ReportTrimPatch
+        {
+            static MethodBase TargetMethod()
+            {
+                return AccessTools.Method(typeof(Inventory), "AddItem", new[]
+                {
+                    typeof(int), typeof(int), typeof(float), typeof(Vector2i), typeof(bool),
+                    typeof(int), typeof(int), typeof(long), typeof(string),
+                    typeof(Dictionary<string, string>), typeof(int), typeof(bool), typeof(bool),
+                    typeof(bool),
+                });
+            }
+
+            static void Prefix(int prefabHash, int stack)
+            {
+                ObjectDB odb = ObjectDB.instance;
+                if (odb == null || stack <= 0)
+                {
+                    return;
+                }
+                GameObject prefab = odb.GetItemPrefab(prefabHash);
+                ItemDrop drop = prefab != null ? prefab.GetComponent<ItemDrop>() : null;
+                ItemDrop.ItemData.SharedData shared = drop?.m_itemData?.m_shared;
+                if (shared == null || stack <= shared.m_maxStackSize)
+                {
+                    return;
+                }
+                LogWarn($"PipsMod: {prefab.name} stack of {stack} exceeds the current maximum of "
+                    + $"{shared.m_maxStackSize} and the game is about to clamp it - "
+                    + $"{stack - shared.m_maxStackSize} destroyed. Raise its multiplier back up "
+                    + "before loading this again if you want them.");
             }
         }
 
@@ -3817,7 +3959,7 @@ namespace ValheimMod
         private static float _sharedSessionCheckedAt = float.NegativeInfinity;
         private static bool _sharedSessionCached;
         private static float _vanillaResourceRate = 1f;
-        private static float _appliedStackMultiplier = float.NaN;
+        private static string _appliedStackSignature;
 
         /// <summary>
         /// Stack size isn't read at point of use - it's written into each item's SharedData - so
@@ -3829,7 +3971,7 @@ namespace ValheimMod
         /// </summary>
         private static void RefreshStackSizeMultiplier()
         {
-            if (SoloOnlyRate(CustomStackSizeMultiplier) == _appliedStackMultiplier)
+            if (StackSizeSignature() == _appliedStackSignature)
             {
                 return;
             }
@@ -6375,6 +6517,7 @@ namespace ValheimMod
             _favoriteFoods = FavoriteFoodList.Value.Split(',').ToList();
             _favoriteAmmo = FavoriteAmmoList.Value.Split(',').ToList();
             _petFoods = PetFoodList.Value.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+            _stackSizeByType = ParseStackSizeByType(StackSizeByType.Value);
             var supersedes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (string pair in (PinCleanupSupersedes.Value ?? string.Empty).Split(','))
             {
